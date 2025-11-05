@@ -1,0 +1,357 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Order;
+use App\Models\Store;
+use Inertia\Inertia;
+
+use Illuminate\Http\Request;
+
+class OrdersController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     */
+    public function index(Request $request)
+    {
+        $query = Order::query()
+            ->where('tenant_id', tenant_id())
+            ->when($request->input('status'), fn($q, $status) =>
+                $q->where('status', $status)
+            )
+            ->when($request->input('store_id'), fn($q, $storeId) =>
+                $q->where('store_id', $storeId)
+            )
+            ->when($request->input('provider'), fn($q, $provider) =>
+                $q->where('provider', $provider)
+            )
+            ->when($request->input('start_date') && $request->input('end_date'), fn($q) =>
+                $q->whereBetween('placed_at', [
+                    request('start_date').' 00:00:00',
+                    request('end_date').' 23:59:59',
+                ])
+            )
+            ->orderByDesc('placed_at')
+            ->orderByDesc('id');
+
+        $perPage = (int) $request->input('per_page', 10);
+
+        $orders = $query->paginate($perPage)->withQueryString();
+
+        // Para popular o filtro de lojas dinamicamente
+        $stores = Store::query()
+            ->select('id', 'display_name AS name')
+            ->orderBy('display_name')
+            ->get();
+
+        return Inertia::render('orders', [
+            'orders' => $orders,
+            'filters' => [
+                'status' => $request->input('status'),
+                'store_id' => $request->input('store_id'),
+                'provider' => $request->input('provider'),
+                'start_date' => $request->input('start_date'),
+                'end_date' => $request->input('end_date'),
+                'per_page' => $perPage,
+            ],
+            'stores' => $stores,
+        ]);
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        //
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request)
+    {
+        //
+    }
+
+    /**
+     * Display the specified resource.
+     */
+    public function show(string $id)
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit(string $id)
+    {
+        //
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request $request, string $id)
+    {
+        //
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(string $id)
+    {
+        //
+    }
+
+    /**
+     * POST /orders/{id}/confirm
+     * Confirma um pedido
+     */
+    public function confirm($id)
+    {
+        try {
+            $order = Order::where('id', $id)
+                ->where('tenant_id', auth()->user()->tenant_id)
+                ->firstOrFail();
+
+            if ($order->provider !== 'ifood') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Apenas pedidos iFood podem ser confirmados por esta ação',
+                ], 400);
+            }
+
+            if (!$order->store_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pedido sem loja associada. Sincronize novamente os pedidos.',
+                ], 400);
+            }
+
+            $client = new \App\Services\IfoodClient($order->tenant_id, $order->store_id);
+            $result = $client->confirmOrder($order->order_uuid);
+
+            // Atualiza status local
+            $order->update(['status' => 'CONFIRMED']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pedido confirmado com sucesso',
+                'data' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            logger()->error('Erro ao confirmar pedido', [
+                'order_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao confirmar pedido: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * POST /orders/{id}/dispatch
+     * Despacha um pedido (inicia entrega)
+     */
+    public function dispatch($id)
+    {
+        try {
+            $order = Order::where('id', $id)
+                ->where('tenant_id', auth()->user()->tenant_id)
+                ->firstOrFail();
+
+            if ($order->provider !== 'ifood') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Apenas pedidos iFood podem ser despachados por esta ação',
+                ], 400);
+            }
+
+            if (!$order->store_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pedido sem loja associada. Sincronize novamente os pedidos.',
+                ], 400);
+            }
+
+            $client = new \App\Services\IfoodClient($order->tenant_id, $order->store_id);
+            $result = $client->dispatchOrder($order->order_uuid);
+
+            // Atualiza status local
+            $order->update(['status' => 'DISPATCHED']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pedido despachado com sucesso',
+                'data' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            logger()->error('Erro ao despachar pedido', [
+                'order_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao despachar pedido: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * POST /orders/{id}/ready
+     * Marca pedido TAKEOUT como pronto para retirada
+     */
+    public function ready($id)
+    {
+        try {
+            $order = Order::where('id', $id)
+                ->where('tenant_id', auth()->user()->tenant_id)
+                ->firstOrFail();
+
+            if ($order->provider !== 'ifood') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Apenas pedidos iFood podem usar esta ação',
+                ], 400);
+            }
+
+            if (!$order->store_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pedido sem loja associada. Sincronize novamente os pedidos.',
+                ], 400);
+            }
+
+            $client = new \App\Services\IfoodClient($order->tenant_id, $order->store_id);
+            $result = $client->readyToPickup($order->order_uuid);
+
+            // Atualiza status local
+            $order->update(['status' => 'READY_TO_PICKUP']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pedido marcado como pronto para retirada',
+                'data' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            logger()->error('Erro ao marcar pedido como pronto', [
+                'order_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao marcar pedido como pronto: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /orders/{id}/cancellation-reasons
+     * Lista motivos de cancelamento disponíveis
+     */
+    public function cancellationReasons($id)
+    {
+        try {
+            $order = Order::where('id', $id)
+                ->where('tenant_id', auth()->user()->tenant_id)
+                ->firstOrFail();
+
+            if ($order->provider !== 'ifood') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Apenas pedidos iFood possuem motivos de cancelamento',
+                ], 400);
+            }
+
+            if (!$order->store_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pedido sem loja associada. Sincronize novamente os pedidos.',
+                ], 400);
+            }
+
+            $client = new \App\Services\IfoodClient($order->tenant_id, $order->store_id);
+            $reasons = $client->getCancellationReasons($order->order_uuid);
+
+            return response()->json([
+                'success' => true,
+                'data' => $reasons,
+            ]);
+        } catch (\Throwable $e) {
+            logger()->error('Erro ao buscar motivos de cancelamento', [
+                'order_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao buscar motivos: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * POST /orders/{id}/cancel
+     * Cancela um pedido
+     */
+    public function cancel(Request $request, $id)
+    {
+        $request->validate([
+            'cancellation_code' => 'required|string',
+        ]);
+
+        try {
+            $order = Order::where('id', $id)
+                ->where('tenant_id', auth()->user()->tenant_id)
+                ->firstOrFail();
+
+            if ($order->provider !== 'ifood') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Apenas pedidos iFood podem ser cancelados por esta ação',
+                ], 400);
+            }
+
+            if (!$order->store_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pedido sem loja associada. Sincronize novamente os pedidos.',
+                ], 400);
+            }
+
+            $client = new \App\Services\IfoodClient($order->tenant_id, $order->store_id);
+            $result = $client->cancelOrder(
+                $order->order_uuid,
+                $request->input('cancellation_code')
+            );
+
+            // Atualiza status local
+            $order->update(['status' => 'CANCELLED']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pedido cancelado com sucesso',
+                'data' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            logger()->error('Erro ao cancelar pedido', [
+                'order_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao cancelar pedido: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+}
