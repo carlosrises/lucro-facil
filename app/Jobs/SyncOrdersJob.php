@@ -50,12 +50,25 @@ class SyncOrdersJob implements ShouldQueue
             ]);
 
             // Header x-polling-merchants: IDs das lojas separadas por vírgula
+            // Inclui apenas lojas que possuem token OAuth válido
             $merchantIds = Store::where('tenant_id', $this->tenantId)
                 ->where('provider', 'ifood')
+                ->whereHas('oauthToken')
                 ->pluck('external_store_id')
                 ->filter()
                 ->unique()
                 ->join(',');
+
+            if (empty($merchantIds)) {
+                logger()->warning('⚠️ Nenhuma loja com token OAuth encontrada para polling', [
+                    'tenant_id' => $this->tenantId,
+                ]);
+                return;
+            }
+
+            logger()->info('📡 Merchant IDs para polling', [
+                'merchant_ids' => $merchantIds,
+            ]);
 
             $events = $client->get('events/v1.0/events:polling', [], [
                 'x-polling-merchants' => $merchantIds,

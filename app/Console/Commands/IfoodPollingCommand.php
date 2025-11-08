@@ -36,10 +36,13 @@ class IfoodPollingCommand extends Command
         while (true) {
             $startTime = microtime(true);
 
-            $stores = Store::where('provider', 'ifood')->get();
+            // Busca apenas lojas iFood que possuem token OAuth
+            $stores = Store::where('provider', 'ifood')
+                ->whereHas('oauthToken')
+                ->get();
 
             if ($stores->isEmpty()) {
-                $this->warn('⚠️ Nenhuma loja iFood encontrada');
+                $this->warn('⚠️ Nenhuma loja iFood com token OAuth encontrada');
                 sleep($interval);
                 continue;
             }
