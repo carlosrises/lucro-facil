@@ -18,9 +18,9 @@ import { edit as appearance } from '@/routes/appearance';
 import { edit as general } from '@/routes/general';
 import { index as integrations } from '@/routes/integrations';
 import { index as orders } from '@/routes/orders';
-import { index as sales } from '@/routes/sales';
 import { edit as password } from '@/routes/password';
 import { edit as profile } from '@/routes/profile';
+import { index as sales } from '@/routes/sales';
 import { index as stores } from '@/routes/stores';
 import { show as twoFactorAuthentication } from '@/routes/two-factor';
 
@@ -67,6 +67,11 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
         title: 'Lojas',
         href: stores(),
         icon: Store,
+    },
+    {
+        title: 'Custos & Comissões',
+        href: '/cost-commissions',
+        icon: Wallet,
     },
     {
         title: 'Fluxo de Caixa',

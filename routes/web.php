@@ -3,6 +3,7 @@
 use App\Http\Controllers\OrdersController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\StoresController;
+use App\Http\Controllers\CostCommissionsController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -40,6 +41,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Opening hours
     Route::get('stores/{id}/opening-hours', [StoresController::class, 'openingHours'])->name('stores.openingHours');
     Route::put('stores/{id}/opening-hours', [StoresController::class, 'updateOpeningHours'])->name('stores.updateOpeningHours');
+
+    // Cost & Commissions
+    Route::get('cost-commissions', [CostCommissionsController::class, 'index'])->name('cost-commissions.index');
+    Route::post('cost-commissions', [CostCommissionsController::class, 'store'])->name('cost-commissions.store');
+    Route::put('cost-commissions/{costCommission}', [CostCommissionsController::class, 'update'])->name('cost-commissions.update');
+    Route::patch('cost-commissions/{costCommission}/toggle', [CostCommissionsController::class, 'toggle'])->name('cost-commissions.toggle');
+    Route::delete('cost-commissions/{costCommission}', [CostCommissionsController::class, 'destroy'])->name('cost-commissions.destroy');
 });
 
 require __DIR__.'/settings.php';
