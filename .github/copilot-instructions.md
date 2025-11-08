@@ -78,14 +78,18 @@ Este é um monorepo Laravel + React (Inertia.js) para uma plataforma de gestão 
 ### 📋 **Diretrizes Técnicas**
 
 - Sempre utilize a estrutura de diretórios e convenções existentes
+- **ROTAS COM INERTIA.JS**: Sempre use URLs diretas (ex: `/cost-commissions`, `/orders/${id}`) ao invés da função `route()` do Ziggy. O Inertia.js já resolve as rotas corretamente.
 - Prefira Inertia.js para navegação/dados de novas páginas
 - Use Pest para testes backend, seguindo a estrutura de testes existente
 - Consulte `package.json` e `composer.json` para dependências
 - Para CI, veja `.github/workflows/` para etapas de build/lint/teste
+- **VERIFICAÇÃO DE EXISTÊNCIA DE ARQUIVOS**: Sempre que for fazer referência, importar ou usar um arquivo (controller, model, component, route, etc.), VERIFIQUE PRIMEIRO se o arquivo existe usando ferramentas de busca. Nunca assuma que um arquivo existe sem confirmar.
 - **VERIFICAÇÃO OBRIGATÓRIA ANTES DE IMPLEMENTAR**: Sempre verifique se estruturas, relacionamentos e dependências existem:
     - Schema de tabelas: Use migrations para verificar campos existentes
     - Relacionamentos Eloquent: Confirme se os relationships estão definidos nos models
     - Rotas: Verifique se as rotas necessárias existem em `routes/web.php`
+    - Controllers: Confirme que os controllers referenciados nas rotas existem
+    - Components: Verifique se os componentes React/TypeScript existem antes de importá-los
     - Estruturas de dados: Analise controllers existentes para entender formato dos dados retornados
     - Exemplo prático: Antes de implementar relacionamento Tenant->users(), verificar se ele existe no model Tenant
 - Antes de criar código novo, sempre verifique o schema atual das tabelas e a estrutura do projeto (ex: use as migrations e models para checar campos e relações). Para integrações, confira onde os tokens e dados realmente estão salvos (exemplo: o token do iFood está em `oauth_tokens`, e todas as lojas com provider 'ifood' em `stores` já estão integradas).
