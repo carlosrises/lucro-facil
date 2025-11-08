@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 
 class Store extends Model
 {
+    use BelongsToTenant;
+
     protected $fillable = [
-        'tenant_id', 'provider', 'external_store_id', 'display_name', 'active'
+        'tenant_id', 'provider', 'external_store_id', 'display_name', 'active',
     ];
 
     public function tenant()
@@ -18,6 +21,11 @@ class Store extends Model
     public function tokens()
     {
         return $this->hasMany(OauthToken::class);
+    }
+
+    public function oauthToken()
+    {
+        return $this->hasOne(OauthToken::class)->latestOfMany();
     }
 
     public function cursors()
