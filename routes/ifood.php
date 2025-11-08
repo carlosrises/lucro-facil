@@ -1,7 +1,7 @@
 <?php
 
 use App\Http\Controllers\IfoodIntegrationController;
-use App\Http\Controllers\MerchantController;
+// use App\Http\Controllers\MerchantController;
 
 use Illuminate\Support\Facades\Route;
 
@@ -19,13 +19,11 @@ Route::prefix('api/ifood')->middleware('auth')->group(function () {
     Route::get('stores', [IfoodIntegrationController::class, 'stores']);
     Route::delete('stores/{id}', [IfoodIntegrationController::class, 'destroy'])->name('ifood.stores.destroy');
 
-    Route::prefix('merchant')->group(function () {
-        // Consulta status/atualização local
-        Route::get('{store}', [MerchantController::class, 'show']);
-
-        // Atualiza status da loja (abrir/fechar)
-        Route::patch('{store}/status', [MerchantController::class, 'updateStatus']);
-    });
+    // TODO: Implementar MerchantController
+    // Route::prefix('merchant')->group(function () {
+    //     Route::get('{store}', [MerchantController::class, 'show']);
+    //     Route::patch('{store}/status', [MerchantController::class, 'updateStatus']);
+    // });
 
     Route::prefix('sales')->group(function () {
         // Lista com filtros e paginação
