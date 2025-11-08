@@ -1,0 +1,69 @@
+name: Deploy to Production (Simple)
+
+# Deploy simples - compila tudo no servidor
+# Use este se o servidor tiver Node.js instalado
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            echo "🚀 Starting deployment..."
+
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            # Pull latest changes
+            echo "📥 Pulling latest changes from GitHub..."
+            git pull origin main
+
+            # Install/update composer dependencies
+            echo "📦 Installing Composer dependencies..."
+            composer install --no-dev --optimize-autoloader --no-interaction
+
+            # Install/update npm dependencies and build
+            echo "🔨 Building frontend assets..."
+            npm install
+            npm run build
+
+            # Clear caches
+            echo "🧹 Clearing caches..."
+            php artisan config:clear
+            php artisan cache:clear
+            php artisan route:clear
+            php artisan view:clear
+
+            # Run migrations
+            echo "🗄️ Running migrations..."
+            php artisan migrate --force
+
+            # Optimize for production
+            echo "⚡ Optimizing for production..."
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+
+            # Set permissions
+            echo "🔐 Setting permissions..."
+            chmod -R 775 storage bootstrap/cache
+            chown -R www:www storage bootstrap/cache
+
+            # Restart queue workers
+            echo "🔄 Restarting queue workers..."
+            php artisan queue:restart || echo "No queue workers running"
+
+            echo "✅ Deployment completed successfully!"
