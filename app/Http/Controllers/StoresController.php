@@ -12,6 +12,7 @@ class StoresController extends Controller
     public function index(Request $request)
     {
         $query = Store::query()
+            ->where('tenant_id', $request->user()->tenant_id)
             ->when($request->input('search'), fn ($q, $search) => $q->where('display_name', 'like', "%{$search}%")
             )
             ->when($request->input('status'), fn ($q, $status) => $q->where('status', $status)
@@ -22,7 +23,8 @@ class StoresController extends Controller
 
         $stores = $query->paginate($perPage)->withQueryString();
 
-        $storesWithError = Store::where('provider', 'ifood')
+        $storesWithError = Store::where('tenant_id', $request->user()->tenant_id)
+            ->where('provider', 'ifood')
             ->where('active', false)
             ->get();
 
@@ -44,7 +46,9 @@ class StoresController extends Controller
         ]);
 
         try {
-            $store = Store::findOrFail($storeId);
+            $store = Store::where('id', $storeId)
+                ->where('tenant_id', $request->user()->tenant_id)
+                ->firstOrFail();
 
             if ($store->provider !== 'ifood') {
                 return response()->json([
