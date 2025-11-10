@@ -16,7 +16,8 @@ import { Badge } from '../ui/badge';
 // Tipos para dados financeiros do Financial API v3.0
 export type BillingEntry = {
     value: number;
-    type: 'COMMISSION' | 'FEE' | 'TRANSFER' | string;
+    type?: 'COMMISSION' | 'FEE' | 'TRANSFER' | string;
+    name?: string;
     description?: string;
 };
 

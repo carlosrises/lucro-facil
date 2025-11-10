@@ -20,26 +20,62 @@ export function SaleExpandedDetails({ sale }: SaleExpandedDetailsProps) {
         }).format(value);
     };
 
-    const getEntryTypeLabel = (type: string) => {
-        const labels: Record<string, string> = {
+    const getEntryTypeLabel = (
+        name?: string,
+        type?: string,
+        description?: string,
+    ) => {
+        // Mapeamento dos nomes do iFood para português
+        const ifoodLabels: Record<string, string> = {
+            PAYMENT_TRANSACTION_FEE: 'Comissão pela transação do pagamento',
+            ORDER_PAYMENT: 'Valor bruto da venda',
+            SERVICE_FEE: 'Taxa de serviço iFood cobrada do cliente',
+            ORDER_COMMISSION: 'Comissão iFood',
+        };
+
+        // Fallback para tipos genéricos
+        const typeLabels: Record<string, string> = {
             COMMISSION: 'Comissão',
             FEE: 'Taxa',
             TRANSFER: 'Repasse',
             PAYMENT: 'Pagamento',
             REFUND: 'Reembolso',
         };
-        return labels[type] || type;
+
+        // Prioridade: 1) Label do iFood pelo name, 2) description, 3) Label do tipo, 4) name/type original, 5) 'Lançamento'
+        return (
+            (name ? ifoodLabels[name] : null) ||
+            description ||
+            (type ? typeLabels[type] : null) ||
+            name ||
+            type ||
+            'Lançamento'
+        );
     };
 
-    const getEntryTypeColor = (type: string) => {
-        const colors: Record<string, string> = {
+    const getEntryTypeColor = (name?: string, type?: string) => {
+        // Cores específicas para tipos do iFood
+        const ifoodColors: Record<string, string> = {
+            PAYMENT_TRANSACTION_FEE: 'text-red-600', // Comissão - vermelho
+            ORDER_PAYMENT: 'text-green-600', // Valor recebido - verde
+            SERVICE_FEE: 'text-orange-600', // Taxa - laranja
+            ORDER_COMMISSION: 'text-red-600', // Comissão - vermelho
+        };
+
+        // Cores para tipos genéricos
+        const typeColors: Record<string, string> = {
             COMMISSION: 'text-red-600',
             FEE: 'text-orange-600',
             TRANSFER: 'text-blue-600',
             PAYMENT: 'text-green-600',
             REFUND: 'text-purple-600',
         };
-        return colors[type] || 'text-gray-600';
+
+        return (
+            (name ? ifoodColors[name] : null) ||
+            (type ? typeColors[type] : null) ||
+            'text-gray-600'
+        );
     };
 
     return (
@@ -178,10 +214,15 @@ export function SaleExpandedDetails({ sale }: SaleExpandedDetailsProps) {
                                     className="flex justify-between text-sm"
                                 >
                                     <span className="text-muted-foreground">
-                                        {getEntryTypeLabel(entry.type)}:
+                                        {getEntryTypeLabel(
+                                            entry.name,
+                                            entry.type,
+                                            entry.description,
+                                        )}
+                                        :
                                     </span>
                                     <span
-                                        className={`font-medium ${getEntryTypeColor(entry.type)}`}
+                                        className={`font-medium ${getEntryTypeColor(entry.name, entry.type)}`}
                                     >
                                         {entry.type === 'TRANSFER' ||
                                         entry.type === 'PAYMENT'
