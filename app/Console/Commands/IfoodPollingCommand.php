@@ -30,7 +30,7 @@ class IfoodPollingCommand extends Command
         $interval = (int) $this->option('interval');
 
         $this->info("🔄 Iniciando polling iFood (intervalo: {$interval}s)");
-        $this->info("Pressione Ctrl+C para parar");
+        $this->info('Pressione Ctrl+C para parar');
         $this->newLine();
 
         while (true) {
@@ -44,10 +44,11 @@ class IfoodPollingCommand extends Command
             if ($stores->isEmpty()) {
                 $this->warn('⚠️ Nenhuma loja iFood com token OAuth encontrada');
                 sleep($interval);
+
                 continue;
             }
 
-            $this->info("📡 [" . now()->format('H:i:s') . "] Iniciando polling para {$stores->count()} loja(s)...");
+            $this->info('📡 ['.now()->format('H:i:s')."] Iniciando polling para {$stores->count()} loja(s)...");
 
             foreach ($stores as $store) {
                 try {

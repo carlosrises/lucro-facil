@@ -2,11 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Store;
 use App\Models\OauthToken;
-
-use App\Http\Controllers\Controller;
-
+use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -21,8 +18,8 @@ class IfoodIntegrationController extends Controller
             $clientId = config('services.ifood.client_id');
             $clientSecret = config('services.ifood.client_secret');
 
-            $response = Http::asForm()->post("https://merchant-api.ifood.com.br/authentication/v1.0/oauth/userCode", [
-                'clientId' => $clientId
+            $response = Http::asForm()->post('https://merchant-api.ifood.com.br/authentication/v1.0/oauth/userCode', [
+                'clientId' => $clientId,
             ]);
 
             if ($response->failed()) {
@@ -52,28 +49,35 @@ class IfoodIntegrationController extends Controller
     {
         $request->validate([
             'authorization_code' => 'required|string',
-            'code_verifier'      => 'required|string',
+            'code_verifier' => 'required|string',
         ]);
 
         try {
-            $clientId     = config('services.ifood.client_id');
+            $clientId = config('services.ifood.client_id');
             $clientSecret = config('services.ifood.client_secret');
 
             // Troca o código por tokens
-            $response = Http::asForm()->post("https://merchant-api.ifood.com.br/authentication/v1.0/oauth/token", [
-                'grantType'                 => 'authorization_code',
-                'clientId'                  => $clientId,
-                'clientSecret'              => $clientSecret,
-                'authorizationCode'         => $request->authorization_code,
+            $response = Http::asForm()->post('https://merchant-api.ifood.com.br/authentication/v1.0/oauth/token', [
+                'grantType' => 'authorization_code',
+                'clientId' => $clientId,
+                'clientSecret' => $clientSecret,
+                'authorizationCode' => $request->authorization_code,
                 'authorizationCodeVerifier' => $request->code_verifier,
 
             ]);
 
             if ($response->failed()) {
+                logger()->error('iFood token exchange failed', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                    'json' => $response->json(),
+                ]);
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Erro ao obter tokens',
-                    'details' => $response->json()
+                    'details' => $response->json(),
+                    'status_code' => $response->status(),
                 ], 400);
             }
 
@@ -83,12 +87,12 @@ class IfoodIntegrationController extends Controller
             $oauth = OauthToken::updateOrCreate(
                 [
                     'tenant_id' => auth()->user()->tenant_id,
-                    'provider'  => 'ifood',
+                    'provider' => 'ifood',
                 ],
                 [
-                    'access_token'  => $tokens['accessToken'],
+                    'access_token' => $tokens['accessToken'],
                     'refresh_token' => $tokens['refreshToken'] ?? null,
-                    'expires_at'    => now()->addSeconds($tokens['expiresIn']),
+                    'expires_at' => now()->addSeconds($tokens['expiresIn']),
                     // 'scopes'        => $tokens['scope'] ?? null,
                 ]
             );
@@ -102,13 +106,13 @@ class IfoodIntegrationController extends Controller
                 $merchant = $merchantResponse->json()[0]; // se tiver mais de uma, pegar todas
                 $store = Store::updateOrCreate(
                     [
-                        'tenant_id'        => auth()->user()->tenant_id,
-                        'external_store_id'=> $merchant['id'],
-                        'provider'         => 'ifood',
+                        'tenant_id' => auth()->user()->tenant_id,
+                        'external_store_id' => $merchant['id'],
+                        'provider' => 'ifood',
                     ],
                     [
-                        'display_name'     => $merchant['name'],
-                        'active'           => true,
+                        'display_name' => $merchant['name'],
+                        'active' => true,
                     ]
                 );
 
@@ -118,20 +122,17 @@ class IfoodIntegrationController extends Controller
 
             return response()->json([
                 'success' => true,
-                'store'   => $store,
+                'store' => $store,
             ]);
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Erro ao concluir integração',
-                'error'   => $e->getMessage(),
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
 
-    /**
-     *
-     */
     public function stores()
     {
         $stores = Store::where('tenant_id', auth()->user()->tenant_id)
@@ -141,9 +142,6 @@ class IfoodIntegrationController extends Controller
         return response()->json(['stores' => $stores]);
     }
 
-    /**
-     *
-     */
     public function destroy($id)
     {
         try {
@@ -159,18 +157,18 @@ class IfoodIntegrationController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Loja e tokens removidos com sucesso.'
+                'message' => 'Loja e tokens removidos com sucesso.',
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Loja não encontrada.'
+                'message' => 'Loja não encontrada.',
             ], 404);
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Erro ao remover a loja.',
-                'error'   => $e->getMessage(),
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

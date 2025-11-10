@@ -38,8 +38,6 @@ export function CostCommissionFormDialog({
         name: item?.name || '',
         type: item?.type || 'percentage',
         value: item?.value || '',
-        affects_revenue_base: item?.affects_revenue_base || false,
-        enters_tax_base: item?.enters_tax_base || false,
         reduces_revenue_base: item?.reduces_revenue_base || false,
         active: item?.active ?? true,
     });
@@ -50,8 +48,6 @@ export function CostCommissionFormDialog({
                 name: item.name,
                 type: item.type,
                 value: item.value,
-                affects_revenue_base: item.affects_revenue_base,
-                enters_tax_base: item.enters_tax_base,
                 reduces_revenue_base: item.reduces_revenue_base,
                 active: item.active,
             });
@@ -208,38 +204,6 @@ export function CostCommissionFormDialog({
                         <h4 className="text-sm font-medium">
                             Configurações de Aplicação
                         </h4>
-
-                        <div className="flex items-center justify-between space-x-2">
-                            <Label
-                                htmlFor="affects_revenue_base"
-                                className="text-sm font-normal"
-                            >
-                                Afeta base de receita
-                            </Label>
-                            <Switch
-                                id="affects_revenue_base"
-                                checked={data.affects_revenue_base}
-                                onCheckedChange={(checked) =>
-                                    setData('affects_revenue_base', checked)
-                                }
-                            />
-                        </div>
-
-                        <div className="flex items-center justify-between space-x-2">
-                            <Label
-                                htmlFor="enters_tax_base"
-                                className="text-sm font-normal"
-                            >
-                                Entra na base do imposto
-                            </Label>
-                            <Switch
-                                id="enters_tax_base"
-                                checked={data.enters_tax_base}
-                                onCheckedChange={(checked) =>
-                                    setData('enters_tax_base', checked)
-                                }
-                            />
-                        </div>
 
                         <div className="flex items-center justify-between space-x-2">
                             <Label

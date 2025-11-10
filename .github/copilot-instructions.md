@@ -79,6 +79,13 @@ Este é um monorepo Laravel + React (Inertia.js) para uma plataforma de gestão 
 
 - Sempre utilize a estrutura de diretórios e convenções existentes
 - **ROTAS COM INERTIA.JS**: Sempre use URLs diretas (ex: `/cost-commissions`, `/orders/${id}`) ao invés da função `route()` do Ziggy. O Inertia.js já resolve as rotas corretamente.
+- **🔒 ISOLAMENTO MULTI-TENANT (CRÍTICO)**: TODAS as queries em controllers que retornam dados para páginas de clientes DEVEM filtrar por `tenant_id`:
+    - ✅ SEMPRE adicione `->where('tenant_id', $request->user()->tenant_id)` nas queries
+    - ✅ Use o trait `BelongsToTenant` nos models quando possível (scope automático)
+    - ✅ Verifique que todos os métodos do controller (index, show, update, delete) filtram por tenant
+    - ❌ NUNCA retorne dados sem filtrar por tenant em áreas de clientes
+    - Exemplo correto: `CostCommission::where('tenant_id', auth()->user()->tenant_id)->get()`
+    - Exceção: Área admin pode ver todos os tenants, mas deve ser explícito
 - Prefira Inertia.js para navegação/dados de novas páginas
 - Use Pest para testes backend, seguindo a estrutura de testes existente
 - Consulte `package.json` e `composer.json` para dependências

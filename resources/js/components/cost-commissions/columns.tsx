@@ -100,32 +100,6 @@ export const columns = (
         },
     },
     {
-        accessorKey: 'affects_revenue_base',
-        header: 'Afeta Base',
-        cell: ({ row }) => (
-            <Badge
-                variant={
-                    row.getValue('affects_revenue_base') ? 'default' : 'outline'
-                }
-            >
-                {row.getValue('affects_revenue_base') ? 'Sim' : 'Não'}
-            </Badge>
-        ),
-    },
-    {
-        accessorKey: 'enters_tax_base',
-        header: 'Base Imposto',
-        cell: ({ row }) => (
-            <Badge
-                variant={
-                    row.getValue('enters_tax_base') ? 'default' : 'outline'
-                }
-            >
-                {row.getValue('enters_tax_base') ? 'Sim' : 'Não'}
-            </Badge>
-        ),
-    },
-    {
         accessorKey: 'reduces_revenue_base',
         header: 'Reduz Base',
         cell: ({ row }) => (
