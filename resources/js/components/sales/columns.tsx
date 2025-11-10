@@ -145,8 +145,8 @@ export const columns: ColumnDef<Sale>[] = [
         header: 'Total do Pedido',
         cell: ({ row }) => {
             const isCancelled = row.original.status === 'CANCELLED';
-            // Total do Pedido = Valor da Sacola + Taxa de Serviço (em valor absoluto)
-            const totalPedido = Number(row.original.bag_value) + Math.abs(Number(row.original.service_fee));
+            // Use the backend-provided payment_value as the authoritative Total do Pedido
+            const paymentValue = Number(row.original.payment_value ?? 0);
             return (
                 <span
                     className={`${isCancelled ? 'text-muted-foreground line-through' : ''}`}
@@ -154,7 +154,7 @@ export const columns: ColumnDef<Sale>[] = [
                     {new Intl.NumberFormat('pt-BR', {
                         style: 'currency',
                         currency: 'BRL',
-                    }).format(totalPedido)}
+                    }).format(paymentValue)}
                 </span>
             );
         },

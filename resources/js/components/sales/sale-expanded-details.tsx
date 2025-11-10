@@ -85,9 +85,7 @@ export function SaleExpandedDetails({ sale }: SaleExpandedDetailsProps) {
                             Total do Pedido:
                         </span>
                         <span className="font-semibold">
-                            {formatCurrency(
-                                Number(sale.bag_value) + Math.abs(Number(sale.service_fee))
-                            )}
+                            {formatCurrency(Number(sale.payment_value ?? 0))}
                         </span>
                     </div>
                     <div className="flex justify-between text-sm">
