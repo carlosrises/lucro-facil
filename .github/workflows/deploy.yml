@@ -15,6 +15,27 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Verify Secrets
+        run: |
+          echo "Checking if secrets are configured..."
+          if [ -z "${{ secrets.SSH_HOST }}" ]; then
+            echo "❌ SSH_HOST secret is not configured!"
+            exit 1
+          fi
+          if [ -z "${{ secrets.SSH_USER }}" ]; then
+            echo "❌ SSH_USER secret is not configured!"
+            exit 1
+          fi
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "❌ SSH_PRIVATE_KEY secret is not configured!"
+            exit 1
+          fi
+          if [ -z "${{ secrets.DEPLOY_PATH }}" ]; then
+            echo "❌ DEPLOY_PATH secret is not configured!"
+            exit 1
+          fi
+          echo "✅ All required secrets are configured!"
+
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
