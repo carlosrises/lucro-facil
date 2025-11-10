@@ -21,12 +21,21 @@ class MakeUserAdmin extends Command
             return 1;
         }
 
-        // Atribuir role admin:system
+        // Atribuir roles administrativas: 'admin' e 'admin:system' para compatibilidade
+        $assigned = [];
+        if (!$user->hasRole('admin')) {
+            $user->assignRole('admin');
+            $assigned[] = 'admin';
+        }
         if (!$user->hasRole('admin:system')) {
             $user->assignRole('admin:system');
-            $this->info("✅ Usuário '{$user->name}' ({$email}) agora é admin:system!");
+            $assigned[] = 'admin:system';
+        }
+
+        if (!empty($assigned)) {
+            $this->info("✅ Usuário '{$user->name}' ({$email}) recebeu roles: " . implode(', ', $assigned));
         } else {
-            $this->warn("⚠️  Usuário '{$user->name}' ({$email}) já é admin:system!");
+            $this->warn("⚠️  Usuário '{$user->name}' ({$email}) já possuía as roles administrativas.");
         }
 
         // Mostrar roles atuais

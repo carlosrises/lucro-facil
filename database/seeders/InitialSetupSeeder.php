@@ -21,7 +21,8 @@ class InitialSetupSeeder extends Seeder
         // 1) Roles básicas
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        $roles = ['admin:system','admin:tenant','manager','operator'];
+    // Inclui role 'admin' para compatibilidade com verificações antigas
+    $roles = ['admin','admin:system','admin:tenant','manager','operator'];
         foreach ($roles as $role) {
             \Spatie\Permission\Models\Role::firstOrCreate(['name' => $role]);
         }

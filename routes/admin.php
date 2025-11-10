@@ -1,10 +1,11 @@
 <?php
 
-use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminClientsController;
+use App\Http\Controllers\Admin\AdminDashboardController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('admin')->middleware(['auth', 'role:admin'])->name('admin.')->group(function () {
+// Aceita usuários com role 'admin' ou qualquer role que comece com 'admin:' (ex: 'admin:system')
+Route::prefix('admin')->middleware(['auth', 'role:admin|admin:system'])->name('admin.')->group(function () {
     Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
 
     Route::resource('clients', AdminClientsController::class)->except(['show', 'create', 'edit']);
