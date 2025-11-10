@@ -201,7 +201,8 @@ const footerNavItems: NavItem[] = [
 
 export function AppSidebar() {
     const { auth } = usePage<SharedData>().props;
-    const isAdmin = auth.user?.roles?.includes('admin');
+    // Considera qualquer role que comece com 'admin' (ex: 'admin', 'admin:system', 'admin:tenant')
+    const isAdmin = (auth.user?.roles ?? []).some((r: string) => r?.toString?.().startsWith?.('admin'));
 
     // Itens admin como array simples para o NavAdmin
     const adminNavItems: NavItem[] = [
