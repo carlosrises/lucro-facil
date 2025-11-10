@@ -142,9 +142,11 @@ export const columns: ColumnDef<Sale>[] = [
     },
     {
         accessorKey: 'gross_value',
-        header: 'Valor Bruto',
+        header: 'Total do Pedido',
         cell: ({ row }) => {
             const isCancelled = row.original.status === 'CANCELLED';
+            // Total do Pedido = Valor da Sacola + Taxa de Serviço (em valor absoluto)
+            const totalPedido = Number(row.original.bag_value) + Math.abs(Number(row.original.service_fee));
             return (
                 <span
                     className={`${isCancelled ? 'text-muted-foreground line-through' : ''}`}
@@ -152,7 +154,7 @@ export const columns: ColumnDef<Sale>[] = [
                     {new Intl.NumberFormat('pt-BR', {
                         style: 'currency',
                         currency: 'BRL',
-                    }).format(row.original.gross_value)}
+                    }).format(totalPedido)}
                 </span>
             );
         },

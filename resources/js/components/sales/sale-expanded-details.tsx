@@ -82,10 +82,12 @@ export function SaleExpandedDetails({ sale }: SaleExpandedDetailsProps) {
                     <Separator />
                     <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">
-                            Valor Bruto:
+                            Total do Pedido:
                         </span>
                         <span className="font-semibold">
-                            {formatCurrency(sale.gross_value)}
+                            {formatCurrency(
+                                Number(sale.bag_value) + Math.abs(Number(sale.service_fee))
+                            )}
                         </span>
                     </div>
                     <div className="flex justify-between text-sm">
