@@ -86,6 +86,19 @@ export function DataTable({
     const [rowSelection, setRowSelection] = React.useState({});
     const [expanded, setExpanded] = React.useState({});
 
+    // Mapeamento de nomes bonitos para as colunas
+    const columnLabels: Record<string, string> = {
+        sale_date: 'Data da Venda',
+        channel: 'Canal',
+        sale_id: 'ID da Venda',
+        status: 'Status',
+        gross_value: 'Total do Pedido',
+        commissions: 'Comissões',
+        fees: 'Taxas',
+        sale_balance: 'Saldo da Venda',
+        expected_payment_date: 'Previsão de Pagamento',
+    };
+
     const table = useReactTable({
         data,
         columns,
@@ -110,49 +123,47 @@ export function DataTable({
     return (
         <div className="flex w-full flex-col gap-4 space-x-4 px-4 lg:px-6">
             {/* 🔎 Filtros */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                        placeholder="Buscar venda..."
-                        value={
-                            (table
-                                .getColumn('sale_id')
-                                ?.getFilterValue() as string) ?? ''
-                        }
-                        onChange={(event) =>
-                            table
-                                .getColumn('sale_id')
-                                ?.setFilterValue(event.target.value)
-                        }
-                        className="max-w-sm"
-                    />
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="ml-auto">
-                                Colunas <ChevronDown />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            {table
-                                .getAllColumns()
-                                .filter((column) => column.getCanHide())
-                                .map((column) => {
-                                    return (
-                                        <DropdownMenuCheckboxItem
-                                            key={column.id}
-                                            className="capitalize"
-                                            checked={column.getIsVisible()}
-                                            onCheckedChange={(value) =>
-                                                column.toggleVisibility(!!value)
-                                            }
-                                        >
-                                            {column.id}
-                                        </DropdownMenuCheckboxItem>
-                                    );
-                                })}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
+            <div className="flex items-center justify-between gap-2">
+                <Input
+                    placeholder="Buscar venda..."
+                    value={
+                        (table
+                            .getColumn('sale_id')
+                            ?.getFilterValue() as string) ?? ''
+                    }
+                    onChange={(event) =>
+                        table
+                            .getColumn('sale_id')
+                            ?.setFilterValue(event.target.value)
+                    }
+                    className="max-w-sm"
+                />
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline">
+                            Colunas <ChevronDown />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        {table
+                            .getAllColumns()
+                            .filter((column) => column.getCanHide())
+                            .map((column) => {
+                                return (
+                                    <DropdownMenuCheckboxItem
+                                        key={column.id}
+                                        className="capitalize"
+                                        checked={column.getIsVisible()}
+                                        onCheckedChange={(value) =>
+                                            column.toggleVisibility(!!value)
+                                        }
+                                    >
+                                        {columnLabels[column.id] || column.id}
+                                    </DropdownMenuCheckboxItem>
+                                );
+                            })}
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
 
             {/* 📌 Tabela */}
