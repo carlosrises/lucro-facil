@@ -4,6 +4,9 @@ use App\Http\Controllers\OrdersController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\StoresController;
 use App\Http\Controllers\CostCommissionsController;
+use App\Http\Controllers\CategoriesController;
+use App\Http\Controllers\IngredientsController;
+use App\Http\Controllers\ProductsController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -48,6 +51,35 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('cost-commissions/{costCommission}', [CostCommissionsController::class, 'update'])->name('cost-commissions.update');
     Route::patch('cost-commissions/{costCommission}/toggle', [CostCommissionsController::class, 'toggle'])->name('cost-commissions.toggle');
     Route::delete('cost-commissions/{costCommission}', [CostCommissionsController::class, 'destroy'])->name('cost-commissions.destroy');
+
+    // Categories Management Page
+    Route::get('categories', [CategoriesController::class, 'manage'])->name('categories.manage');
+
+    // Categories API
+    Route::get('api/categories', [CategoriesController::class, 'index'])->name('categories.index');
+    Route::post('api/categories', [CategoriesController::class, 'store'])->name('categories.store');
+    Route::put('api/categories/{category}', [CategoriesController::class, 'update'])->name('categories.update');
+    Route::delete('api/categories/{category}', [CategoriesController::class, 'destroy'])->name('categories.destroy');
+
+    // Ingredients
+    Route::get('ingredients', [IngredientsController::class, 'index'])->name('ingredients.index');
+    Route::post('ingredients', [IngredientsController::class, 'store'])->name('ingredients.store');
+    Route::put('ingredients/{ingredient}', [IngredientsController::class, 'update'])->name('ingredients.update');
+    Route::patch('ingredients/{ingredient}/toggle', [IngredientsController::class, 'toggle'])->name('ingredients.toggle');
+    Route::delete('ingredients/{ingredient}', [IngredientsController::class, 'destroy'])->name('ingredients.destroy');
+
+    // Products
+    Route::get('products', [ProductsController::class, 'index'])->name('products.index');
+    Route::post('products', [ProductsController::class, 'store'])->name('products.store');
+    Route::get('products/{product}/data', [ProductsController::class, 'getData'])->name('products.getData');
+    Route::get('products/{product}', [ProductsController::class, 'show'])->name('products.show');
+    Route::put('products/{product}', [ProductsController::class, 'update'])->name('products.update');
+    Route::patch('products/{product}/toggle', [ProductsController::class, 'toggle'])->name('products.toggle');
+    Route::delete('products/{product}', [ProductsController::class, 'destroy'])->name('products.destroy');
+
+    // Product recipes (technical sheet)
+    Route::post('products/{product}/ingredients', [ProductsController::class, 'addIngredient'])->name('products.addIngredient');
+    Route::delete('products/{product}/ingredients/{ingredient}', [ProductsController::class, 'removeIngredient'])->name('products.removeIngredient');
 });
 
 require __DIR__.'/settings.php';

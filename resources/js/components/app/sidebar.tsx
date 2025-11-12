@@ -110,11 +110,15 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
         items: [
             {
                 title: 'Insumos',
-                href: '#',
+                href: '/ingredients',
             },
             {
                 title: 'Produtos',
-                href: '#',
+                href: '/products',
+            },
+            {
+                title: 'Categorias',
+                href: '/categories',
             },
             {
                 title: 'Combos',
@@ -202,7 +206,9 @@ const footerNavItems: NavItem[] = [
 export function AppSidebar() {
     const { auth } = usePage<SharedData>().props;
     // Considera qualquer role que comece com 'admin' (ex: 'admin', 'admin:system', 'admin:tenant')
-    const isAdmin = (auth.user?.roles ?? []).some((r: string) => r?.toString?.().startsWith?.('admin'));
+    const isAdmin = (auth.user?.roles ?? []).some((r: string) =>
+        r?.toString?.().startsWith?.('admin'),
+    );
 
     // Itens admin como array simples para o NavAdmin
     const adminNavItems: NavItem[] = [
