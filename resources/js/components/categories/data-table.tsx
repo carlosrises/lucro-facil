@@ -35,20 +35,36 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { router } from '@inertiajs/react';
-import { ChevronDown, LayoutGrid, Plus } from 'lucide-react';
+import {
+    ChevronDown,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
+    LayoutGrid,
+    Plus,
+} from 'lucide-react';
 import { CategoryManageDialog } from './category-manage-dialog';
 import { createColumns, type Category } from './columns';
 
 interface DataTableProps {
     data: Category[];
+    pagination: {
+        current_page: number;
+        last_page: number;
+        per_page: number;
+        from: number;
+        to: number;
+        total: number;
+    };
     filters: {
         search?: string;
-        type?: string;
         active?: string;
+        page?: number;
     };
 }
 
-export function DataTable({ data, filters }: DataTableProps) {
+export function DataTable({ data, pagination, filters }: DataTableProps) {
     const [sorting, setSorting] = React.useState<SortingState>([
         { id: 'name', desc: false },
     ]);
@@ -133,24 +149,6 @@ export function DataTable({ data, filters }: DataTableProps) {
                         }
                         className="h-9 max-w-sm"
                     />
-
-                    <Select
-                        value={filters.type || 'all'}
-                        onValueChange={(value) =>
-                            updateFilters({
-                                type: value === 'all' ? undefined : value,
-                            })
-                        }
-                    >
-                        <SelectTrigger className="h-9 w-[140px]">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Todos tipos</SelectItem>
-                            <SelectItem value="ingredient">Insumos</SelectItem>
-                            <SelectItem value="product">Produtos</SelectItem>
-                        </SelectContent>
-                    </Select>
 
                     <Select
                         value={filters.active || 'all'}
@@ -268,6 +266,88 @@ export function DataTable({ data, filters }: DataTableProps) {
                             )}
                         </TableBody>
                     </Table>
+                </div>
+
+                {/* Paginação */}
+                <div className="flex items-center justify-between px-2">
+                    <div className="flex-1 text-sm text-muted-foreground">
+                        Mostrando {pagination.from} a {pagination.to} de{' '}
+                        {pagination.total} categoria(s)
+                    </div>
+                    <div className="flex items-center space-x-6 lg:space-x-8">
+                        <div className="flex w-[100px] items-center justify-center text-sm font-medium">
+                            Página {pagination.current_page} de{' '}
+                            {pagination.last_page}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <Button
+                                variant="outline"
+                                className="hidden h-8 w-8 p-0 lg:flex"
+                                onClick={() =>
+                                    updateFilters({
+                                        page: 1,
+                                    })
+                                }
+                                disabled={pagination.current_page === 1}
+                            >
+                                <span className="sr-only">
+                                    Ir para primeira página
+                                </span>
+                                <ChevronsLeft className="h-4 w-4" />
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="h-8 w-8 p-0"
+                                onClick={() =>
+                                    updateFilters({
+                                        page: pagination.current_page - 1,
+                                    })
+                                }
+                                disabled={pagination.current_page === 1}
+                            >
+                                <span className="sr-only">
+                                    Ir para página anterior
+                                </span>
+                                <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="h-8 w-8 p-0"
+                                onClick={() =>
+                                    updateFilters({
+                                        page: pagination.current_page + 1,
+                                    })
+                                }
+                                disabled={
+                                    pagination.current_page ===
+                                    pagination.last_page
+                                }
+                            >
+                                <span className="sr-only">
+                                    Ir para próxima página
+                                </span>
+                                <ChevronRight className="h-4 w-4" />
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="hidden h-8 w-8 p-0 lg:flex"
+                                onClick={() =>
+                                    updateFilters({
+                                        page: pagination.last_page,
+                                    })
+                                }
+                                disabled={
+                                    pagination.current_page ===
+                                    pagination.last_page
+                                }
+                            >
+                                <span className="sr-only">
+                                    Ir para última página
+                                </span>
+                                <ChevronsRight className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             </div>
 

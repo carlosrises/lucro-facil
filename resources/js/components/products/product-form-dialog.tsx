@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { Combobox } from '@/components/ui/combobox';
 import {
     Dialog,
     DialogContent,
@@ -473,32 +474,20 @@ export function ProductFormDialog({
                                         Adicionar Insumo
                                     </h4>
                                     <div className="flex gap-2">
-                                        <Select
+                                        <Combobox
+                                            options={availableIngredients.map(
+                                                (ing) => ({
+                                                    value: ing.id.toString(),
+                                                    label: `${ing.name} (${ing.unit}) - R$ ${parseFloat(ing.unit_price).toFixed(4)}`,
+                                                }),
+                                            )}
                                             value={selectedIngredientId}
-                                            onValueChange={
-                                                setSelectedIngredientId
-                                            }
-                                        >
-                                            <SelectTrigger className="flex-1">
-                                                <SelectValue placeholder="Selecione um insumo" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {availableIngredients.map(
-                                                    (ing) => (
-                                                        <SelectItem
-                                                            key={ing.id}
-                                                            value={ing.id.toString()}
-                                                        >
-                                                            {ing.name} (
-                                                            {ing.unit}) - R${' '}
-                                                            {parseFloat(
-                                                                ing.unit_price,
-                                                            ).toFixed(4)}
-                                                        </SelectItem>
-                                                    ),
-                                                )}
-                                            </SelectContent>
-                                        </Select>
+                                            onChange={setSelectedIngredientId}
+                                            placeholder="Selecione um insumo"
+                                            searchPlaceholder="Buscar insumo..."
+                                            emptyMessage="Nenhum insumo encontrado."
+                                            className="flex-1"
+                                        />
                                         <Input
                                             type="number"
                                             step="0.001"

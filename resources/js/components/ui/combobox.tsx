@@ -29,6 +29,9 @@ interface ComboboxProps {
   placeholder?: string;
   value?: string;
   onChange?: (value: string) => void;
+  className?: string;
+  emptyMessage?: string;
+  searchPlaceholder?: string;
 }
 
 export function Combobox({
@@ -36,6 +39,9 @@ export function Combobox({
   placeholder = "Selecionar...",
   value,
   onChange,
+  className,
+  emptyMessage = "Nenhum resultado encontrado.",
+  searchPlaceholder = "Buscar...",
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -48,25 +54,25 @@ export function Combobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="h-9 w-[200px] justify-between"
+          className={cn("h-9 justify-between", className)}
         >
           {selected ? selected.label : placeholder}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-0">
+      <PopoverContent className={cn("p-0", className)} align="start">
         <Command>
-          <CommandInput placeholder="Buscar..." className="h-9" />
+          <CommandInput placeholder={searchPlaceholder} className="h-9" />
           <CommandList>
-            <CommandEmpty>Nenhum resultado encontrado.</CommandEmpty>
+            <CommandEmpty>{emptyMessage}</CommandEmpty>
             <CommandGroup>
               {options.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.value}
-                  onSelect={(currentValue) => {
-                    const newValue = currentValue === value ? "" : currentValue;
-                    onChange?.(newValue);
+                  value={option.label}
+                  keywords={[option.label, option.value]}
+                  onSelect={() => {
+                    onChange?.(option.value);
                     setOpen(false);
                   }}
                 >

@@ -85,7 +85,7 @@ export default function ShowProduct({ product }: ShowProductProps) {
 
     const cmv = calculateCMV();
     const salePrice = parseFloat(product.sale_price);
-    const margin = salePrice > 0 ? ((salePrice - cmv) / salePrice) * 100 : 0;
+    const margin = cmv > 0 ? ((salePrice - cmv) / cmv) * 100 : 0;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>

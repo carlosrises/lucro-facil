@@ -10,13 +10,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useForm } from '@inertiajs/react';
 import { useEffect } from 'react';
@@ -102,42 +95,13 @@ export function CategoryManageDialog({
                                 onChange={(e) =>
                                     setData('name', e.target.value)
                                 }
-                                placeholder="Ex: Bebidas"
+                                placeholder="Ex: Bebidas, Carnes, Vegetais"
                                 required
                                 autoComplete="off"
                             />
                             {errors.name && (
                                 <p className="text-sm text-red-500">
                                     {errors.name}
-                                </p>
-                            )}
-                        </div>
-
-                        <div className="grid gap-2">
-                            <Label htmlFor="type">
-                                Tipo <span className="text-red-500">*</span>
-                            </Label>
-                            <Select
-                                value={data.type}
-                                onValueChange={(
-                                    value: 'ingredient' | 'product',
-                                ) => setData('type', value)}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="ingredient">
-                                        Insumo
-                                    </SelectItem>
-                                    <SelectItem value="product">
-                                        Produto
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                            {errors.type && (
-                                <p className="text-sm text-red-500">
-                                    {errors.type}
                                 </p>
                             )}
                         </div>

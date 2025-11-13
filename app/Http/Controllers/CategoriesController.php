@@ -24,13 +24,13 @@ class CategoriesController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'type' => ['required', 'in:ingredient,product'],
             'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'active' => ['boolean'],
         ]);
 
         $category = Category::create([
             ...$validated,
+            'type' => 'ingredient',
             'tenant_id' => tenant_id(),
         ]);
 
@@ -48,12 +48,14 @@ class CategoriesController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'type' => ['required', 'in:ingredient,product'],
             'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'active' => ['boolean'],
         ]);
 
-        $category->update($validated);
+        $category->update([
+            ...$validated,
+            'type' => 'ingredient',
+        ]);
 
         return redirect()->back()->with('success', 'Categoria atualizada com sucesso!');
     }
@@ -72,15 +74,12 @@ class CategoriesController extends Controller
     public function manage(Request $request)
     {
         $query = Category::where('tenant_id', $request->user()->tenant_id)
+            ->where('type', 'ingredient')
             ->withCount(['ingredients']);
 
         // Filtros
         if ($request->filled('search')) {
             $query->where('name', 'like', '%' . $request->search . '%');
-        }
-
-        if ($request->filled('type')) {
-            $query->where('type', $request->type);
         }
 
         if ($request->filled('active')) {
@@ -93,7 +92,6 @@ class CategoriesController extends Controller
             'categories' => $categories,
             'filters' => [
                 'search' => $request->search,
-                'type' => $request->type,
                 'active' => $request->active,
             ]
         ]);

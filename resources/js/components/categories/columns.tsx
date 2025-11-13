@@ -1,4 +1,3 @@
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -18,12 +17,6 @@ export type Category = {
     color: string;
     active: boolean;
     ingredients_count?: number;
-    products_count?: number;
-};
-
-const typeLabels: Record<string, string> = {
-    ingredient: 'Insumo',
-    product: 'Produto',
 };
 
 interface ColumnsProps {
@@ -63,14 +56,6 @@ export const createColumns = ({
                     <span className="font-medium">{category.name}</span>
                 </div>
             );
-        },
-    },
-    {
-        accessorKey: 'type',
-        header: 'Tipo',
-        cell: ({ row }) => {
-            const type = row.getValue('type') as string;
-            return <Badge variant="outline">{typeLabels[type] || type}</Badge>;
         },
     },
     {
