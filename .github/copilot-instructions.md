@@ -30,7 +30,7 @@ Este é um monorepo Laravel + React (Inertia.js) para uma plataforma de gestão 
     - Usa alias `@/` para `resources/js/`
     - Pages em `resources/js/pages/`, components em `resources/js/components/`
     - Componentes específicos de páginas devem ficar em `resources/js/components/{pageName}/` (exemplo: componentes do dashboard em `resources/js/components/dashboard/`).
-    - Sempre utilize a biblioteca shadcn/ui para construir componentes visuais.
+    - **SEMPRE utilize shadcn/ui para componentes visuais**: Use `npx shadcn@latest add [component]` para adicionar novos componentes UI. NUNCA crie componentes UI manualmente quando o shadcn/ui oferece uma alternativa.
     - Para ícones, utilize sempre a biblioteca Lucide (https://lucide.dev/) e nunca SVGs inline ou outras libs.
     - Data tables e UI usam Radix UI, TailwindCSS, custom hooks e shadcn/ui.
     - Inertia.js para props de página e navegação.

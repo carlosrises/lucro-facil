@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\GeneralController;
 use App\Http\Controllers\Settings\IntegrationsController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
@@ -30,7 +31,9 @@ Route::middleware('auth')->group(function () {
     Route::get('settings/integrations', [IntegrationsController::class, 'index'])
         ->name('integrations.index');
 
-    Route::get('settings/general', function () {
-        return Inertia::render('settings/general');
-    })->name('general.edit');
+    Route::get('settings/general', [GeneralController::class, 'edit'])
+        ->name('general.edit');
+
+    Route::put('settings/general', [GeneralController::class, 'update'])
+        ->name('general.update');
 });

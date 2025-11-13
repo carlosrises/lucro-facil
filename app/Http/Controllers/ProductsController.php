@@ -39,9 +39,18 @@ class ProductsController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'unit', 'unit_price']);
 
+        // Buscar configurações de margem do tenant
+        $tenant = $request->user()->tenant;
+
         return Inertia::render('products', [
             'products' => $products,
             'ingredients' => $ingredients,
+            'marginSettings' => [
+                'margin_excellent' => (float) ($tenant->margin_excellent ?? 100.00),
+                'margin_good_min' => (float) ($tenant->margin_good_min ?? 30.00),
+                'margin_good_max' => (float) ($tenant->margin_good_max ?? 99.99),
+                'margin_poor' => (float) ($tenant->margin_poor ?? 0.00),
+            ],
             'filters' => [
                 'search' => $request->input('search'),
                 'type' => $request->input('type'),

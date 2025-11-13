@@ -42,11 +42,18 @@ const unitLabels: Record<string, string> = {
 interface ColumnsProps {
     onEdit: (product: Product) => void;
     onDelete: (product: Product) => void;
+    marginSettings: {
+        margin_excellent: number;
+        margin_good_min: number;
+        margin_good_max: number;
+        margin_poor: number;
+    };
 }
 
 export const createColumns = ({
     onEdit,
     onDelete,
+    marginSettings,
 }: ColumnsProps): ColumnDef<Product>[] => [
     {
         id: 'status_indicator',
@@ -118,24 +125,36 @@ export const createColumns = ({
         header: 'Preço de Venda',
         cell: ({ row }) => {
             const price = parseFloat(row.getValue('sale_price'));
+
+            return (
+                <div className="font-medium text-green-600">
+                    {new Intl.NumberFormat('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL',
+                    }).format(price)}
+                </div>
+            );
+        },
+    },
+    {
+        accessorKey: 'margin',
+        header: 'Margem',
+        cell: ({ row }) => {
+            const price = parseFloat(row.original.sale_price);
             const cost = parseFloat(row.original.unit_cost);
             const margin = cost > 0 ? ((price - cost) / cost) * 100 : 0;
 
-            return (
-                <div>
-                    <div className="font-medium text-green-600">
-                        {new Intl.NumberFormat('pt-BR', {
-                            style: 'currency',
-                            currency: 'BRL',
-                        }).format(price)}
-                    </div>
-                    {margin > 0 && (
-                        <div className="text-xs text-muted-foreground">
-                            Margem: {margin.toFixed(1)}%
-                        </div>
-                    )}
-                </div>
-            );
+            // Determina a cor do badge baseado nas configurações
+            let variant: 'default' | 'warning' | 'destructive' = 'default';
+            if (margin <= marginSettings.margin_poor) {
+                variant = 'destructive'; // Vermelho - margem ruim
+            } else if (margin >= marginSettings.margin_excellent) {
+                variant = 'default'; // Verde - margem excelente
+            } else {
+                variant = 'warning'; // Laranja - margem boa (entre ruim e excelente)
+            }
+
+            return <Badge variant={variant}>{margin.toFixed(1)}%</Badge>;
         },
     },
     {

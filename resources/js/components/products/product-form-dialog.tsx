@@ -324,9 +324,6 @@ export function ProductFormDialog({
                                                 <SelectItem value="product">
                                                     Produto
                                                 </SelectItem>
-                                                <SelectItem value="service">
-                                                    Serviço
-                                                </SelectItem>
                                             </SelectContent>
                                         </Select>
                                         {errors.type && (

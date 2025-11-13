@@ -66,13 +66,26 @@ type ProductsFilters = {
     page?: number;
 };
 
+type MarginSettings = {
+    margin_excellent: number;
+    margin_good_min: number;
+    margin_good_max: number;
+    margin_poor: number;
+};
+
 interface DataTableProps {
     data: Product[];
     pagination: ProductsPagination;
     filters: ProductsFilters;
+    marginSettings: MarginSettings;
 }
 
-export function DataTable({ data, pagination, filters }: DataTableProps) {
+export function DataTable({
+    data,
+    pagination,
+    filters,
+    marginSettings,
+}: DataTableProps) {
     const [sorting, setSorting] = React.useState<SortingState>([
         { id: 'name', desc: false },
     ]);
@@ -108,8 +121,9 @@ export function DataTable({ data, pagination, filters }: DataTableProps) {
             createColumns({
                 onEdit: handleEdit,
                 onDelete: handleDelete,
+                marginSettings,
             }),
-        [],
+        [marginSettings],
     );
 
     const table = useReactTable({

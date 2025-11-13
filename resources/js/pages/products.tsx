@@ -42,6 +42,12 @@ interface ProductsProps {
             active: boolean;
         }>;
     };
+    marginSettings: {
+        margin_excellent: number;
+        margin_good_min: number;
+        margin_good_max: number;
+        margin_poor: number;
+    };
     filters: {
         search: string;
         type: string;
@@ -52,7 +58,8 @@ interface ProductsProps {
 }
 
 export default function Products() {
-    const { products, filters } = usePage<ProductsProps>().props;
+    const { products, filters, marginSettings } =
+        usePage<ProductsProps>().props;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -74,6 +81,7 @@ export default function Products() {
                                 prev_page_url: products.prev_page_url,
                             }}
                             filters={filters}
+                            marginSettings={marginSettings}
                         />
                     </div>
                 </div>
