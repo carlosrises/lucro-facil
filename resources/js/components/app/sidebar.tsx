@@ -77,6 +77,7 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
         title: 'Fluxo de Caixa',
         href: '#',
         icon: LineChart,
+        locked: true,
     },
     {
         title: 'Estoque',
@@ -85,22 +86,27 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
             {
                 title: 'Inventário',
                 href: '#',
+                locked: true,
             },
             {
                 title: 'Compras',
                 href: '#',
+                locked: true,
             },
             {
                 title: 'Análise',
                 href: '#',
+                locked: true,
             },
             {
                 title: 'Lista de Produção',
                 href: '#',
+                locked: true,
             },
             {
                 title: 'Movimentação',
                 href: '#',
+                locked: true,
             },
         ],
     },
@@ -123,6 +129,7 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
             {
                 title: 'Combos',
                 href: '#',
+                locked: true,
             },
         ],
     },
@@ -133,18 +140,22 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
             {
                 title: 'Curva ABC',
                 href: '#',
+                locked: true,
             },
             {
                 title: 'DRE',
                 href: '#',
+                locked: true,
             },
             {
                 title: 'Análise CMV',
                 href: '#',
+                locked: true,
             },
             {
                 title: 'Ponto de Equilíbrio',
                 href: '#',
+                locked: true,
             },
         ],
     },
@@ -182,11 +193,13 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
         title: 'Custos Fixos',
         href: '#',
         icon: Wallet,
+        locked: true,
     },
     {
         title: 'Relatórios',
         href: '#',
         icon: FileText,
+        locked: true,
     },
 ];
 

@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Lock } from 'lucide-react';
 
 import {
     Collapsible,
@@ -70,33 +70,55 @@ export function NavMain({ items = [] }: { items: NavEntry[] }) {
                                                         ? subItem.href
                                                         : subItem.href.url,
                                                 );
+                                            const isLocked = subItem.locked;
 
                                             return (
                                                 <SidebarMenuSubItem
                                                     key={subItem.title}
                                                 >
                                                     <SidebarMenuSubButton
-                                                        asChild
+                                                        asChild={!isLocked}
                                                         isActive={isActive}
+                                                        className={
+                                                            isLocked
+                                                                ? 'cursor-not-allowed opacity-50'
+                                                                : ''
+                                                        }
                                                     >
-                                                        <Link
-                                                            href={
-                                                                typeof subItem.href ===
-                                                                'string'
-                                                                    ? subItem.href
-                                                                    : subItem
-                                                                          .href
-                                                                          .url
-                                                            }
-                                                            prefetch
-                                                        >
-                                                            {SubIcon && (
-                                                                <SubIcon className="h-4 w-4" />
-                                                            )}
-                                                            <span>
-                                                                {subItem.title}
-                                                            </span>
-                                                        </Link>
+                                                        {isLocked ? (
+                                                            <div className="flex items-center gap-2">
+                                                                {SubIcon && (
+                                                                    <SubIcon className="h-4 w-4" />
+                                                                )}
+                                                                <span>
+                                                                    {
+                                                                        subItem.title
+                                                                    }
+                                                                </span>
+                                                                <Lock className="ml-auto h-3 w-3" />
+                                                            </div>
+                                                        ) : (
+                                                            <Link
+                                                                href={
+                                                                    typeof subItem.href ===
+                                                                    'string'
+                                                                        ? subItem.href
+                                                                        : subItem
+                                                                              .href
+                                                                              .url
+                                                                }
+                                                                prefetch
+                                                            >
+                                                                {SubIcon && (
+                                                                    <SubIcon className="h-4 w-4" />
+                                                                )}
+                                                                <span>
+                                                                    {
+                                                                        subItem.title
+                                                                    }
+                                                                </span>
+                                                            </Link>
+                                                        )}
                                                     </SidebarMenuSubButton>
                                                 </SidebarMenuSubItem>
                                             );
@@ -109,20 +131,35 @@ export function NavMain({ items = [] }: { items: NavEntry[] }) {
                         // 🌟 NavItem
                         <SidebarMenuItem key={item.title}>
                             <SidebarMenuButton
-                                asChild
+                                asChild={!item.locked}
                                 isActive={page.url.startsWith(
                                     typeof item.href === 'string'
                                         ? item.href
                                         : item.href.url,
                                 )}
                                 tooltip={{ children: item.title }}
+                                className={
+                                    item.locked
+                                        ? 'cursor-not-allowed opacity-50'
+                                        : ''
+                                }
                             >
-                                <Link href={item.href} prefetch>
-                                    {item.icon && (
-                                        <item.icon className="h-4 w-4" />
-                                    )}
-                                    <span>{item.title}</span>
-                                </Link>
+                                {item.locked ? (
+                                    <div className="flex items-center gap-2">
+                                        {item.icon && (
+                                            <item.icon className="h-4 w-4" />
+                                        )}
+                                        <span>{item.title}</span>
+                                        <Lock className="ml-auto h-3 w-3" />
+                                    </div>
+                                ) : (
+                                    <Link href={item.href} prefetch>
+                                        {item.icon && (
+                                            <item.icon className="h-4 w-4" />
+                                        )}
+                                        <span>{item.title}</span>
+                                    </Link>
+                                )}
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                     ),
