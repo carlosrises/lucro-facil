@@ -317,7 +317,7 @@ export function ProductFormDialog({
                                                 setData('type', value)
                                             }
                                         >
-                                            <SelectTrigger>
+                                            <SelectTrigger className="w-full">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -346,7 +346,7 @@ export function ProductFormDialog({
                                                 setData('unit', value)
                                             }
                                         >
-                                            <SelectTrigger>
+                                            <SelectTrigger className="w-full">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>

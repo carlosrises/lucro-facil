@@ -98,6 +98,19 @@ export function DataTable({
     const [editingProduct, setEditingProduct] = React.useState<Product | null>(
         null,
     );
+    const [searchValue, setSearchValue] = React.useState(filters?.search ?? '');
+
+    // Debounce para o search
+    React.useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            if (searchValue !== filters?.search) {
+                updateFilters({ search: searchValue });
+            }
+        }, 500);
+
+        return () => clearTimeout(timeoutId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchValue]);
 
     const handleEdit = (product: Product) => {
         setEditingProduct(product);
@@ -146,17 +159,20 @@ export function DataTable({
     });
 
     const updateFilters = (newFilters: Partial<ProductsFilters>) => {
-        router.get(
-            '/products',
-            {
-                ...filters,
-                ...newFilters,
-            },
-            {
-                preserveState: true,
-                preserveScroll: true,
-            },
+        const updatedFilters = { ...filters, ...newFilters };
+
+        // Remove valores vazios/null/undefined
+        const cleanFilters = Object.fromEntries(
+            Object.entries(updatedFilters).filter(
+                ([, value]) =>
+                    value !== '' && value !== null && value !== undefined,
+            ),
         );
+
+        router.get('/products', cleanFilters, {
+            preserveState: true,
+            preserveScroll: true,
+        });
     };
 
     const columnLabels: Record<string, string> = {
@@ -179,16 +195,18 @@ export function DataTable({
                         {/* Buscar por nome/SKU */}
                         <Input
                             placeholder="Buscar produto..."
-                            defaultValue={filters?.search ?? ''}
-                            onBlur={(e) =>
-                                updateFilters({ search: e.target.value })
-                            }
+                            value={searchValue}
+                            onChange={(e) => setSearchValue(e.target.value)}
                             className="h-9 w-[200px]"
                         />
 
                         {/* Filtro por tipo */}
                         <Select
-                            value={filters?.type ?? 'all'}
+                            value={
+                                filters?.type && filters.type !== ''
+                                    ? filters.type
+                                    : 'all'
+                            }
                             onValueChange={(value) =>
                                 updateFilters({
                                     type: value === 'all' ? '' : value,
@@ -201,13 +219,16 @@ export function DataTable({
                             <SelectContent>
                                 <SelectItem value="all">Todos</SelectItem>
                                 <SelectItem value="product">Produto</SelectItem>
-                                <SelectItem value="service">Serviço</SelectItem>
                             </SelectContent>
                         </Select>
 
                         {/* Filtro por status */}
                         <Select
-                            value={filters?.active ?? 'all'}
+                            value={
+                                filters?.active && filters.active !== ''
+                                    ? filters.active
+                                    : 'all'
+                            }
                             onValueChange={(value) =>
                                 updateFilters({
                                     active: value === 'all' ? '' : value,

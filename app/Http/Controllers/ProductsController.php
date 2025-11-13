@@ -52,9 +52,9 @@ class ProductsController extends Controller
                 'margin_poor' => (float) ($tenant->margin_poor ?? 0.00),
             ],
             'filters' => [
-                'search' => $request->input('search'),
-                'type' => $request->input('type'),
-                'active' => $request->input('active'),
+                'search' => $request->input('search', ''),
+                'type' => $request->input('type', ''),
+                'active' => $request->input('active', ''),
                 'per_page' => $perPage,
             ],
         ]);
@@ -136,9 +136,17 @@ class ProductsController extends Controller
             ->orderBy('name')
             ->get();
 
+        $tenant = request()->user()->tenant;
+
         return Inertia::render('products/show', [
             'product' => $product,
             'ingredients' => $ingredients,
+            'marginSettings' => [
+                'margin_excellent' => (float) ($tenant->margin_excellent ?? 100.00),
+                'margin_good_min' => (float) ($tenant->margin_good_min ?? 30.00),
+                'margin_good_max' => (float) ($tenant->margin_good_max ?? 99.99),
+                'margin_poor' => (float) ($tenant->margin_poor ?? 0.00),
+            ],
         ]);
     }
 

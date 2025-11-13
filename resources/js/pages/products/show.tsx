@@ -60,6 +60,12 @@ interface Product {
 
 interface ShowProductProps {
     product: Product;
+    marginSettings: {
+        margin_excellent: number;
+        margin_good_min: number;
+        margin_good_max: number;
+        margin_poor: number;
+    };
 }
 
 const typeLabels: Record<string, string> = {
@@ -76,7 +82,10 @@ const unitLabels: Record<string, string> = {
     hour: 'Hora',
 };
 
-export default function ShowProduct({ product }: ShowProductProps) {
+export default function ShowProduct({
+    product,
+    marginSettings,
+}: ShowProductProps) {
     const calculateCMV = () => {
         return product.costs.reduce((total, cost) => {
             return total + parseFloat(cost.ingredient.unit_price) * cost.qty;
@@ -86,6 +95,16 @@ export default function ShowProduct({ product }: ShowProductProps) {
     const cmv = calculateCMV();
     const salePrice = parseFloat(product.sale_price);
     const margin = cmv > 0 ? ((salePrice - cmv) / cmv) * 100 : 0;
+
+    // Determina a variante do badge baseado nas configurações
+    let marginVariant: 'default' | 'warning' | 'destructive' = 'default';
+    if (margin <= marginSettings.margin_poor) {
+        marginVariant = 'destructive'; // Vermelho - margem ruim
+    } else if (margin >= marginSettings.margin_excellent) {
+        marginVariant = 'default'; // Verde - margem excelente
+    } else {
+        marginVariant = 'warning'; // Laranja - margem boa
+    }
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -216,15 +235,12 @@ export default function ShowProduct({ product }: ShowProductProps) {
                                                 <p className="text-sm font-medium text-muted-foreground">
                                                     Margem de Lucro
                                                 </p>
-                                                <p
-                                                    className={`text-lg font-semibold ${
-                                                        margin > 0
-                                                            ? 'text-green-600'
-                                                            : 'text-red-600'
-                                                    }`}
+                                                <Badge
+                                                    variant={marginVariant}
+                                                    className="text-base font-semibold"
                                                 >
-                                                    {margin.toFixed(2)}%
-                                                </p>
+                                                    {margin.toFixed(1)}%
+                                                </Badge>
                                             </div>
                                         </div>
                                     </CardContent>
