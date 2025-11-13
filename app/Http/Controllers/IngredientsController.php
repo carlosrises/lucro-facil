@@ -14,13 +14,13 @@ class IngredientsController extends Controller
         $query = Ingredient::query()
             ->where('tenant_id', tenant_id())
             ->with('category')
-            ->when($request->input('search'), fn ($q, $search) =>
-                $q->where('name', 'like', "%{$search}%")
+            ->when($request->filled('search'), fn ($q, $search) =>
+                $q->where('name', 'like', "%{$request->input('search')}%")
             )
-            ->when($request->input('category_id'), fn ($q, $catId) =>
-                $q->where('category_id', $catId)
+            ->when($request->filled('category_id'), fn ($q) =>
+                $q->where('category_id', $request->input('category_id'))
             )
-            ->when($request->has('active'), fn ($q) =>
+            ->when($request->filled('active'), fn ($q) =>
                 $q->where('active', $request->boolean('active'))
             )
             ->orderBy('name');
@@ -38,9 +38,9 @@ class IngredientsController extends Controller
             'ingredients' => $ingredients,
             'categories' => $categories,
             'filters' => [
-                'search' => $request->input('search'),
-                'category_id' => $request->input('category_id'),
-                'active' => $request->input('active'),
+                'search' => $request->input('search') ?? '',
+                'category_id' => $request->input('category_id') ?? '',
+                'active' => $request->input('active') ?? '',
                 'per_page' => $perPage,
             ],
         ]);

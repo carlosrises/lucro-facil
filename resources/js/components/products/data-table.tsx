@@ -182,6 +182,7 @@ export function DataTable({
         unit: 'Unidade',
         unit_cost: 'Custo (CMV)',
         sale_price: 'Preço de Venda',
+        margin: 'Margem',
         costs_count: 'Insumos',
         actions: 'Ações',
     };

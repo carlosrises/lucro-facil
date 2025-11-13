@@ -76,6 +76,19 @@ export function DataTable({ data, pagination, filters }: DataTableProps) {
     const [isFormOpen, setIsFormOpen] = React.useState(false);
     const [editingCategory, setEditingCategory] =
         React.useState<Category | null>(null);
+    const [searchValue, setSearchValue] = React.useState(filters?.search ?? '');
+
+    // Debounce para o search
+    React.useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            if (searchValue !== filters?.search) {
+                updateFilters({ search: searchValue });
+            }
+        }, 500);
+
+        return () => clearTimeout(timeoutId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchValue]);
 
     const handleEdit = (category: Category) => {
         setEditingCategory(category);
@@ -123,57 +136,83 @@ export function DataTable({ data, pagination, filters }: DataTableProps) {
     });
 
     const updateFilters = (newFilters: Partial<typeof filters>) => {
-        router.get(
-            '/categories',
-            {
-                ...filters,
-                ...newFilters,
-            },
-            {
-                preserveState: true,
-                preserveScroll: true,
-            },
+        const updatedFilters = { ...filters, ...newFilters };
+
+        // Remove valores vazios/null/undefined
+        const cleanFilters = Object.fromEntries(
+            Object.entries(updatedFilters).filter(
+                ([, value]) =>
+                    value !== '' && value !== null && value !== undefined,
+            ),
         );
+
+        router.get('/categories', cleanFilters, {
+            preserveState: true,
+            preserveScroll: true,
+        });
+    };
+
+    const columnLabels: Record<string, string> = {
+        status_indicator: '',
+        name: 'Nome',
+        items_count: 'Itens',
+        color: 'Cor',
+        actions: 'Ações',
     };
 
     return (
         <>
             <div className="flex w-full flex-col gap-4 space-x-4 px-4 lg:px-6">
                 {/* Filtros */}
-                <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                        placeholder="Buscar categorias..."
-                        value={filters.search || ''}
-                        onChange={(e) =>
-                            updateFilters({ search: e.target.value })
-                        }
-                        className="h-9 max-w-sm"
-                    />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Input
+                            placeholder="Buscar categorias..."
+                            value={searchValue}
+                            onChange={(e) => setSearchValue(e.target.value)}
+                            className="h-9 w-[200px]"
+                        />
 
-                    <Select
-                        value={filters.active || 'all'}
-                        onValueChange={(value) =>
-                            updateFilters({
-                                active: value === 'all' ? undefined : value,
-                            })
-                        }
-                    >
-                        <SelectTrigger className="h-9 w-[140px]">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Todos status</SelectItem>
-                            <SelectItem value="1">Ativos</SelectItem>
-                            <SelectItem value="0">Inativos</SelectItem>
-                        </SelectContent>
-                    </Select>
+                        <Select
+                            value={
+                                filters?.active && filters.active !== ''
+                                    ? filters.active
+                                    : 'all'
+                            }
+                            onValueChange={(value) =>
+                                updateFilters({
+                                    active: value === 'all' ? '' : value,
+                                })
+                            }
+                        >
+                            <SelectTrigger className="h-9 w-[150px]">
+                                <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todos</SelectItem>
+                                <SelectItem value="1">Ativos</SelectItem>
+                                <SelectItem value="0">Inativos</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
 
-                    <div className="ml-auto flex gap-2">
+                    <div className="flex items-center gap-2">
+                        <Button
+                            size="sm"
+                            onClick={() => {
+                                setEditingCategory(null);
+                                setIsFormOpen(true);
+                            }}
+                        >
+                            <Plus className="h-4 w-4" />
+                            <span className="ml-2">Nova Categoria</span>
+                        </Button>
+
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="h-9">
-                                    <LayoutGrid className="mr-2 h-4 w-4" />
-                                    Colunas
+                                <Button variant="outline" size="sm">
+                                    <LayoutGrid className="h-4 w-4" />
+                                    <span className="ml-2">Colunas</span>
                                     <ChevronDown className="ml-2 h-4 w-4" />
                                 </Button>
                             </DropdownMenuTrigger>
@@ -185,7 +224,6 @@ export function DataTable({ data, pagination, filters }: DataTableProps) {
                                         return (
                                             <DropdownMenuCheckboxItem
                                                 key={column.id}
-                                                className="capitalize"
                                                 checked={column.getIsVisible()}
                                                 onCheckedChange={(value) =>
                                                     column.toggleVisibility(
@@ -193,23 +231,13 @@ export function DataTable({ data, pagination, filters }: DataTableProps) {
                                                     )
                                                 }
                                             >
-                                                {column.id}
+                                                {columnLabels[column.id] ||
+                                                    column.id}
                                             </DropdownMenuCheckboxItem>
                                         );
                                     })}
                             </DropdownMenuContent>
                         </DropdownMenu>
-
-                        <Button
-                            onClick={() => {
-                                setEditingCategory(null);
-                                setIsFormOpen(true);
-                            }}
-                            className="h-9"
-                        >
-                            <Plus className="mr-2 h-4 w-4" />
-                            Nova Categoria
-                        </Button>
                     </div>
                 </div>
 

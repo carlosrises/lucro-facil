@@ -83,7 +83,7 @@ class CategoriesController extends Controller
         }
 
         if ($request->filled('active')) {
-            $query->where('active', $request->active === 'true');
+            $query->where('active', $request->active === '1');
         }
 
         $categories = $query->orderBy('name')->paginate(10);
@@ -91,8 +91,8 @@ class CategoriesController extends Controller
         return Inertia::render('categories', [
             'categories' => $categories,
             'filters' => [
-                'search' => $request->search,
-                'active' => $request->active,
+                'search' => $request->search ?? '',
+                'active' => $request->active ?? '',
             ]
         ]);
     }
