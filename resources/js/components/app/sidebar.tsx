@@ -20,7 +20,6 @@ import { index as integrations } from '@/routes/integrations';
 import { index as orders } from '@/routes/orders';
 import { edit as password } from '@/routes/password';
 import { edit as profile } from '@/routes/profile';
-import { index as sales } from '@/routes/sales';
 import { index as stores } from '@/routes/stores';
 import { show as twoFactorAuthentication } from '@/routes/two-factor';
 
@@ -32,7 +31,6 @@ import {
     ChartBarBig,
     ClipboardList,
     CreditCard,
-    DollarSign,
     FileText,
     LayoutGrid,
     LifeBuoy,
@@ -58,20 +56,15 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
         href: orders(),
         icon: ChartBarBig,
     },
-    {
-        title: 'Vendas',
-        href: sales(),
-        icon: DollarSign,
-    },
+    // {
+    //     title: 'Vendas',
+    //     href: sales(),
+    //     icon: DollarSign,
+    // },
     {
         title: 'Lojas',
         href: stores(),
         icon: Store,
-    },
-    {
-        title: 'Usuários',
-        href: '/users',
-        icon: Users,
     },
     {
         title: 'Custos & Comissões',
