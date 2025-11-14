@@ -167,12 +167,16 @@ export const createColumns = ({
 
             // Determina a cor do badge baseado nas configurações
             let variant: 'default' | 'warning' | 'destructive' = 'default';
-            if (margin <= marginSettings.margin_poor) {
-                variant = 'destructive'; // Vermelho - margem ruim
-            } else if (margin >= marginSettings.margin_excellent) {
-                variant = 'default'; // Verde - margem excelente
-            } else {
-                variant = 'warning'; // Laranja - margem boa (entre ruim e excelente)
+
+            // Verifica se marginSettings está definido antes de acessar
+            if (marginSettings) {
+                if (margin <= marginSettings.margin_poor) {
+                    variant = 'destructive'; // Vermelho - margem ruim
+                } else if (margin >= marginSettings.margin_excellent) {
+                    variant = 'default'; // Verde - margem excelente
+                } else {
+                    variant = 'warning'; // Laranja - margem boa (entre ruim e excelente)
+                }
             }
 
             return <Badge variant={variant}>{margin.toFixed(1)}%</Badge>;

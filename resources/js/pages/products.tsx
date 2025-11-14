@@ -77,6 +77,17 @@ export default function Products() {
     const { products, filters, marginSettings, externalItems } =
         usePage<ProductsProps>().props;
 
+    // Garante valores padrão para marginSettings
+    const safeMarginSettings = React.useMemo(
+        () => ({
+            margin_excellent: marginSettings?.margin_excellent ?? 100.0,
+            margin_good_min: marginSettings?.margin_good_min ?? 30.0,
+            margin_good_max: marginSettings?.margin_good_max ?? 99.99,
+            margin_poor: marginSettings?.margin_poor ?? 0.0,
+        }),
+        [marginSettings],
+    );
+
     const [associateDialogOpen, setAssociateDialogOpen] = React.useState(false);
     const [selectedProductId, setSelectedProductId] = React.useState<
         number | null
@@ -116,7 +127,7 @@ export default function Products() {
                                 prev_page_url: products.prev_page_url,
                             }}
                             filters={filters}
-                            marginSettings={marginSettings}
+                            marginSettings={safeMarginSettings}
                             onAssociate={handleAssociate}
                         />
                     </div>
