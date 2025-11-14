@@ -10,4 +10,14 @@ class ProductMapping extends Model
         'tenant_id', 'internal_product_id', 'provider',
         'external_item_id', 'external_item_name'
     ];
+
+    public function internalProduct()
+    {
+        return $this->belongsTo(InternalProduct::class, 'internal_product_id');
+    }
+
+    public function tenant()
+    {
+        return $this->belongsTo(Tenant::class);
+    }
 }

@@ -7,6 +7,8 @@ use App\Http\Controllers\CostCommissionsController;
 use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\IngredientsController;
 use App\Http\Controllers\ProductsController;
+use App\Http\Controllers\UsersController;
+use App\Http\Controllers\ProductMappingController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -80,6 +82,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Product recipes (technical sheet)
     Route::post('products/{product}/ingredients', [ProductsController::class, 'addIngredient'])->name('products.addIngredient');
     Route::delete('products/{product}/ingredients/{ingredient}', [ProductsController::class, 'removeIngredient'])->name('products.removeIngredient');
+
+    // Users Management
+    Route::get('users', [UsersController::class, 'index'])->name('users.index');
+    Route::post('users', [UsersController::class, 'store'])->name('users.store');
+    Route::match(['put', 'patch'], 'users/{user}', [UsersController::class, 'update'])->name('users.update');
+    Route::delete('users/{user}', [UsersController::class, 'destroy'])->name('users.destroy');
+    Route::post('users/{id}/restore', [UsersController::class, 'restore'])->name('users.restore');
+
+    // Product Mappings
+    Route::get('product-mappings', [ProductMappingController::class, 'index'])->name('product-mappings.index');
+    Route::post('product-mappings', [ProductMappingController::class, 'store'])->name('product-mappings.store');
+    Route::delete('product-mappings/{productMapping}', [ProductMappingController::class, 'destroy'])->name('product-mappings.destroy');
+    Route::delete('product-mappings/sku/{sku}', [ProductMappingController::class, 'destroyBySku'])->name('product-mappings.destroyBySku');
 });
 
 require __DIR__.'/settings.php';
