@@ -1,0 +1,178 @@
+{/* BACKUP DO COMPONENTE DE DETALHAMENTO FINANCEIRO - NÃO DELETAR */}
+{/* Localização: data-table.tsx, linhas ~804-1113 */}
+{/* Este é o card de detalhamento financeiro que fica ao lado dos itens do pedido */}
+
+{/* Card: Detalhamento Financeiro */}
+<Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+    <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+        <CardTitle className="flex h-[18px] items-center font-semibold">
+            Detalhamento financeiro do pedido
+        </CardTitle>
+    </CardHeader>
+    <CardContent className="rounded-md bg-card p-0">
+        <ul className="m-0 flex w-full flex-col ps-0">
+            {/* Valor bruto da venda */}
+            <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                    <div className="flex items-center justify-center rounded-full bg-green-100 p-0.5 text-green-800">
+                        <ArrowUpRight className="h-4 w-4" />
+                    </div>
+                    <span className="flex-grow text-sm leading-4 font-semibold">
+                        Valor bruto da venda
+                    </span>
+                    <span className="text-sm leading-4 whitespace-nowrap">
+                        R$ 54,49
+                    </span>
+                </div>
+                <ul className="flex w-full flex-col items-center justify-between gap-2 pl-0">
+                    <li className="flex w-full flex-row items-start justify-between px-3 py-0">
+                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+                            Total recebido via iFood
+                        </span>
+                    </li>
+                    <li className="flex w-full flex-row items-start justify-between px-3 py-0">
+                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+                            Promoções custeadas pela loja
+                        </span>
+                    </li>
+                    <li className="flex w-full flex-row items-start justify-between px-3 py-0">
+                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+                            Taxa de entrega no valor de R$ 0,00
+                        </span>
+                    </li>
+                </ul>
+            </li>
+
+            {/* Valores pagos pelo cliente devidos ao iFood */}
+            <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                    <div className="flex items-center justify-center rounded-full bg-red-100 p-0.5 text-red-900">
+                        <ArrowDownLeft className="h-4 w-4" />
+                    </div>
+                    <span className="flex-grow text-sm leading-4 font-semibold">
+                        Valores pagos pelo cliente devidos ao iFood
+                    </span>
+                    <span className="text-sm leading-4 whitespace-nowrap">
+                        -R$ 0,99
+                    </span>
+                </div>
+                <ul className="flex w-full flex-col items-center justify-between pl-0">
+                    <li className="flex w-full flex-row items-start justify-between px-3 py-2">
+                        <span className="text-sm leading-4 font-normal">
+                            <div className="flex h-[1em] items-center">
+                                <span>Taxa de serviço iFood cobrada do cliente</span>
+                            </div>
+                        </span>
+                        <span className="text-sm leading-4 font-normal whitespace-nowrap text-gray-700">
+                            -R$ 0,99
+                        </span>
+                    </li>
+                </ul>
+            </li>
+
+            {/* Promoções */}
+            <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                    <div className="flex items-center justify-center rounded-full bg-red-100 p-0.5 text-red-900">
+                        <ArrowDownLeft className="h-4 w-4" />
+                    </div>
+                    <span className="flex-grow text-sm leading-4 font-semibold">
+                        Promoções
+                    </span>
+                    <span className="text-sm leading-4 whitespace-nowrap">
+                        -R$ 13,37
+                    </span>
+                </div>
+                <ul className="flex w-full flex-col items-center justify-between gap-2 pl-0">
+                    <li className="flex w-full flex-row items-start justify-between px-3 py-2">
+                        <span className="text-sm leading-4 font-normal">
+                            Promoção custeada pela loja
+                        </span>
+                        <span className="text-sm leading-4 font-normal whitespace-nowrap text-gray-700">
+                            - R$ 13,37
+                        </span>
+                    </li>
+                    <li className="flex w-full flex-row items-start justify-between px-3 py-2">
+                        <span className="text-sm leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                            Cupom Clube 25% off - Limitado a R$ 20 - Para novos clientes no valor de R$ 13,37
+                        </span>
+                    </li>
+                </ul>
+            </li>
+
+            {/* Total recebido via loja */}
+            <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                    <div className="flex items-center justify-center rounded-full bg-gray-200 p-1 text-gray-700">
+                        <ArrowRightLeft className="h-3 w-3" />
+                    </div>
+                    <span className="flex-grow text-sm leading-4 font-semibold">
+                        Total recebido via loja
+                    </span>
+                    <span className="text-sm leading-4 whitespace-nowrap">
+                        R$ 0,00
+                    </span>
+                </div>
+                <ul className="flex w-full flex-col items-center justify-between pl-0">
+                    <li className="flex w-full flex-row items-start justify-between px-3 py-2">
+                        <span className="text-sm leading-4 font-normal whitespace-nowrap text-gray-700">
+                            Pedido recebido via iFood no valor de R$ 41,12
+                        </span>
+                    </li>
+                </ul>
+            </li>
+
+            {/* Taxas e comissões iFood */}
+            <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                    <div className="flex items-center justify-center rounded-full bg-red-100 p-0.5 text-red-900">
+                        <ArrowDownLeft className="h-4 w-4" />
+                    </div>
+                    <span className="flex-grow text-sm leading-4 font-semibold">
+                        Taxas e comissões iFood
+                    </span>
+                    <span className="text-sm leading-4 whitespace-nowrap">
+                        -R$ 6,10
+                    </span>
+                </div>
+                <ul className="flex w-full flex-col items-center justify-between pl-0">
+                    <li className="flex w-full flex-row items-start justify-between px-3 py-2">
+                        <span className="text-sm leading-4 font-normal">
+                            Comissão pela transação do pagamento
+                        </span>
+                        <span className="text-sm leading-4 font-normal whitespace-nowrap text-gray-700">
+                            -R$ 1,28
+                        </span>
+                    </li>
+                    <li className="flex w-full flex-row items-start justify-between px-3 py-2">
+                        <span className="text-sm leading-4 font-normal">
+                            Comissão iFood de Entrega Própria (12,0%)
+                        </span>
+                        <span className="text-sm leading-4 font-normal whitespace-nowrap text-gray-700">
+                            -R$ 4,82
+                        </span>
+                    </li>
+                    <li className="flex w-full flex-row items-start justify-between px-3 py-2">
+                        <span className="text-xs leading-4 font-normal text-gray-700">
+                            O valor de R$ 40,13 é o valor base usado para calcular as taxas e comissões iFood desse pedido.
+                        </span>
+                    </li>
+                </ul>
+            </li>
+
+            {/* Valor líquido a receber */}
+            <li className="flex flex-col gap-2 px-0 py-4">
+                <ul className="flex w-full flex-col items-center justify-between pl-0">
+                    <li className="flex w-full flex-row items-start justify-between px-3 py-2">
+                        <span className="text-sm leading-4 font-semibold">
+                            Valor líquido a receber
+                        </span>
+                        <span className="positive text-sm leading-4 font-semibold text-green-700">
+                            R$ 34,03
+                        </span>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+    </CardContent>
+</Card>
