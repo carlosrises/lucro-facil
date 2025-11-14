@@ -19,9 +19,17 @@ import { Badge } from '../ui/badge';
 // Tipagem vinda do backend
 export type OrderItem = {
     id: number;
+    sku?: string;
     name: string;
     quantity: number;
+    qty?: number;
     price: number;
+    unit_price?: number;
+    internal_product?: {
+        id: number;
+        name: string;
+        unit_cost: string;
+    };
 };
 
 export type Order = {
@@ -39,6 +47,24 @@ export type Order = {
     net_total?: number | 0;
     items?: OrderItem[];
     raw: any;
+    sale?: {
+        id: number;
+        sale_uuid: string;
+        short_id: string;
+        type: string;
+        sales_channel: string;
+        current_status: string;
+        bag_value?: number;
+        delivery_fee?: number;
+        service_fee?: number;
+        gross_value: number;
+        discount_value?: number;
+        net_value: number;
+        payment_method: string;
+        concluded_at: string | null;
+        expected_payment_date: string | null;
+        raw?: any;
+    };
 };
 
 export const columns: ColumnDef<Order>[] = [
@@ -180,23 +206,38 @@ export const columns: ColumnDef<Order>[] = [
     {
         accessorKey: 'cost',
         header: 'Custo do Pedido',
-        cell: ({ row }) =>
-            row.original.cost !== null && row.original.cost !== undefined ? (
+        cell: ({ row }) => {
+            const items = row.original.items || [];
+
+            // Calcular soma dos custos dos produtos associados
+            const totalCost = items.reduce((sum, item) => {
+                if (item.internal_product?.unit_cost) {
+                    const quantity = item.qty || item.quantity || 0;
+                    const unitCost = parseFloat(
+                        item.internal_product.unit_cost,
+                    );
+                    return sum + quantity * unitCost;
+                }
+                return sum;
+            }, 0);
+
+            const isCancelled = row.original.status === 'CANCELLED';
+
+            return totalCost > 0 ? (
                 <span
                     className={`text-sm ${
-                        row.original.status === 'CANCELLED'
-                            ? 'text-muted-foreground line-through'
-                            : ''
+                        isCancelled ? 'text-muted-foreground line-through' : ''
                     }`}
                 >
                     {new Intl.NumberFormat('pt-BR', {
                         style: 'currency',
                         currency: 'BRL',
-                    }).format(row.original.cost)}
+                    }).format(totalCost)}
                 </span>
             ) : (
                 <span className="text-muted-foreground">--</span>
-            ),
+            );
+        },
     },
     {
         accessorKey: 'tax',
