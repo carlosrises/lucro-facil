@@ -176,7 +176,7 @@ class SyncOrdersJob implements ShouldQueue
                             OrderItem::create([
                                 'tenant_id' => $this->tenantId,
                                 'order_id' => $order->id,
-                                'sku' => data_get($it, 'externalCode'),
+                                'sku' => data_get($it, 'id'), // Usar o ID do produto no iFood
                                 'name' => data_get($it, 'name'),
                                 'qty' => (int) data_get($it, 'quantity', 1),
                                 'unit_price' => (float) data_get($it, 'unitPrice', 0),
