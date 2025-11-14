@@ -114,7 +114,12 @@ class SyncOrdersJob implements ShouldQueue
                             ->first();
 
                         $oldStatus = $existingOrder?->status;
-                        $newStatus = data_get($detail, 'status', $eventCode);
+
+                        // Prioriza fullCode (status completo) sobre code (abreviado)
+                        // Se não houver fullCode, usa status ou eventCode como fallback
+                        $newStatus = data_get($detail, 'fullCode')
+                            ?? data_get($detail, 'status')
+                            ?? $eventCode;
 
                         $order = Order::updateOrCreate(
                             [

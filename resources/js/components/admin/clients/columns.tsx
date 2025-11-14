@@ -8,7 +8,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { router } from '@inertiajs/react';
 import { ColumnDef } from '@tanstack/react-table';
 import { ArrowUpDown, Eye, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
@@ -21,6 +20,7 @@ export interface Client {
     stores_count: number;
     subscription?: {
         id: number;
+        plan_id: number;
         plan_name: string;
         status: string;
         started_on?: string;
@@ -28,26 +28,24 @@ export interface Client {
         price: number;
     } | null;
     primary_user?: {
+        id: number;
         name: string;
         email: string;
     } | null;
     status: string;
 }
 
-const handleEdit = (client: Client) => {
-    // TODO: Implementar modal de edição
-    console.log('Editar cliente:', client);
-};
+interface ColumnsProps {
+    onEdit: (client: Client) => void;
+    onDelete: (client: Client) => void;
+    onViewDetails: (client: Client) => void;
+}
 
-const handleDelete = (client: Client) => {
-    if (confirm(`Tem certeza que deseja excluir o cliente "${client.name}"?`)) {
-        router.delete(`/admin/clients/${client.id}`, {
-            preserveScroll: true,
-        });
-    }
-};
-
-export const columns: ColumnDef<Client>[] = [
+export const createColumns = ({
+    onEdit,
+    onDelete,
+    onViewDetails,
+}: ColumnsProps): ColumnDef<Client>[] => [
     {
         accessorKey: 'name',
         header: ({ column }) => {
@@ -206,19 +204,17 @@ export const columns: ColumnDef<Client>[] = [
                             Copiar email
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => handleEdit(client)}>
+                        <DropdownMenuItem onClick={() => onEdit(client)}>
                             <Pencil className="mr-2 h-4 w-4" />
                             Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={() => console.log('Ver detalhes:', client)}
-                        >
+                        <DropdownMenuItem onClick={() => onViewDetails(client)}>
                             <Eye className="mr-2 h-4 w-4" />
                             Ver detalhes
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
-                            onClick={() => handleDelete(client)}
+                            onClick={() => onDelete(client)}
                             className="text-destructive focus:text-destructive"
                         >
                             <Trash2 className="mr-2 h-4 w-4" />

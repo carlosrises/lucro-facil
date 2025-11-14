@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\IfoodOrderStatus;
 use App\Models\Order;
 use App\Models\Store;
-use Inertia\Inertia;
-
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class OrdersController extends Controller
 {
@@ -16,21 +16,32 @@ class OrdersController extends Controller
     public function index(Request $request)
     {
         $query = Order::query()
+            ->select([
+                'id', 'order_uuid', 'code', 'status', 'provider',
+                'store_id', 'placed_at', 'gross_total', 'discount_total',
+                'delivery_fee', 'tip', 'net_total', 'raw', 'tenant_id',
+            ])
             ->where('tenant_id', tenant_id())
-            ->when($request->input('status'), fn($q, $status) =>
-                $q->where('status', $status)
+            ->when($request->input('status'), function ($q, $status) {
+                // Aceita tanto status completo quanto abreviado usando o Enum
+                if ($status !== 'all') {
+                    $abbreviated = IfoodOrderStatus::fullCodeToCode($status);
+                    $q->where(function ($query) use ($status, $abbreviated) {
+                        $query->where('status', $status)
+                            ->orWhere('status', $abbreviated);
+                    });
+                }
+
+                return $q;
+            })
+            ->when($request->input('store_id'), fn ($q, $storeId) => $q->where('store_id', $storeId)
             )
-            ->when($request->input('store_id'), fn($q, $storeId) =>
-                $q->where('store_id', $storeId)
+            ->when($request->input('provider'), fn ($q, $provider) => $q->where('provider', $provider)
             )
-            ->when($request->input('provider'), fn($q, $provider) =>
-                $q->where('provider', $provider)
-            )
-            ->when($request->input('start_date') && $request->input('end_date'), fn($q) =>
-                $q->whereBetween('placed_at', [
-                    request('start_date').' 00:00:00',
-                    request('end_date').' 23:59:59',
-                ])
+            ->when($request->input('start_date') && $request->input('end_date'), fn ($q) => $q->whereBetween('placed_at', [
+                request('start_date').' 00:00:00',
+                request('end_date').' 23:59:59',
+            ])
             )
             ->orderByDesc('placed_at')
             ->orderByDesc('id');
@@ -125,7 +136,7 @@ class OrdersController extends Controller
                 ], 400);
             }
 
-            if (!$order->store_id) {
+            if (! $order->store_id) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Pedido sem loja associada. Sincronize novamente os pedidos.',
@@ -174,7 +185,7 @@ class OrdersController extends Controller
                 ], 400);
             }
 
-            if (!$order->store_id) {
+            if (! $order->store_id) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Pedido sem loja associada. Sincronize novamente os pedidos.',
@@ -223,7 +234,7 @@ class OrdersController extends Controller
                 ], 400);
             }
 
-            if (!$order->store_id) {
+            if (! $order->store_id) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Pedido sem loja associada. Sincronize novamente os pedidos.',
@@ -272,7 +283,7 @@ class OrdersController extends Controller
                 ], 400);
             }
 
-            if (!$order->store_id) {
+            if (! $order->store_id) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Pedido sem loja associada. Sincronize novamente os pedidos.',
@@ -321,7 +332,7 @@ class OrdersController extends Controller
                 ], 400);
             }
 
-            if (!$order->store_id) {
+            if (! $order->store_id) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Pedido sem loja associada. Sincronize novamente os pedidos.',

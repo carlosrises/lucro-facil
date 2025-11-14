@@ -44,7 +44,7 @@ import {
     LayoutGrid,
     Plus,
 } from 'lucide-react';
-import { columns, type Client } from './columns';
+import { createColumns, type Client } from './columns';
 
 type ClientsPagination = {
     current_page: number;
@@ -76,6 +76,10 @@ interface DataTableProps {
     pagination: ClientsPagination;
     filters: ClientsFilters;
     plans: Plan[];
+    onCreateClient: () => void;
+    onEditClient: (client: Client) => void;
+    onViewDetails: (client: Client) => void;
+    onDeleteClient: (client: Client) => void;
 }
 
 export function DataTable({
@@ -83,6 +87,10 @@ export function DataTable({
     pagination,
     filters,
     plans,
+    onCreateClient,
+    onEditClient,
+    onViewDetails,
+    onDeleteClient,
 }: DataTableProps) {
     const [sorting, setSorting] = React.useState<SortingState>([
         { id: 'created_at', desc: true },
@@ -92,6 +100,15 @@ export function DataTable({
     const [columnVisibility, setColumnVisibility] =
         React.useState<VisibilityState>({});
     const [rowSelection, setRowSelection] = React.useState({});
+
+    // Estado local para busca com debounce
+    const [searchValue, setSearchValue] = React.useState(filters?.search || '');
+
+    const columns = createColumns({
+        onEdit: onEditClient,
+        onDelete: onDeleteClient,
+        onViewDetails,
+    });
 
     const table = useReactTable({
         data,
@@ -112,18 +129,42 @@ export function DataTable({
         },
     });
 
+    // Debounce para busca
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            if (searchValue !== filters?.search) {
+                const cleanFilters = Object.fromEntries(
+                    Object.entries({ ...filters, search: searchValue }).filter(
+                        ([, value]) =>
+                            value !== '' &&
+                            value !== null &&
+                            value !== undefined,
+                    ),
+                );
+
+                router.get('/admin/clients', cleanFilters, {
+                    preserveState: true,
+                    preserveScroll: true,
+                });
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchValue, filters?.search]);
+
     const updateFilters = (newFilters: Partial<ClientsFilters>) => {
-        router.get(
-            '/admin/clients',
-            {
-                ...filters,
-                ...newFilters,
-            },
-            {
-                preserveState: true,
-                preserveScroll: true,
-            },
+        const cleanFilters = Object.fromEntries(
+            Object.entries({ ...filters, ...newFilters }).filter(
+                ([, value]) =>
+                    value !== '' && value !== null && value !== undefined,
+            ),
         );
+
+        router.get('/admin/clients', cleanFilters, {
+            preserveState: true,
+            preserveScroll: true,
+        });
     };
 
     return (
@@ -134,10 +175,8 @@ export function DataTable({
                     {/* Buscar por nome/email */}
                     <Input
                         placeholder="Buscar cliente..."
-                        defaultValue={filters?.search ?? ''}
-                        onBlur={(e) =>
-                            updateFilters({ search: e.target.value })
-                        }
+                        value={searchValue}
+                        onChange={(e) => setSearchValue(e.target.value)}
                         className="h-9 w-[200px]"
                     />
 
@@ -189,13 +228,7 @@ export function DataTable({
                 {/* Ações à direita */}
                 <div className="flex items-center gap-2">
                     {/* Adicionar Cliente */}
-                    <Button
-                        size="sm"
-                        onClick={() => {
-                            // TODO: Implementar modal de novo cliente
-                            console.log('Criar novo cliente');
-                        }}
-                    >
+                    <Button size="sm" onClick={onCreateClient}>
                         <Plus className="h-4 w-4" />
                         <span className="ml-2">Adicionar Cliente</span>
                     </Button>

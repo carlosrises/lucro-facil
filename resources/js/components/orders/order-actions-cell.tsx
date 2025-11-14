@@ -146,10 +146,41 @@ export function OrderActionsCell({
     };
 
     // Determina quais ações estão disponíveis baseado no status
-    const canConfirm = orderStatus === 'PLACED' || orderStatus === 'CONFIRMED';
-    const canDispatch = orderStatus === 'CONFIRMED' && orderType === 'DELIVERY';
-    const canReady = orderStatus === 'CONFIRMED' && orderType === 'TAKEOUT';
-    const canCancel = ['PLACED', 'CONFIRMED'].includes(orderStatus);
+    // Aceita tanto fullCode (completo) quanto code (abreviado) conforme API iFood
+    // PLC = PLACED, CFM = CONFIRMED, CAN = CANCELLED, etc
+    const canConfirm = ['PLACED', 'PLC'].includes(orderStatus);
+
+    // Pode despachar quando confirmado ou durante eventos de entrega pré-despacho
+    const canDispatch =
+        [
+            'CONFIRMED',
+            'CFM',
+            'SEPARATION_STARTED',
+            'SPS',
+            'SEPARATION_ENDED',
+            'SPE',
+            'READY_TO_PICKUP',
+            'RTP',
+            'DELIVERY_DROP_CODE_REQUESTED',
+            'DDCR',
+            'DELIVERY_PICKUP_CODE_REQUESTED',
+            'DPCR',
+        ].includes(orderStatus) && orderType === 'DELIVERY';
+
+    // Pode marcar como pronto quando confirmado ou durante separação
+    const canReady =
+        [
+            'CONFIRMED',
+            'CFM',
+            'SEPARATION_STARTED',
+            'SPS',
+            'SEPARATION_ENDED',
+            'SPE',
+        ].includes(orderStatus) && orderType === 'TAKEOUT';
+
+    const canCancel = ['PLACED', 'PLC', 'CONFIRMED', 'CFM'].includes(
+        orderStatus,
+    );
 
     // Se não há ações disponíveis, não mostra o dropdown
     if (!canConfirm && !canDispatch && !canReady && !canCancel) {

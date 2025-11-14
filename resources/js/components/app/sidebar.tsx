@@ -69,6 +69,11 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
         icon: Store,
     },
     {
+        title: 'Usuários',
+        href: '/users',
+        icon: Users,
+    },
+    {
         title: 'Custos & Comissões',
         href: '/cost-commissions',
         icon: Wallet,
@@ -121,6 +126,10 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
             {
                 title: 'Produtos',
                 href: '/products',
+            },
+            {
+                title: 'Mapeamento',
+                href: '/product-mappings',
             },
             {
                 title: 'Categorias',

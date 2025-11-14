@@ -167,14 +167,18 @@ export function DataTable({
                             { value: 'PLACED', label: 'Novo' },
                             { value: 'CONFIRMED', label: 'Confirmado' },
                             {
-                                value: 'PREPARATION_STARTED',
-                                label: 'Em preparação',
+                                value: 'SEPARATION_START',
+                                label: 'Separação iniciada',
                             },
-                            { value: 'DISPATCHED', label: 'Despachado' },
+                            {
+                                value: 'SEPARATION_END',
+                                label: 'Separação finalizada',
+                            },
                             {
                                 value: 'READY_TO_PICKUP',
                                 label: 'Pronto para retirada',
                             },
+                            { value: 'DISPATCHED', label: 'Despachado' },
                             { value: 'CONCLUDED', label: 'Concluído' },
                             { value: 'CANCELLED', label: 'Cancelado' },
                         ]}

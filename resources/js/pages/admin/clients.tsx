@@ -1,8 +1,14 @@
+import { ClientDetailsDialog } from '@/components/admin/clients/client-details-dialog';
+import { ClientManageDialog } from '@/components/admin/clients/client-manage-dialog';
+import { Client } from '@/components/admin/clients/columns';
 import { DataTable } from '@/components/admin/clients/data-table';
+import { PasswordDisplayDialog } from '@/components/admin/clients/password-display-dialog';
 import AppLayout from '@/layouts/app-layout';
 import admin from '@/routes/admin';
 import { type BreadcrumbItem } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -63,11 +69,64 @@ interface AdminClientsProps {
         id: number;
         name: string;
     }>;
+    flash: {
+        success?: string;
+        error?: string;
+        generated_password?: string;
+        client_email?: string;
+    };
     [key: string]: unknown;
 }
 
 export default function AdminClients() {
-    const { clients, filters, plans } = usePage<AdminClientsProps>().props;
+    const { clients, filters, plans, flash } =
+        usePage<AdminClientsProps>().props;
+
+    const [manageDialogOpen, setManageDialogOpen] = useState(false);
+    const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+    const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+    const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+
+    // Mostrar dialog de senha quando um cliente é criado
+    useEffect(() => {
+        console.log('Flash data:', flash);
+        if (flash?.generated_password && flash?.client_email) {
+            setPasswordDialogOpen(true);
+        }
+    }, [flash]);
+
+    const handleCreateClient = () => {
+        setSelectedClient(null);
+        setManageDialogOpen(true);
+    };
+
+    const handleEditClient = (client: Client) => {
+        setSelectedClient(client);
+        setManageDialogOpen(true);
+    };
+
+    const handleViewDetails = (client: Client) => {
+        setSelectedClient(client);
+        setDetailsDialogOpen(true);
+    };
+
+    const handleDeleteClient = (client: Client) => {
+        if (
+            confirm(
+                `Tem certeza que deseja excluir o cliente "${client.name}"?`,
+            )
+        ) {
+            router.delete(`/admin/clients/${client.id}`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    toast.success('Cliente excluído com sucesso!');
+                },
+                onError: () => {
+                    toast.error('Erro ao excluir cliente.');
+                },
+            });
+        }
+    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -90,10 +149,36 @@ export default function AdminClients() {
                             }}
                             filters={filters}
                             plans={plans}
+                            onCreateClient={handleCreateClient}
+                            onEditClient={handleEditClient}
+                            onViewDetails={handleViewDetails}
+                            onDeleteClient={handleDeleteClient}
                         />
                     </div>
                 </div>
             </div>
+
+            <ClientManageDialog
+                open={manageDialogOpen}
+                onOpenChange={setManageDialogOpen}
+                client={selectedClient}
+                plans={plans}
+            />
+
+            <ClientDetailsDialog
+                open={detailsDialogOpen}
+                onOpenChange={setDetailsDialogOpen}
+                client={selectedClient}
+            />
+
+            {flash?.generated_password && flash?.client_email && (
+                <PasswordDisplayDialog
+                    open={passwordDialogOpen}
+                    onOpenChange={setPasswordDialogOpen}
+                    email={flash.client_email}
+                    password={flash.generated_password}
+                />
+            )}
         </AppLayout>
     );
 }
