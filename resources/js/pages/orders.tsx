@@ -20,6 +20,13 @@ type Store = {
     name: string;
 };
 
+type InternalProduct = {
+    id: number;
+    name: string;
+    sku: string | null;
+    unit_cost: string;
+};
+
 type OrdersPageProps = {
     orders: {
         data: Order[];
@@ -33,11 +40,20 @@ type OrdersPageProps = {
         prev_page_url?: string | null;
     };
     filters: Record<string, any>;
-    stores: Store[]; // 👈 agora também recebemos as lojas
+    stores: Store[];
+    unmappedProductsCount: number;
+    internalProducts: InternalProduct[];
 };
 
 export default function Orders() {
-    const { orders, filters, stores, auth } = usePage<OrdersPageProps>().props;
+    const {
+        orders,
+        filters,
+        stores,
+        unmappedProductsCount,
+        internalProducts,
+        auth,
+    } = usePage<OrdersPageProps>().props;
 
     // Hook para sincronização bidirecional de status (Critérios 12-13)
     // Recarrega automaticamente a lista quando há mudanças externas
@@ -64,6 +80,8 @@ export default function Orders() {
                             }}
                             filters={filters}
                             stores={stores}
+                            unmappedProductsCount={unmappedProductsCount}
+                            internalProducts={internalProducts}
                         />
                     </div>
                 </div>
