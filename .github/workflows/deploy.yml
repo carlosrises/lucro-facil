@@ -68,6 +68,9 @@ jobs:
           script: |
             cd ${{ secrets.DEPLOY_PATH }}
 
+            # Discard local changes in gitignore files (cache/logs)
+            git restore .
+
             # Pull latest changes
             git pull origin main
 
