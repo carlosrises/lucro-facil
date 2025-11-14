@@ -241,16 +241,19 @@ export function AppSidebar() {
             title: 'Planos',
             href: admin.plans(),
             icon: ClipboardList,
+            locked: true,
         },
         {
             title: 'Pagamentos',
             href: admin.payments(),
             icon: CreditCard,
+            locked: true,
         },
         {
             title: 'Chamados',
             href: admin.tickets(),
             icon: Ticket,
+            locked: true,
         },
     ];
 
