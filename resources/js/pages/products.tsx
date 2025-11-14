@@ -16,6 +16,13 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+interface ProductMapping {
+    id: number;
+    external_item_id: string;
+    external_item_name: string;
+    provider: string;
+}
+
 interface ProductsProps {
     products: {
         data: Array<{
@@ -29,6 +36,7 @@ interface ProductsProps {
             category: string | null;
             active: boolean;
             costs_count: number;
+            mappings?: ProductMapping[];
         }>;
         current_page: number;
         last_page: number;
@@ -70,13 +78,21 @@ export default function Products() {
         usePage<ProductsProps>().props;
 
     const [associateDialogOpen, setAssociateDialogOpen] = React.useState(false);
-    const [selectedProduct, setSelectedProduct] = React.useState<{
-        id: number;
-        name: string;
-    } | null>(null);
+    const [selectedProductId, setSelectedProductId] = React.useState<
+        number | null
+    >(null);
+
+    // Buscar o produto atualizado da lista sempre que os dados mudarem
+    const selectedProduct = React.useMemo(() => {
+        if (!selectedProductId) return null;
+        const product = products.data.find((p) => p.id === selectedProductId);
+        return product
+            ? { id: product.id, name: product.name, mappings: product.mappings }
+            : null;
+    }, [selectedProductId, products.data]);
 
     const handleAssociate = (product: { id: number; name: string }) => {
-        setSelectedProduct(product);
+        setSelectedProductId(product.id);
         setAssociateDialogOpen(true);
     };
 

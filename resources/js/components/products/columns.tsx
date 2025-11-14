@@ -8,9 +8,22 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { router } from '@inertiajs/react';
 import { ColumnDef } from '@tanstack/react-table';
-import { FileText, Link2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import {
+    FileText,
+    Link2,
+    MoreHorizontal,
+    Pencil,
+    Store,
+    Trash2,
+} from 'lucide-react';
 
 export type Product = {
     id: number;
@@ -23,6 +36,12 @@ export type Product = {
     category: string | null;
     active: boolean;
     costs_count: number;
+    mappings?: Array<{
+        id: number;
+        provider: string;
+        external_item_id: string;
+        external_item_name: string;
+    }>;
 };
 
 const typeLabels: Record<string, string> = {
@@ -168,6 +187,89 @@ export const createColumns = ({
                 <div className="text-center">
                     <Badge variant="outline">{count}</Badge>
                 </div>
+            );
+        },
+    },
+    {
+        id: 'marketplaces',
+        header: 'Marketplaces',
+        cell: ({ row }) => {
+            const mappings = row.original.mappings || [];
+
+            const getProviderLogo = (provider: string) => {
+                const logos: Record<string, string> = {
+                    ifood: '/images/ifood.svg',
+                    takeat: '/images/takeat.svg',
+                    '99food': '/images/99food.png',
+                };
+                return logos[provider.toLowerCase()] || null;
+            };
+
+            const getProviderName = (provider: string) => {
+                const names: Record<string, string> = {
+                    ifood: 'iFood',
+                    takeat: 'Takeat',
+                    '99food': '99Food',
+                };
+                return names[provider.toLowerCase()] || provider;
+            };
+
+            if (mappings.length === 0) {
+                return (
+                    <div className="flex items-center justify-center text-muted-foreground">
+                        <Store className="h-4 w-4" />
+                    </div>
+                );
+            }
+
+            // Obter providers únicos
+            const uniqueProviders = Array.from(
+                new Set(mappings.map((m) => m.provider)),
+            );
+
+            // Contar quantos produtos por provider
+            const providerCounts = mappings.reduce(
+                (acc, mapping) => {
+                    acc[mapping.provider] = (acc[mapping.provider] || 0) + 1;
+                    return acc;
+                },
+                {} as Record<string, number>,
+            );
+
+            return (
+                <TooltipProvider>
+                    <div className="flex items-center gap-1">
+                        {uniqueProviders.map((provider) => (
+                            <Tooltip key={provider}>
+                                <TooltipTrigger asChild>
+                                    <div className="flex h-6 w-6 items-center justify-center rounded border bg-background">
+                                        {getProviderLogo(provider) ? (
+                                            <img
+                                                src={getProviderLogo(provider)!}
+                                                alt={getProviderName(provider)}
+                                                className="h-4 w-4 object-contain"
+                                            />
+                                        ) : (
+                                            <Store className="h-3 w-3 text-muted-foreground" />
+                                        )}
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p className="text-xs">
+                                        <strong>
+                                            {getProviderName(provider)}
+                                        </strong>
+                                        <br />
+                                        {providerCounts[provider]}{' '}
+                                        {providerCounts[provider] === 1
+                                            ? 'produto'
+                                            : 'produtos'}
+                                    </p>
+                                </TooltipContent>
+                            </Tooltip>
+                        ))}
+                    </div>
+                </TooltipProvider>
             );
         },
     },

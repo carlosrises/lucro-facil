@@ -8,16 +8,9 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { router } from '@inertiajs/react';
-import { Check, Link2, Search, Trash2, X } from 'lucide-react';
+import { Check, Link2, Search, Store, Trash2, X } from 'lucide-react';
 import React from 'react';
 import { toast } from 'sonner';
 
@@ -26,6 +19,14 @@ interface ExternalItem {
     name: string;
     unit_price: number;
     mapped: boolean;
+    provider?: string;
+}
+
+interface ProductMapping {
+    id: number;
+    external_item_id: string;
+    external_item_name: string;
+    provider: string;
 }
 
 interface ProductAssociateDialogProps {
@@ -34,6 +35,7 @@ interface ProductAssociateDialogProps {
     product: {
         id: number;
         name: string;
+        mappings?: ProductMapping[];
     } | null;
     externalItems: ExternalItem[];
 }
@@ -46,11 +48,39 @@ export function ProductAssociateDialog({
 }: ProductAssociateDialogProps) {
     const [search, setSearch] = React.useState('');
 
-    const filteredItems = externalItems.filter(
+    // Filtrar apenas produtos não associados ao produto atual
+    const availableItems = externalItems.filter((item) => {
+        const isMappedToThis = product?.mappings?.some(
+            (m) => m.external_item_id === item.sku,
+        );
+        return !isMappedToThis;
+    });
+
+    const filteredAvailableItems = availableItems.filter(
         (item) =>
             item.name.toLowerCase().includes(search.toLowerCase()) ||
             item.sku.toLowerCase().includes(search.toLowerCase()),
     );
+
+    const mappedItems = product?.mappings || [];
+
+    const getProviderLogo = (provider: string) => {
+        const logos: Record<string, string> = {
+            ifood: '/images/ifood.svg',
+            takeat: '/images/takeat.svg',
+            '99food': '/images/99food.png',
+        };
+        return logos[provider.toLowerCase()] || null;
+    };
+
+    const getProviderName = (provider: string) => {
+        const names: Record<string, string> = {
+            ifood: 'iFood',
+            takeat: 'Takeat',
+            '99food': '99Food',
+        };
+        return names[provider.toLowerCase()] || provider;
+    };
 
     const handleAssociate = (externalItem: ExternalItem) => {
         if (!product) return;
@@ -61,14 +91,13 @@ export function ProductAssociateDialog({
                 external_item_id: externalItem.sku,
                 external_item_name: externalItem.name,
                 internal_product_id: product.id,
-                provider: 'ifood',
+                provider: externalItem.provider || 'ifood',
             },
             {
                 preserveScroll: true,
-                preserveState: true,
-                only: ['externalItems'],
                 onSuccess: () => {
                     toast.success('Produto associado com sucesso!');
+                    router.reload({ only: ['products', 'externalItems'] });
                 },
                 onError: () => {
                     toast.error('Erro ao associar produto');
@@ -77,149 +106,228 @@ export function ProductAssociateDialog({
         );
     };
 
-    const handleRemoveMapping = (sku: string) => {
+    const handleRemoveMapping = (mappingId: number) => {
         if (!product) return;
 
-        router.delete(`/product-mappings/sku/${sku}`, {
+        router.delete(`/product-mappings/${mappingId}`, {
             preserveScroll: true,
-            preserveState: true,
-            only: ['externalItems'],
             onSuccess: () => {
                 toast.success('Associação removida!');
+                router.reload({ only: ['products', 'externalItems'] });
             },
         });
     };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex max-h-[90vh] min-w-[90vw] flex-col overflow-hidden lg:min-w-[1200px]">
+            <DialogContent className="flex max-h-[90vh] min-w-[90vw] flex-col overflow-hidden lg:min-w-[1400px]">
                 <DialogHeader>
-                    <DialogTitle>Associar Produtos Externos</DialogTitle>
+                    <DialogTitle>Associar Produtos de Marketplaces</DialogTitle>
                     <DialogDescription>
                         Produto interno: <strong>{product?.name}</strong>
-                        <br />
-                        Selecione os produtos do marketplace para associar
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="flex flex-1 flex-col gap-4 overflow-hidden">
-                    {/* Busca */}
-                    <div className="flex items-center gap-2">
-                        <div className="relative flex-1">
+                <div className="grid flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-2">
+                    {/* COLUNA ESQUERDA - Produtos Disponíveis */}
+                    <div className="flex flex-col gap-4 overflow-hidden border-r pr-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold">
+                                Produtos Disponíveis
+                            </h3>
+                            <Badge variant="secondary">
+                                {filteredAvailableItems.length}
+                            </Badge>
+                        </div>
+
+                        {/* Busca */}
+                        <div className="relative">
                             <Search className="absolute top-2.5 left-2 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Buscar por nome ou SKU..."
+                                placeholder="Buscar por nome, SKU ou código..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 className="pl-8"
                             />
                         </div>
-                    </div>
 
-                    {/* Lista de produtos externos */}
-                    <div className="flex-1 overflow-auto rounded-md border">
-                        <Table>
-                            <TableHeader className="sticky top-0 bg-background">
-                                <TableRow>
-                                    <TableHead className="w-[40%]">
-                                        Produto (Marketplace)
-                                    </TableHead>
-                                    <TableHead className="w-[15%]">
-                                        SKU
-                                    </TableHead>
-                                    <TableHead className="w-[15%]">
-                                        Preço
-                                    </TableHead>
-                                    <TableHead className="w-[15%]">
-                                        Status
-                                    </TableHead>
-                                    <TableHead className="w-[15%] text-right">
-                                        Ações
-                                    </TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredItems.length > 0 ? (
-                                    filteredItems.map((item) => (
-                                        <TableRow key={item.sku}>
-                                            <TableCell className="font-medium">
-                                                {item.name}
-                                            </TableCell>
-                                            <TableCell className="text-xs text-muted-foreground">
-                                                {item.sku}
-                                            </TableCell>
-                                            <TableCell className="font-mono">
-                                                R$ {item.unit_price.toFixed(2)}
-                                            </TableCell>
-                                            <TableCell>
-                                                {item.mapped ? (
-                                                    <Badge
-                                                        variant="default"
-                                                        className="gap-1"
-                                                    >
-                                                        <Check className="h-3 w-3" />
-                                                        Associado
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge
-                                                        variant="secondary"
-                                                        className="gap-1"
-                                                    >
-                                                        <X className="h-3 w-3" />
-                                                        Não Associado
-                                                    </Badge>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                {item.mapped ? (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            handleRemoveMapping(
-                                                                item.sku,
-                                                            )
+                        {/* Lista de produtos disponíveis */}
+                        <ScrollArea className="flex-1">
+                            <div className="space-y-2 pr-4">
+                                {filteredAvailableItems.length > 0 ? (
+                                    filteredAvailableItems.map((item) => (
+                                        <div
+                                            key={item.sku}
+                                            className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-accent"
+                                        >
+                                            {/* Logo do marketplace */}
+                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded border bg-background">
+                                                {getProviderLogo(
+                                                    item.provider || 'ifood',
+                                                ) ? (
+                                                    <img
+                                                        src={
+                                                            getProviderLogo(
+                                                                item.provider ||
+                                                                    'ifood',
+                                                            )!
                                                         }
-                                                    >
-                                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                                    </Button>
+                                                        alt={getProviderName(
+                                                            item.provider ||
+                                                                'ifood',
+                                                        )}
+                                                        className="h-6 w-6 object-contain"
+                                                    />
                                                 ) : (
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            handleAssociate(
-                                                                item,
-                                                            )
-                                                        }
-                                                    >
-                                                        <Link2 className="mr-2 h-4 w-4" />
-                                                        Associar
-                                                    </Button>
+                                                    <Store className="h-5 w-5 text-muted-foreground" />
                                                 )}
-                                            </TableCell>
-                                        </TableRow>
+                                            </div>
+
+                                            {/* Info do produto */}
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-sm font-medium">
+                                                    {item.name}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    SKU: {item.sku}
+                                                </p>
+                                                <p className="mt-1 font-mono text-sm">
+                                                    R${' '}
+                                                    {item.unit_price.toFixed(2)}
+                                                </p>
+                                            </div>
+
+                                            {/* Botão associar */}
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() =>
+                                                    handleAssociate(item)
+                                                }
+                                            >
+                                                <Link2 className="mr-2 h-4 w-4" />
+                                                Associar
+                                            </Button>
+                                        </div>
                                     ))
                                 ) : (
-                                    <TableRow>
-                                        <TableCell
-                                            colSpan={5}
-                                            className="h-24 text-center"
-                                        >
-                                            Nenhum produto encontrado
-                                        </TableCell>
-                                    </TableRow>
+                                    <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+                                        {search
+                                            ? 'Nenhum produto encontrado'
+                                            : 'Todos os produtos já estão associados'}
+                                    </div>
                                 )}
-                            </TableBody>
-                        </Table>
+                            </div>
+                        </ScrollArea>
                     </div>
 
-                    <div className="flex items-center justify-between border-t pt-4 text-sm text-muted-foreground">
-                        <p>
-                            {filteredItems.filter((i) => i.mapped).length} de{' '}
-                            {filteredItems.length} produtos associados
-                        </p>
+                    {/* COLUNA DIREITA - Produtos Associados */}
+                    <div className="flex flex-col gap-4 overflow-hidden pl-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold">
+                                Produtos Associados
+                            </h3>
+                            <Badge variant="default">
+                                {mappedItems.length}
+                            </Badge>
+                        </div>
+
+                        <ScrollArea className="flex-1">
+                            <div className="space-y-2 pr-4">
+                                {mappedItems.length > 0 ? (
+                                    mappedItems.map((mapping) => (
+                                        <div
+                                            key={mapping.id}
+                                            className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-900 dark:bg-green-950/30"
+                                        >
+                                            {/* Logo do marketplace */}
+                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded border bg-background">
+                                                {getProviderLogo(
+                                                    mapping.provider,
+                                                ) ? (
+                                                    <img
+                                                        src={
+                                                            getProviderLogo(
+                                                                mapping.provider,
+                                                            )!
+                                                        }
+                                                        alt={getProviderName(
+                                                            mapping.provider,
+                                                        )}
+                                                        className="h-6 w-6 object-contain"
+                                                    />
+                                                ) : (
+                                                    <Store className="h-5 w-5 text-muted-foreground" />
+                                                )}
+                                            </div>
+
+                                            {/* Info do produto */}
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                                    <p className="truncate text-sm font-medium">
+                                                        {
+                                                            mapping.external_item_name
+                                                        }
+                                                    </p>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">
+                                                    SKU:{' '}
+                                                    {mapping.external_item_id}
+                                                </p>
+                                                <Badge
+                                                    variant="outline"
+                                                    className="mt-1"
+                                                >
+                                                    {getProviderName(
+                                                        mapping.provider,
+                                                    )}
+                                                </Badge>
+                                            </div>
+
+                                            {/* Botão remover */}
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() =>
+                                                    handleRemoveMapping(
+                                                        mapping.id,
+                                                    )
+                                                }
+                                            >
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                            </Button>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+                                        <div className="text-center">
+                                            <X className="mx-auto mb-2 h-8 w-8 text-muted-foreground/50" />
+                                            <p>Nenhum produto associado</p>
+                                            <p className="mt-1 text-xs">
+                                                Associe produtos da lista ao
+                                                lado
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </ScrollArea>
                     </div>
+                </div>
+
+                {/* Footer com estatísticas */}
+                <div className="flex items-center justify-between border-t pt-4 text-sm text-muted-foreground">
+                    <p>
+                        {mappedItems.length} produto(s) associado(s) •{' '}
+                        {availableItems.length} disponível(is)
+                    </p>
+                    <Button
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        Fechar
+                    </Button>
                 </div>
             </DialogContent>
         </Dialog>

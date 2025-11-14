@@ -17,6 +17,9 @@ class ProductsController extends Controller
     {
         $query = InternalProduct::query()
             ->where('tenant_id', tenant_id())
+            ->with(['mappings' => function ($query) {
+                $query->select('id', 'internal_product_id', 'external_item_id', 'external_item_name', 'provider');
+            }])
             ->withCount('costs')
             ->when($request->input('search'), fn ($q, $search) =>
                 $q->where(function ($query) use ($search) {
@@ -43,10 +46,17 @@ class ProductsController extends Controller
 
         // Buscar itens externos (dos pedidos) para associação
         $tenantId = tenant_id();
-        $externalItems = OrderItem::where('tenant_id', $tenantId)
-            ->selectRaw('DISTINCT sku, name, MAX(unit_price) as unit_price')
-            ->groupBy('sku', 'name')
-            ->orderBy('name')
+        $externalItems = DB::table('order_items')
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->where('order_items.tenant_id', $tenantId)
+            ->select(
+                'order_items.sku',
+                'order_items.name',
+                DB::raw('MAX(order_items.unit_price) as unit_price'),
+                DB::raw('MAX(orders.provider) as provider')
+            )
+            ->groupBy('order_items.sku', 'order_items.name')
+            ->orderBy('order_items.name')
             ->get()
             ->map(function ($item) use ($tenantId) {
                 // Verificar se já está mapeado
@@ -58,6 +68,7 @@ class ProductsController extends Controller
                     'sku' => $item->sku,
                     'name' => $item->name,
                     'unit_price' => (float) $item->unit_price,
+                    'provider' => $item->provider ?? 'ifood',
                     'mapped' => $mapping,
                 ];
             });
