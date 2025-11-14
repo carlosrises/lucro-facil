@@ -1,14 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-    Banknote,
-    Calendar,
-    CreditCard,
-    Hash,
-    MessageSquare,
-    Percent,
-    User,
-} from 'lucide-react';
+import { Calendar, Hash, Percent, User } from 'lucide-react';
 
 type OrderExpandedDetailsProps = {
     order: {
@@ -68,14 +60,12 @@ type OrderExpandedDetailsProps = {
 };
 
 export function OrderExpandedDetails({ order }: OrderExpandedDetailsProps) {
-    const payments = order.raw?.payments?.methods || [];
     const benefitsList = order.raw?.benefits || [];
     const totalBenefits = order.raw?.total?.benefits || 0;
     const cpfCnpj = order.raw?.customer?.taxPayerIdentificationNumber;
     const orderTiming = order.raw?.orderTiming;
     const scheduledTo = order.raw?.scheduledTo;
     const takeoutCode = order.raw?.takeout?.takeoutCode;
-    const deliveryObservations = order.raw?.delivery?.observations;
 
     // Função auxiliar para traduzir o target
     const getTargetLabel = (target?: string) => {
@@ -111,101 +101,16 @@ export function OrderExpandedDetails({ order }: OrderExpandedDetailsProps) {
 
     // Se não há dados adicionais, não renderiza
     if (
-        payments.length === 0 &&
         benefitsList.length === 0 &&
         !cpfCnpj &&
         orderTiming !== 'SCHEDULED' &&
-        !takeoutCode &&
-        !deliveryObservations
+        !takeoutCode
     ) {
         return null;
     }
 
     return (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            {/* Pagamento */}
-            {payments.length > 0 && (
-                <Card className="border-0 bg-gray-100 shadow-none dark:bg-neutral-950">
-                    <CardHeader className="px-3 py-2">
-                        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                            <CreditCard className="h-4 w-4" />
-                            Pagamento
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="rounded-md bg-card p-3">
-                        <div className="space-y-2">
-                            {payments.map((payment, index) => (
-                                <div
-                                    key={index}
-                                    className="flex items-center justify-between"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        {payment.method === 'CASH' ? (
-                                            <Banknote className="h-4 w-4 text-green-600" />
-                                        ) : (
-                                            <CreditCard className="h-4 w-4 text-blue-600" />
-                                        )}
-                                        <div className="text-sm">
-                                            <div className="font-medium">
-                                                {payment.method === 'CASH'
-                                                    ? 'Dinheiro'
-                                                    : payment.method ===
-                                                        'CREDIT'
-                                                      ? 'Crédito'
-                                                      : payment.method ===
-                                                          'DEBIT'
-                                                        ? 'Débito'
-                                                        : payment.method ===
-                                                            'MEAL_VOUCHER'
-                                                          ? 'Vale Refeição'
-                                                          : payment.method ===
-                                                              'FOOD_VOUCHER'
-                                                            ? 'Vale Alimentação'
-                                                            : payment.method ===
-                                                                'DIGITAL_WALLET'
-                                                              ? 'Carteira Digital'
-                                                              : payment.method ===
-                                                                  'PIX'
-                                                                ? 'PIX'
-                                                                : payment.method}
-                                            </div>
-                                            {payment.card?.brand && (
-                                                <div className="text-xs text-muted-foreground">
-                                                    {payment.card.brand}
-                                                </div>
-                                            )}
-                                            {payment.wallet?.name && (
-                                                <div className="text-xs text-muted-foreground">
-                                                    {payment.wallet.name
-                                                        .replace('_', ' ')
-                                                        .toLowerCase()
-                                                        .replace(/\b\w/g, (l) =>
-                                                            l.toUpperCase(),
-                                                        )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="font-medium">
-                                            R$ {(payment.value || 0).toFixed(2)}
-                                        </div>
-                                        {payment.cash?.changeFor && (
-                                            <div className="text-xs text-muted-foreground">
-                                                Troco para: R${' '}
-                                                {payment.cash.changeFor.toFixed(
-                                                    2,
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
+        <>
             {/* Cupons/Descontos */}
             {benefitsList.length > 0 && (
                 <Card className="border-0 bg-gray-100 shadow-none dark:bg-neutral-950">
@@ -364,23 +269,6 @@ export function OrderExpandedDetails({ order }: OrderExpandedDetailsProps) {
                     </CardContent>
                 </Card>
             )}
-
-            {/* Observações de Entrega */}
-            {deliveryObservations && (
-                <Card className="border-0 bg-gray-100 shadow-none dark:bg-neutral-950">
-                    <CardHeader className="px-3 py-2">
-                        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                            <MessageSquare className="h-4 w-4" />
-                            Observações da Entrega
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="rounded-md bg-card p-3">
-                        <p className="text-sm text-muted-foreground">
-                            {deliveryObservations}
-                        </p>
-                    </CardContent>
-                </Card>
-            )}
-        </div>
+        </>
     );
 }

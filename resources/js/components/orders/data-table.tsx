@@ -38,6 +38,8 @@ import {
 import { DateRangePicker } from '@/components/date-range-picker';
 import { columns, Order } from '@/components/orders/columns';
 import { OrderExpandedDetails } from '@/components/orders/order-expanded-details';
+import { OrderFinancialCard } from '@/components/orders/order-financial-card';
+import { QuickAssociateDialog } from '@/components/orders/quick-associate-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -48,7 +50,6 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Link, router } from '@inertiajs/react';
-import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import {
     DropdownMenu,
@@ -75,6 +76,7 @@ type Filters = {
     store_id?: number | string;
     start_date?: string;
     end_date?: string;
+    unmapped_only?: string;
     per_page?: number;
     page?: number;
 };
@@ -84,15 +86,89 @@ export function DataTable({
     pagination,
     filters,
     stores,
+    unmappedProductsCount = 0,
+    internalProducts = [],
 }: {
     data: Order[];
     pagination: Pagination;
     filters: Filters;
     stores: { id: number; name: string }[];
+    unmappedProductsCount?: number;
+    internalProducts?: Array<{
+        id: number;
+        name: string;
+        sku: string | null;
+        unit_cost: string;
+    }>;
 }) {
     const [sorting, setSorting] = React.useState<SortingState>([
         { id: 'placed_at', desc: true }, // 🔧 padrão: ordenado por data
     ]);
+
+    const [associateDialogOpen, setAssociateDialogOpen] = React.useState(false);
+    const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(
+        null,
+    );
+    const selectedOrderIdRef = React.useRef<number | null>(null);
+
+    // Atualizar selectedOrder quando os dados mudarem
+    React.useEffect(() => {
+        if (selectedOrderIdRef.current && data) {
+            const updatedOrder = data.find(
+                (o) => o.id === selectedOrderIdRef.current,
+            );
+            if (updatedOrder) {
+                setSelectedOrder(updatedOrder);
+            }
+        }
+    }, [data]);
+
+    // Atualizar ref quando selectedOrder muda
+    React.useEffect(() => {
+        selectedOrderIdRef.current = selectedOrder?.id || null;
+    }, [selectedOrder]);
+
+    // Adicionar coluna de produtos não associados
+    const columnsWithAssociate = React.useMemo(() => {
+        const associateColumn = {
+            id: 'unmapped_products',
+            header: 'Produtos',
+            enableSorting: false,
+            cell: ({ row }: { row: any }) => {
+                const order = row.original as Order;
+
+                // Contar items sem internal_product diretamente da relação carregada
+                const unmappedCount =
+                    order.items?.filter((item) => !item.internal_product)
+                        .length || 0;
+
+                if (unmappedCount === 0) return null;
+
+                return (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1 text-xs"
+                        onClick={() => {
+                            setSelectedOrder(order);
+                            setAssociateDialogOpen(true);
+                        }}
+                    >
+                        <Badge variant="secondary" className="h-5 px-1.5">
+                            {unmappedCount}
+                        </Badge>
+                        <span>Associar</span>
+                    </Button>
+                );
+            },
+        };
+
+        // Inserir a coluna antes da coluna de ações
+        const actionIndex = columns.findIndex((col) => col.id === 'actions');
+        const newColumns = [...columns];
+        newColumns.splice(actionIndex, 0, associateColumn);
+        return newColumns;
+    }, []);
 
     const [dateRange, setDateRange] = React.useState<DateRange | undefined>({
         from: filters?.start_date ? new Date(filters.start_date) : undefined,
@@ -130,7 +206,7 @@ export function DataTable({
 
     const table = useReactTable({
         data,
-        columns,
+        columns: columnsWithAssociate,
         state: {
             sorting,
             columnFilters,
@@ -147,9 +223,85 @@ export function DataTable({
 
     return (
         <div className="flex w-full flex-col gap-4 space-x-4 px-4 lg:px-6">
+            {/* Banner de produtos não mapeados */}
+            {unmappedProductsCount > 0 && (
+                <Button
+                    variant="outline"
+                    className="h-auto w-full justify-start gap-3 rounded-lg border-2 border-red-500 bg-red-50 p-4 text-left hover:bg-red-100 dark:border-red-900 dark:bg-red-950 dark:hover:bg-red-900"
+                    onClick={() => updateFilters({ unmapped_only: '1' })}
+                >
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-red-500 text-white">
+                        <svg
+                            className="h-5 w-5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                            />
+                        </svg>
+                    </div>
+                    <div className="flex-1">
+                        <div className="text-base font-bold text-red-900 dark:text-red-100">
+                            {unmappedProductsCount} vendas sem produto vinculado
+                        </div>
+                        <div className="mt-1 text-sm text-red-700 dark:text-red-300">
+                            Clique para filtrar apenas pedidos com produtos não
+                            associados
+                        </div>
+                    </div>
+                    <div className="flex-shrink-0">
+                        <svg
+                            className="h-5 w-5 text-red-700 dark:text-red-300"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 5l7 7-7 7"
+                            />
+                        </svg>
+                    </div>
+                </Button>
+            )}
+
             {/* 🔎 Filtros */}
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
+                    {/* Badge de filtro ativo */}
+                    {filters?.unmapped_only && (
+                        <Badge variant="destructive" className="h-9 gap-2 px-3">
+                            Apenas não associados
+                            <button
+                                onClick={() =>
+                                    updateFilters({ unmapped_only: undefined })
+                                }
+                                className="ml-1 rounded-full hover:bg-red-700"
+                            >
+                                <svg
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
+                                </svg>
+                            </button>
+                        </Badge>
+                    )}
+
                     {/* Buscar por código */}
                     <Input
                         placeholder="Buscar pedido..."
@@ -406,515 +558,440 @@ export function DataTable({
                                                 colSpan={columns.length + 1}
                                                 className="border-t-0 p-0" // 🔥 remove a borda superior
                                             >
-                                                <div className="grid grid-cols-1 gap-4 p-2 duration-300 animate-in slide-in-from-top-2 xl:grid-cols-2">
-                                                    {/* Card: Itens do pedido */}
-                                                    <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 shadow-none dark:bg-neutral-950">
-                                                        <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
-                                                            <CardTitle className="flex items-center gap-1 font-semibold">
-                                                                Itens do Pedido{' '}
-                                                                <Badge className="text-14px/[16px] bg-gray-200 px-3 py-0 text-gray-600">
-                                                                    2
-                                                                </Badge>
-                                                            </CardTitle>
-                                                        </CardHeader>
-                                                        <CardContent className="rounded-md bg-card p-0">
-                                                            <ul className="m-0 flex w-full basis-full list-none flex-col gap-2 pt-2 pl-0">
-                                                                {/* Cabeçalho */}
-                                                                <li className="hidden flex-wrap items-center gap-2 px-3 py-2 md:flex">
-                                                                    <span className="text-start leading-4 font-bold no-underline md:min-w-[32px]">
-                                                                        Qtd.
-                                                                    </span>
-                                                                    <span className="grow text-start leading-4 font-bold no-underline">
-                                                                        Item
-                                                                    </span>
-                                                                    <span className="hidden text-end leading-4 font-bold no-underline md:flex md:min-w-[120px] md:justify-end">
-                                                                        Valor
-                                                                        unitário
-                                                                    </span>
-                                                                    <span className="text-end leading-4 font-bold no-underline md:min-w-[120px]">
-                                                                        Subtotal
-                                                                    </span>
-                                                                </li>
-
-                                                                {/* Itens do pedido */}
-                                                                {row.original.raw?.items?.map(
-                                                                    (
-                                                                        item: any,
-                                                                    ) => (
-                                                                        <li
-                                                                            key={
-                                                                                item.id
-                                                                            }
-                                                                            className="flex flex-wrap items-center gap-2 px-3 py-2"
-                                                                        >
-                                                                            {/* Produto principal (1º nível) */}
-                                                                            <span className="md:min-w-[32px]">
-                                                                                {
-                                                                                    item.quantity
-                                                                                }
-
-                                                                                x
-                                                                            </span>
-                                                                            <span className="grow font-medium">
-                                                                                {
-                                                                                    item.name
-                                                                                }
-                                                                                {item.observations && (
-                                                                                    <div className="mt-1 text-xs text-muted-foreground italic">
-                                                                                        Obs:{' '}
-                                                                                        {
-                                                                                            item.observations
-                                                                                        }
-                                                                                    </div>
-                                                                                )}
-                                                                            </span>
-                                                                            <span className="hidden justify-end md:flex md:min-w-[120px]">
-                                                                                {new Intl.NumberFormat(
-                                                                                    'pt-BR',
-                                                                                    {
-                                                                                        style: 'currency',
-                                                                                        currency:
-                                                                                            'BRL',
-                                                                                    },
-                                                                                ).format(
-                                                                                    item.unitPrice,
-                                                                                )}
-                                                                            </span>
-                                                                            <span className="text-end md:min-w-[120px]">
-                                                                                {new Intl.NumberFormat(
-                                                                                    'pt-BR',
-                                                                                    {
-                                                                                        style: 'currency',
-                                                                                        currency:
-                                                                                            'BRL',
-                                                                                    },
-                                                                                ).format(
-                                                                                    item.totalPrice,
-                                                                                )}
-                                                                            </span>
-
-                                                                            {/* Segundo nível (options) */}
-                                                                            {item
-                                                                                .options
-                                                                                ?.length >
-                                                                                0 && (
-                                                                                <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
-                                                                                    {item.options.map(
-                                                                                        (
-                                                                                            opt: any,
-                                                                                        ) => (
-                                                                                            <li
-                                                                                                key={
-                                                                                                    opt.id
-                                                                                                }
-                                                                                                className="flex flex-wrap items-center gap-2 py-2 text-muted-foreground"
-                                                                                            >
-                                                                                                <span className="text-start md:min-w-[32px]">
-                                                                                                    {
-                                                                                                        opt.quantity
-                                                                                                    }
-
-                                                                                                    x
-                                                                                                </span>
-                                                                                                <span className="grow">
-                                                                                                    {
-                                                                                                        opt.name
-                                                                                                    }
-                                                                                                </span>
-                                                                                                <span className="hidden justify-end text-end md:flex md:min-w-[120px]">
-                                                                                                    {new Intl.NumberFormat(
-                                                                                                        'pt-BR',
-                                                                                                        {
-                                                                                                            style: 'currency',
-                                                                                                            currency:
-                                                                                                                'BRL',
-                                                                                                        },
-                                                                                                    ).format(
-                                                                                                        opt.unitPrice,
-                                                                                                    )}
-                                                                                                </span>
-                                                                                                <span className="text-end md:min-w-[120px]">
-                                                                                                    {new Intl.NumberFormat(
-                                                                                                        'pt-BR',
-                                                                                                        {
-                                                                                                            style: 'currency',
-                                                                                                            currency:
-                                                                                                                'BRL',
-                                                                                                        },
-                                                                                                    ).format(
-                                                                                                        opt.price ??
-                                                                                                            opt.totalPrice ??
-                                                                                                            0,
-                                                                                                    )}
-                                                                                                </span>
-
-                                                                                                {/* Terceiro nível (customizations) */}
-                                                                                                {opt
-                                                                                                    .customizations
-                                                                                                    ?.length >
-                                                                                                    0 && (
-                                                                                                    <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
-                                                                                                        {opt.customizations.map(
-                                                                                                            (
-                                                                                                                cust: any,
-                                                                                                            ) => (
-                                                                                                                <li
-                                                                                                                    key={
-                                                                                                                        cust.id
-                                                                                                                    }
-                                                                                                                    className="flex flex-wrap items-center gap-2 py-2"
-                                                                                                                >
-                                                                                                                    <span className="ms-5 grow border-s-2 border-muted-foreground ps-5 text-muted-foreground">
-                                                                                                                        {
-                                                                                                                            cust.quantity
-                                                                                                                        }
-
-                                                                                                                        x{' '}
-                                                                                                                        {
-                                                                                                                            cust.name
-                                                                                                                        }
-                                                                                                                    </span>
-                                                                                                                    <span className="hidden justify-end text-end text-muted-foreground md:flex md:min-w-[120px]">
-                                                                                                                        {new Intl.NumberFormat(
-                                                                                                                            'pt-BR',
-                                                                                                                            {
-                                                                                                                                style: 'currency',
-                                                                                                                                currency:
-                                                                                                                                    'BRL',
-                                                                                                                            },
-                                                                                                                        ).format(
-                                                                                                                            cust.unitPrice,
-                                                                                                                        )}
-                                                                                                                    </span>
-                                                                                                                    <span className="text-end text-muted-foreground md:min-w-[120px]">
-                                                                                                                        {new Intl.NumberFormat(
-                                                                                                                            'pt-BR',
-                                                                                                                            {
-                                                                                                                                style: 'currency',
-                                                                                                                                currency:
-                                                                                                                                    'BRL',
-                                                                                                                            },
-                                                                                                                        ).format(
-                                                                                                                            cust.price ??
-                                                                                                                                0,
-                                                                                                                        )}
-                                                                                                                    </span>
-                                                                                                                </li>
-                                                                                                            ),
-                                                                                                        )}
-                                                                                                    </ul>
-                                                                                                )}
-                                                                                            </li>
-                                                                                        ),
-                                                                                    )}
-                                                                                </ul>
-                                                                            )}
-                                                                        </li>
-                                                                    ),
-                                                                )}
-                                                            </ul>
-
-                                                            {/* Rodapé com total */}
-                                                            <div className="flex w-full justify-between border-t px-3 py-4">
-                                                                <div className="flex w-full flex-row justify-between gap-2">
-                                                                    <span className="leading-4 font-semibold">
-                                                                        Total
-                                                                        dos
-                                                                        itens
-                                                                    </span>
-                                                                    <span className="leading-4 font-semibold">
-                                                                        R$ 21,00
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                        </CardContent>
-                                                    </Card>
-
-                                                    {/* Card: Detalhamento Financeiro */}
-                                                    <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
-                                                        <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
-                                                            <CardTitle className="flex h-[18px] items-center font-semibold">
-                                                                Detalhamento
-                                                                financeiro do
-                                                                pedido
-                                                            </CardTitle>
-                                                        </CardHeader>
-                                                        <CardContent className="rounded-md bg-card p-0">
-                                                            <ul className="m-0 flex w-full flex-col ps-0">
-                                                                {/* Valor bruto da venda */}
-                                                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                                                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                                                        <div className="flex items-center justify-center rounded-full bg-green-100 p-0.5 text-green-800">
-                                                                            <ArrowUpRight className="h-4 w-4" />
-                                                                        </div>
-                                                                        <span className="flex-grow text-sm leading-4 font-semibold">
+                                                <div className="grid grid-cols-1 gap-4 p-4 duration-300 animate-in slide-in-from-top-2 xl:grid-cols-2">
+                                                    {/* Coluna 1: Itens + Observações */}
+                                                    <div className="flex flex-col gap-4">
+                                                        {/* Card: Itens do pedido */}
+                                                        <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 shadow-none dark:bg-neutral-950">
+                                                            <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                                                                <CardTitle className="flex items-center gap-1 font-semibold">
+                                                                    Itens do
+                                                                    Pedido{' '}
+                                                                    <Badge className="text-14px/[16px] bg-gray-200 px-3 py-0 text-gray-600">
+                                                                        2
+                                                                    </Badge>
+                                                                </CardTitle>
+                                                            </CardHeader>
+                                                            <CardContent className="rounded-md bg-card p-0">
+                                                                <ul className="m-0 flex w-full basis-full list-none flex-col gap-2 pt-2 pl-0">
+                                                                    {/* Cabeçalho */}
+                                                                    <li className="hidden flex-wrap items-center gap-2 px-3 py-2 md:flex">
+                                                                        <span className="text-start leading-4 font-bold no-underline md:min-w-[32px]">
+                                                                            Qtd.
+                                                                        </span>
+                                                                        <span className="grow text-start leading-4 font-bold no-underline">
+                                                                            Item
+                                                                        </span>
+                                                                        <span className="hidden text-end leading-4 font-bold no-underline md:flex md:min-w-[120px] md:justify-end">
                                                                             Valor
-                                                                            bruto
-                                                                            da
-                                                                            venda
+                                                                            unitário
                                                                         </span>
-                                                                        <span className="text-sm leading-4 whitespace-nowrap">
-                                                                            R$
-                                                                            54,49
+                                                                        <span className="text-end leading-4 font-bold no-underline md:min-w-[120px]">
+                                                                            Subtotal
                                                                         </span>
-                                                                    </div>
-                                                                    <ul className="flex w-full flex-col items-center justify-between gap-2 pl-0">
-                                                                        <li className="flex w-full flex-row items-start justify-between px-3 py-0">
-                                                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                                                Total
-                                                                                recebido
-                                                                                via
-                                                                                iFood
-                                                                            </span>
-                                                                        </li>
-                                                                        <li className="flex w-full flex-row items-start justify-between px-3 py-0">
-                                                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                                                Promoções
-                                                                                custeadas
-                                                                                pela
-                                                                                loja
-                                                                            </span>
-                                                                        </li>
-                                                                        <li className="flex w-full flex-row items-start justify-between px-3 py-0">
-                                                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                                                Taxa
-                                                                                de
-                                                                                entrega
-                                                                                no
-                                                                                valor
-                                                                                de
-                                                                                R$
-                                                                                0,00
-                                                                            </span>
-                                                                        </li>
-                                                                    </ul>
-                                                                </li>
+                                                                    </li>
 
-                                                                {/* Valores pagos pelo cliente devidos ao iFood */}
-                                                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                                                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                                                        <div className="flex items-center justify-center rounded-full bg-red-100 p-0.5 text-red-900">
-                                                                            <ArrowDownLeft className="h-4 w-4" />
-                                                                        </div>
-                                                                        <span className="flex-grow text-sm leading-4 font-semibold">
-                                                                            Valores
-                                                                            pagos
-                                                                            pelo
-                                                                            cliente
-                                                                            devidos
-                                                                            ao
-                                                                            iFood
-                                                                        </span>
-                                                                        <span className="text-sm leading-4 whitespace-nowrap">
-                                                                            -R$
-                                                                            0,99
-                                                                        </span>
-                                                                    </div>
-                                                                    <ul className="flex w-full flex-col items-center justify-between pl-0">
-                                                                        <li className="flex w-full flex-row items-start justify-between px-3 py-2">
-                                                                            <span className="text-sm leading-4 font-normal">
-                                                                                <div className="flex h-[1em] items-center">
-                                                                                    <span>
-                                                                                        Taxa
-                                                                                        de
-                                                                                        serviço
-                                                                                        iFood
-                                                                                        cobrada
-                                                                                        do
-                                                                                        cliente
-                                                                                    </span>
-                                                                                </div>
-                                                                            </span>
-                                                                            <span className="text-sm leading-4 font-normal whitespace-nowrap text-gray-700">
-                                                                                -R$
-                                                                                0,99
-                                                                            </span>
-                                                                        </li>
-                                                                    </ul>
-                                                                </li>
+                                                                    {/* Itens do pedido */}
+                                                                    {row.original.raw?.items?.map(
+                                                                        (
+                                                                            item: any,
+                                                                        ) => (
+                                                                            <li
+                                                                                key={
+                                                                                    item.id
+                                                                                }
+                                                                                className="flex flex-wrap items-center gap-2 px-3 py-2"
+                                                                            >
+                                                                                {/* Produto principal (1º nível) */}
+                                                                                <span className="md:min-w-[32px]">
+                                                                                    {
+                                                                                        item.quantity
+                                                                                    }
 
-                                                                {/* Promoções */}
-                                                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                                                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                                                        <div className="flex items-center justify-center rounded-full bg-red-100 p-0.5 text-red-900">
-                                                                            <ArrowDownLeft className="h-4 w-4" />
-                                                                        </div>
-                                                                        <span className="flex-grow text-sm leading-4 font-semibold">
-                                                                            Promoções
-                                                                        </span>
-                                                                        <span className="text-sm leading-4 whitespace-nowrap">
-                                                                            -R$
-                                                                            13,37
-                                                                        </span>
-                                                                    </div>
-                                                                    <ul className="flex w-full flex-col items-center justify-between gap-2 pl-0">
-                                                                        <li className="flex w-full flex-row items-start justify-between px-3 py-2">
-                                                                            <span className="text-sm leading-4 font-normal">
-                                                                                Promoção
-                                                                                custeada
-                                                                                pela
-                                                                                loja
-                                                                            </span>
-                                                                            <span className="text-sm leading-4 font-normal whitespace-nowrap text-gray-700">
-                                                                                -
-                                                                                R$
-                                                                                13,37
-                                                                            </span>
-                                                                        </li>
-                                                                        <li className="flex w-full flex-row items-start justify-between px-3 py-2">
-                                                                            <span className="text-sm leading-4 font-normal whitespace-nowrap text-muted-foreground">
-                                                                                Cupom
-                                                                                Clube
-                                                                                25%
-                                                                                off
-                                                                                -
-                                                                                Limitado
-                                                                                a
-                                                                                R$
-                                                                                20
-                                                                                -
-                                                                                Para
-                                                                                novos
-                                                                                clientes
-                                                                                no
-                                                                                valor
-                                                                                de
-                                                                                R$
-                                                                                13,37
-                                                                            </span>
-                                                                        </li>
-                                                                    </ul>
-                                                                </li>
+                                                                                    x
+                                                                                </span>
+                                                                                <span className="grow font-medium">
+                                                                                    {
+                                                                                        item.name
+                                                                                    }
+                                                                                    {item.internal_product && (
+                                                                                        <div className="mt-1 text-xs font-semibold text-emerald-600">
+                                                                                            Custo:{' '}
+                                                                                            {new Intl.NumberFormat(
+                                                                                                'pt-BR',
+                                                                                                {
+                                                                                                    style: 'currency',
+                                                                                                    currency:
+                                                                                                        'BRL',
+                                                                                                },
+                                                                                            ).format(
+                                                                                                parseFloat(
+                                                                                                    item
+                                                                                                        .internal_product
+                                                                                                        .unit_cost,
+                                                                                                ),
+                                                                                            )}
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {item.observations && (
+                                                                                        <div className="mt-1 text-xs text-muted-foreground italic">
+                                                                                            Obs:{' '}
+                                                                                            {
+                                                                                                item.observations
+                                                                                            }
+                                                                                        </div>
+                                                                                    )}
+                                                                                </span>
+                                                                                <span className="hidden justify-end md:flex md:min-w-[120px]">
+                                                                                    {new Intl.NumberFormat(
+                                                                                        'pt-BR',
+                                                                                        {
+                                                                                            style: 'currency',
+                                                                                            currency:
+                                                                                                'BRL',
+                                                                                        },
+                                                                                    ).format(
+                                                                                        item.unitPrice,
+                                                                                    )}
+                                                                                </span>
+                                                                                <span className="text-end md:min-w-[120px]">
+                                                                                    {new Intl.NumberFormat(
+                                                                                        'pt-BR',
+                                                                                        {
+                                                                                            style: 'currency',
+                                                                                            currency:
+                                                                                                'BRL',
+                                                                                        },
+                                                                                    ).format(
+                                                                                        item.totalPrice,
+                                                                                    )}
+                                                                                </span>
 
-                                                                {/* Total recebido via loja */}
-                                                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                                                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                                                        <div className="flex items-center justify-center rounded-full bg-gray-200 p-1 text-gray-700">
-                                                                            <ArrowRightLeft className="h-3 w-3" />
-                                                                        </div>
-                                                                        <span className="flex-grow text-sm leading-4 font-semibold">
+                                                                                {/* Segundo nível (options) */}
+                                                                                {item
+                                                                                    .options
+                                                                                    ?.length >
+                                                                                    0 && (
+                                                                                    <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
+                                                                                        {item.options.map(
+                                                                                            (
+                                                                                                opt: any,
+                                                                                            ) => (
+                                                                                                <li
+                                                                                                    key={
+                                                                                                        opt.id
+                                                                                                    }
+                                                                                                    className="flex flex-wrap items-center gap-2 py-2 text-muted-foreground"
+                                                                                                >
+                                                                                                    <span className="text-start md:min-w-[32px]">
+                                                                                                        {
+                                                                                                            opt.quantity
+                                                                                                        }
+
+                                                                                                        x
+                                                                                                    </span>
+                                                                                                    <span className="grow">
+                                                                                                        {
+                                                                                                            opt.name
+                                                                                                        }
+                                                                                                    </span>
+                                                                                                    <span className="hidden justify-end text-end md:flex md:min-w-[120px]">
+                                                                                                        {new Intl.NumberFormat(
+                                                                                                            'pt-BR',
+                                                                                                            {
+                                                                                                                style: 'currency',
+                                                                                                                currency:
+                                                                                                                    'BRL',
+                                                                                                            },
+                                                                                                        ).format(
+                                                                                                            opt.unitPrice,
+                                                                                                        )}
+                                                                                                    </span>
+                                                                                                    <span className="text-end md:min-w-[120px]">
+                                                                                                        {new Intl.NumberFormat(
+                                                                                                            'pt-BR',
+                                                                                                            {
+                                                                                                                style: 'currency',
+                                                                                                                currency:
+                                                                                                                    'BRL',
+                                                                                                            },
+                                                                                                        ).format(
+                                                                                                            opt.price ??
+                                                                                                                opt.totalPrice ??
+                                                                                                                0,
+                                                                                                        )}
+                                                                                                    </span>
+
+                                                                                                    {/* Terceiro nível (customizations) */}
+                                                                                                    {opt
+                                                                                                        .customizations
+                                                                                                        ?.length >
+                                                                                                        0 && (
+                                                                                                        <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
+                                                                                                            {opt.customizations.map(
+                                                                                                                (
+                                                                                                                    cust: any,
+                                                                                                                ) => (
+                                                                                                                    <li
+                                                                                                                        key={
+                                                                                                                            cust.id
+                                                                                                                        }
+                                                                                                                        className="flex flex-wrap items-center gap-2 py-2"
+                                                                                                                    >
+                                                                                                                        <span className="ms-5 grow border-s-2 border-muted-foreground ps-5 text-muted-foreground">
+                                                                                                                            {
+                                                                                                                                cust.quantity
+                                                                                                                            }
+
+                                                                                                                            x{' '}
+                                                                                                                            {
+                                                                                                                                cust.name
+                                                                                                                            }
+                                                                                                                        </span>
+                                                                                                                        <span className="hidden justify-end text-end text-muted-foreground md:flex md:min-w-[120px]">
+                                                                                                                            {new Intl.NumberFormat(
+                                                                                                                                'pt-BR',
+                                                                                                                                {
+                                                                                                                                    style: 'currency',
+                                                                                                                                    currency:
+                                                                                                                                        'BRL',
+                                                                                                                                },
+                                                                                                                            ).format(
+                                                                                                                                cust.unitPrice,
+                                                                                                                            )}
+                                                                                                                        </span>
+                                                                                                                        <span className="text-end text-muted-foreground md:min-w-[120px]">
+                                                                                                                            {new Intl.NumberFormat(
+                                                                                                                                'pt-BR',
+                                                                                                                                {
+                                                                                                                                    style: 'currency',
+                                                                                                                                    currency:
+                                                                                                                                        'BRL',
+                                                                                                                                },
+                                                                                                                            ).format(
+                                                                                                                                cust.price ??
+                                                                                                                                    0,
+                                                                                                                            )}
+                                                                                                                        </span>
+                                                                                                                    </li>
+                                                                                                                ),
+                                                                                                            )}
+                                                                                                        </ul>
+                                                                                                    )}
+                                                                                                </li>
+                                                                                            ),
+                                                                                        )}
+                                                                                    </ul>
+                                                                                )}
+                                                                            </li>
+                                                                        ),
+                                                                    )}
+                                                                </ul>
+
+                                                                {/* Rodapé com total */}
+                                                                <div className="flex w-full justify-between border-t px-3 py-4">
+                                                                    <div className="flex w-full flex-row justify-between gap-2">
+                                                                        <span className="leading-4 font-semibold">
                                                                             Total
-                                                                            recebido
-                                                                            via
-                                                                            loja
+                                                                            dos
+                                                                            itens
                                                                         </span>
-                                                                        <span className="text-sm leading-4 whitespace-nowrap">
+                                                                        <span className="leading-4 font-semibold">
                                                                             R$
-                                                                            0,00
+                                                                            21,00
                                                                         </span>
                                                                     </div>
-                                                                    <ul className="flex w-full flex-col items-center justify-between pl-0">
-                                                                        <li className="flex w-full flex-row items-start justify-between px-3 py-2">
-                                                                            <span className="text-sm leading-4 font-normal whitespace-nowrap text-gray-700">
-                                                                                Pedido
-                                                                                recebido
-                                                                                via
-                                                                                iFood
-                                                                                no
-                                                                                valor
-                                                                                de
-                                                                                R$
-                                                                                41,12
-                                                                            </span>
-                                                                        </li>
-                                                                    </ul>
-                                                                </li>
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
 
-                                                                {/* Taxas e comissões iFood */}
-                                                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                                                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                                                        <div className="flex items-center justify-center rounded-full bg-red-100 p-0.5 text-red-900">
-                                                                            <ArrowDownLeft className="h-4 w-4" />
-                                                                        </div>
-                                                                        <span className="flex-grow text-sm leading-4 font-semibold">
-                                                                            Taxas
-                                                                            e
-                                                                            comissões
-                                                                            iFood
-                                                                        </span>
-                                                                        <span className="text-sm leading-4 whitespace-nowrap">
-                                                                            -R$
-                                                                            6,10
-                                                                        </span>
+                                                        {/* Card: Observações da Entrega */}
+                                                        {row.original.raw
+                                                            ?.delivery
+                                                            ?.observations && (
+                                                            <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+                                                                <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                                                                    <CardTitle className="flex h-[18px] items-center font-semibold">
+                                                                        Observações
+                                                                        da
+                                                                        Entrega
+                                                                    </CardTitle>
+                                                                </CardHeader>
+                                                                <CardContent className="rounded-md bg-card p-0">
+                                                                    <div className="px-3 py-4">
+                                                                        <p className="text-sm leading-4 font-normal text-gray-700">
+                                                                            {
+                                                                                row
+                                                                                    .original
+                                                                                    .raw
+                                                                                    .delivery
+                                                                                    .observations
+                                                                            }
+                                                                        </p>
                                                                     </div>
-                                                                    <ul className="flex w-full flex-col items-center justify-between pl-0">
-                                                                        <li className="flex w-full flex-row items-start justify-between px-3 py-2">
-                                                                            <span className="text-sm leading-4 font-normal">
-                                                                                Comissão
-                                                                                pela
-                                                                                transação
-                                                                                do
-                                                                                pagamento{' '}
-                                                                            </span>
-                                                                            <span className="text-sm leading-4 font-normal whitespace-nowrap text-gray-700">
-                                                                                -R$
-                                                                                1,28
-                                                                            </span>
-                                                                        </li>
-                                                                        <li className="flex w-full flex-row items-start justify-between px-3 py-2">
-                                                                            <span className="text-sm leading-4 font-normal">
-                                                                                Comissão
-                                                                                iFood
-                                                                                de
-                                                                                Entrega
-                                                                                Própria
-                                                                                (12,0%)
-                                                                            </span>
-                                                                            <span className="text-sm leading-4 font-normal whitespace-nowrap text-gray-700">
-                                                                                -R$
-                                                                                4,82
-                                                                            </span>
-                                                                        </li>
-                                                                        <li className="flex w-full flex-row items-start justify-between px-3 py-2">
-                                                                            <span className="text-xs leading-4 font-normal text-gray-700">
-                                                                                O
-                                                                                valor
-                                                                                de
-                                                                                R$
-                                                                                40,13
-                                                                                é
-                                                                                o
-                                                                                valor
-                                                                                base
-                                                                                usado
-                                                                                para
-                                                                                calcular
-                                                                                as
-                                                                                taxas
-                                                                                e
-                                                                                comissões
-                                                                                iFood
-                                                                                desse
-                                                                                pedido.
-                                                                            </span>
-                                                                        </li>
-                                                                    </ul>
-                                                                </li>
+                                                                </CardContent>
+                                                            </Card>
+                                                        )}
+                                                    </div>
 
-                                                                {/* Valor líquido a receber */}
-                                                                <li className="flex flex-col gap-2 px-0 py-4">
-                                                                    <ul className="flex w-full flex-col items-center justify-between pl-0">
-                                                                        <li className="flex w-full flex-row items-start justify-between px-3 py-2">
-                                                                            <span className="text-sm leading-4 font-semibold">
-                                                                                Valor
-                                                                                líquido
-                                                                                a
-                                                                                receber
-                                                                            </span>
-                                                                            <span className="positive text-sm leading-4 font-semibold text-green-700">
-                                                                                R$
-                                                                                34,03
-                                                                            </span>
-                                                                        </li>
-                                                                    </ul>
-                                                                </li>
-                                                            </ul>
-                                                        </CardContent>
-                                                    </Card>
+                                                    {/* Coluna 2: Detalhamento Financeiro + Pagamento */}
+                                                    <div className="flex flex-col gap-4">
+                                                        {/* Card: Detalhamento Financeiro */}
+                                                        <OrderFinancialCard
+                                                            sale={
+                                                                row.original
+                                                                    .sale
+                                                            }
+                                                        />
+
+                                                        {/* Card: Pagamento (abaixo do detalhamento) */}
+                                                        {row.original.raw
+                                                            ?.payments
+                                                            ?.methods &&
+                                                            row.original.raw
+                                                                .payments
+                                                                .methods
+                                                                .length > 0 && (
+                                                                <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+                                                                    <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                                                                        <CardTitle className="flex h-[18px] items-center font-semibold">
+                                                                            Pagamento
+                                                                        </CardTitle>
+                                                                    </CardHeader>
+                                                                    <CardContent className="rounded-md bg-card p-0">
+                                                                        <ul className="m-0 flex w-full flex-col ps-0">
+                                                                            {row.original.raw.payments.methods.map(
+                                                                                (
+                                                                                    payment: any,
+                                                                                    index: number,
+                                                                                ) => (
+                                                                                    <li
+                                                                                        key={
+                                                                                            index
+                                                                                        }
+                                                                                        className="flex flex-col gap-2 border-b-1 px-3 py-4 last:border-b-0"
+                                                                                    >
+                                                                                        <div className="flex w-full flex-row items-center justify-between gap-2">
+                                                                                            <div className="flex items-center gap-2">
+                                                                                                <span className="text-sm leading-4 font-medium">
+                                                                                                    {payment.method ===
+                                                                                                    'CASH'
+                                                                                                        ? 'Dinheiro'
+                                                                                                        : payment.method ===
+                                                                                                            'CREDIT'
+                                                                                                          ? 'Crédito'
+                                                                                                          : payment.method ===
+                                                                                                              'DEBIT'
+                                                                                                            ? 'Débito'
+                                                                                                            : payment.method ===
+                                                                                                                'MEAL_VOUCHER'
+                                                                                                              ? 'Vale Refeição'
+                                                                                                              : payment.method ===
+                                                                                                                  'FOOD_VOUCHER'
+                                                                                                                ? 'Vale Alimentação'
+                                                                                                                : payment.method ===
+                                                                                                                    'DIGITAL_WALLET'
+                                                                                                                  ? 'Carteira Digital'
+                                                                                                                  : payment.method ===
+                                                                                                                      'PIX'
+                                                                                                                    ? 'PIX'
+                                                                                                                    : payment.method}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            <span className="text-sm leading-4 font-semibold whitespace-nowrap">
+                                                                                                {new Intl.NumberFormat(
+                                                                                                    'pt-BR',
+                                                                                                    {
+                                                                                                        style: 'currency',
+                                                                                                        currency:
+                                                                                                            'BRL',
+                                                                                                    },
+                                                                                                ).format(
+                                                                                                    payment.value ||
+                                                                                                        0,
+                                                                                                )}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        {(payment
+                                                                                            .card
+                                                                                            ?.brand ||
+                                                                                            payment
+                                                                                                .wallet
+                                                                                                ?.name ||
+                                                                                            payment
+                                                                                                .cash
+                                                                                                ?.changeFor) && (
+                                                                                            <ul className="flex w-full flex-col gap-2 pl-0">
+                                                                                                {payment
+                                                                                                    .card
+                                                                                                    ?.brand && (
+                                                                                                    <li className="flex w-full flex-row items-start justify-between px-0 py-0">
+                                                                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                                                            {
+                                                                                                                payment
+                                                                                                                    .card
+                                                                                                                    .brand
+                                                                                                            }
+                                                                                                        </span>
+                                                                                                    </li>
+                                                                                                )}
+                                                                                                {payment
+                                                                                                    .wallet
+                                                                                                    ?.name && (
+                                                                                                    <li className="flex w-full flex-row items-start justify-between px-0 py-0">
+                                                                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                                                            {payment.wallet.name
+                                                                                                                .replace(
+                                                                                                                    '_',
+                                                                                                                    ' ',
+                                                                                                                )
+                                                                                                                .toLowerCase()
+                                                                                                                .replace(
+                                                                                                                    /\b\w/g,
+                                                                                                                    (
+                                                                                                                        l,
+                                                                                                                    ) =>
+                                                                                                                        l.toUpperCase(),
+                                                                                                                )}
+                                                                                                        </span>
+                                                                                                    </li>
+                                                                                                )}
+                                                                                                {payment
+                                                                                                    .cash
+                                                                                                    ?.changeFor && (
+                                                                                                    <li className="flex w-full flex-row items-start justify-between px-0 py-0">
+                                                                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                                                            Troco
+                                                                                                            para:{' '}
+                                                                                                            {new Intl.NumberFormat(
+                                                                                                                'pt-BR',
+                                                                                                                {
+                                                                                                                    style: 'currency',
+                                                                                                                    currency:
+                                                                                                                        'BRL',
+                                                                                                                },
+                                                                                                            ).format(
+                                                                                                                payment
+                                                                                                                    .cash
+                                                                                                                    .changeFor,
+                                                                                                            )}
+                                                                                                        </span>
+                                                                                                    </li>
+                                                                                                )}
+                                                                                            </ul>
+                                                                                        )}
+                                                                                    </li>
+                                                                                ),
+                                                                            )}
+                                                                        </ul>
+                                                                    </CardContent>
+                                                                </Card>
+                                                            )}
+                                                    </div>
                                                 </div>
 
-                                                {/* Detalhes expandidos: Pagamento, Cupons, CPF, Agendamento */}
-                                                <div className="p-2 pt-0">
+                                                {/* Outros detalhes: Cupons, CPF, Agendamento, etc. */}
+                                                <div className="p-4 pt-0">
                                                     <OrderExpandedDetails
                                                         order={row.original}
                                                     />
@@ -1081,6 +1158,18 @@ export function DataTable({
                     </div>
                 </div>
             </div>
+
+            {/* Modal de Associação Rápida */}
+            {selectedOrder && (
+                <QuickAssociateDialog
+                    open={associateDialogOpen}
+                    onOpenChange={setAssociateDialogOpen}
+                    orderCode={selectedOrder.code}
+                    items={selectedOrder.items || []}
+                    internalProducts={internalProducts}
+                    provider={selectedOrder.provider}
+                />
+            )}
         </div>
     );
 }
