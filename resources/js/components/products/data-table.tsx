@@ -78,6 +78,7 @@ interface DataTableProps {
     pagination: ProductsPagination;
     filters: ProductsFilters;
     marginSettings: MarginSettings;
+    onAssociate: (product: { id: number; name: string }) => void;
 }
 
 export function DataTable({
@@ -85,6 +86,7 @@ export function DataTable({
     pagination,
     filters,
     marginSettings,
+    onAssociate,
 }: DataTableProps) {
     const [sorting, setSorting] = React.useState<SortingState>([
         { id: 'name', desc: false },
@@ -134,9 +136,10 @@ export function DataTable({
             createColumns({
                 onEdit: handleEdit,
                 onDelete: handleDelete,
+                onAssociate,
                 marginSettings,
             }),
-        [marginSettings],
+        [marginSettings, onAssociate],
     );
 
     const table = useReactTable({

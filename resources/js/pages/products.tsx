@@ -1,7 +1,9 @@
 import { DataTable } from '@/components/products/data-table';
+import { ProductAssociateDialog } from '@/components/products/product-associate-dialog';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
+import React from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -54,12 +56,29 @@ interface ProductsProps {
         active: string;
         per_page: number;
     };
+    externalItems?: Array<{
+        sku: string;
+        name: string;
+        unit_price: number;
+        mapped: boolean;
+    }>;
     [key: string]: unknown;
 }
 
 export default function Products() {
-    const { products, filters, marginSettings } =
+    const { products, filters, marginSettings, externalItems } =
         usePage<ProductsProps>().props;
+
+    const [associateDialogOpen, setAssociateDialogOpen] = React.useState(false);
+    const [selectedProduct, setSelectedProduct] = React.useState<{
+        id: number;
+        name: string;
+    } | null>(null);
+
+    const handleAssociate = (product: { id: number; name: string }) => {
+        setSelectedProduct(product);
+        setAssociateDialogOpen(true);
+    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -82,10 +101,18 @@ export default function Products() {
                             }}
                             filters={filters}
                             marginSettings={marginSettings}
+                            onAssociate={handleAssociate}
                         />
                     </div>
                 </div>
             </div>
+
+            <ProductAssociateDialog
+                open={associateDialogOpen}
+                onOpenChange={setAssociateDialogOpen}
+                product={selectedProduct}
+                externalItems={externalItems || []}
+            />
         </AppLayout>
     );
 }

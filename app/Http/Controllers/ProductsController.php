@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\InternalProduct;
 use App\Models\Ingredient;
 use App\Models\ProductCost;
+use App\Models\OrderItem;
+use App\Models\ProductMapping;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -39,12 +41,34 @@ class ProductsController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'unit', 'unit_price']);
 
+        // Buscar itens externos (dos pedidos) para associação
+        $tenantId = tenant_id();
+        $externalItems = OrderItem::where('tenant_id', $tenantId)
+            ->selectRaw('DISTINCT sku, name, MAX(unit_price) as unit_price')
+            ->groupBy('sku', 'name')
+            ->orderBy('name')
+            ->get()
+            ->map(function ($item) use ($tenantId) {
+                // Verificar se já está mapeado
+                $mapping = ProductMapping::where('tenant_id', $tenantId)
+                    ->where('external_item_id', $item->sku)
+                    ->exists();
+
+                return [
+                    'sku' => $item->sku,
+                    'name' => $item->name,
+                    'unit_price' => (float) $item->unit_price,
+                    'mapped' => $mapping,
+                ];
+            });
+
         // Buscar configurações de margem do tenant
         $tenant = $request->user()->tenant;
 
         return Inertia::render('products', [
             'products' => $products,
             'ingredients' => $ingredients,
+            'externalItems' => $externalItems,
             'marginSettings' => [
                 'margin_excellent' => (float) ($tenant->margin_excellent ?? 100.00),
                 'margin_good_min' => (float) ($tenant->margin_good_min ?? 30.00),

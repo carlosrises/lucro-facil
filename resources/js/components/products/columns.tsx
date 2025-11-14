@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { router } from '@inertiajs/react';
 import { ColumnDef } from '@tanstack/react-table';
-import { FileText, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { FileText, Link2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
 export type Product = {
     id: number;
@@ -42,6 +42,7 @@ const unitLabels: Record<string, string> = {
 interface ColumnsProps {
     onEdit: (product: Product) => void;
     onDelete: (product: Product) => void;
+    onAssociate: (product: Product) => void;
     marginSettings: {
         margin_excellent: number;
         margin_good_min: number;
@@ -53,6 +54,7 @@ interface ColumnsProps {
 export const createColumns = ({
     onEdit,
     onDelete,
+    onAssociate,
     marginSettings,
 }: ColumnsProps): ColumnDef<Product>[] => [
     {
@@ -176,37 +178,47 @@ export const createColumns = ({
             const product = row.original;
 
             return (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Abrir menu</span>
-                            <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            onClick={() => {
-                                router.get(`/products/${product.id}`);
-                            }}
-                        >
-                            <FileText className="mr-2 h-4 w-4" />
-                            Ficha Técnica
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onEdit(product)}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={() => onDelete(product)}
-                            className="text-red-600"
-                        >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Excluir
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onAssociate(product)}
+                    >
+                        <Link2 className="mr-2 h-4 w-4" />
+                        Associar
+                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Abrir menu</span>
+                                <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    router.get(`/products/${product.id}`);
+                                }}
+                            >
+                                <FileText className="mr-2 h-4 w-4" />
+                                Ficha Técnica
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onEdit(product)}>
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => onDelete(product)}
+                                className="text-red-600"
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Excluir
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             );
         },
     },
