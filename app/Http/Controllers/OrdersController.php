@@ -21,6 +21,7 @@ class OrdersController extends Controller
                 'store_id', 'placed_at', 'gross_total', 'discount_total',
                 'delivery_fee', 'tip', 'net_total', 'raw', 'tenant_id',
             ])
+            ->with(['items.internalProduct', 'sale'])
             ->where('tenant_id', tenant_id())
             ->when($request->input('status'), function ($q, $status) {
                 // Aceita tanto status completo quanto abreviado usando o Enum
@@ -43,6 +44,12 @@ class OrdersController extends Controller
                 request('end_date').' 23:59:59',
             ])
             )
+            ->when($request->input('unmapped_only'), function ($q) {
+                // Filtrar apenas pedidos com itens não mapeados
+                $q->whereHas('items', function ($query) {
+                    $query->whereDoesntHave('internalProduct');
+                });
+            })
             ->orderByDesc('placed_at')
             ->orderByDesc('id');
 
@@ -56,6 +63,25 @@ class OrdersController extends Controller
             ->orderBy('display_name')
             ->get();
 
+        // Contar produtos únicos não associados
+        $unmappedProductsCount = \App\Models\OrderItem::query()
+            ->where('tenant_id', tenant_id())
+            ->whereNotNull('sku')
+            ->whereNotIn('sku', function ($query) {
+                $query->select('external_item_id')
+                    ->from('product_mappings')
+                    ->where('tenant_id', tenant_id());
+            })
+            ->distinct('sku')
+            ->count('sku');
+
+        // Buscar produtos internos para associação
+        $internalProducts = \App\Models\InternalProduct::query()
+            ->where('tenant_id', tenant_id())
+            ->select('id', 'name', 'sku', 'unit_cost')
+            ->orderBy('name')
+            ->get();
+
         return Inertia::render('orders', [
             'orders' => $orders,
             'filters' => [
@@ -64,9 +90,12 @@ class OrdersController extends Controller
                 'provider' => $request->input('provider'),
                 'start_date' => $request->input('start_date'),
                 'end_date' => $request->input('end_date'),
+                'unmapped_only' => $request->input('unmapped_only'),
                 'per_page' => $perPage,
             ],
             'stores' => $stores,
+            'unmappedProductsCount' => $unmappedProductsCount,
+            'internalProducts' => $internalProducts,
         ]);
     }
 
