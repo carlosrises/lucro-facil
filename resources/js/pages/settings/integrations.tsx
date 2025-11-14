@@ -38,6 +38,12 @@ const marketplaces = [
         available: false,
     },
     {
+        name: 'Keeta',
+        logo: '/images/integrations/keeta.png',
+        description: 'Integração com pedidos Keeta',
+        available: false,
+    },
+    {
         name: 'Takeat',
         logo: '/images/integrations/takeat.svg',
         description: 'Integração com pedidos Takeat',
