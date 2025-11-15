@@ -123,6 +123,7 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
             {
                 title: 'Mapeamento',
                 href: '/product-mappings',
+                locked: true,
             },
             {
                 title: 'Categorias',
