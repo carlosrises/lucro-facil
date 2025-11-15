@@ -8,7 +8,6 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { router } from '@inertiajs/react';
 import { Check, Link2, Search, Store, Trash2, X } from 'lucide-react';
 import React from 'react';
@@ -120,13 +119,24 @@ export function ProductAssociateDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex h-[85vh] max-w-6xl flex-col gap-4 overflow-hidden sm:max-w-[90vw] lg:max-w-[1200px]">
+            <DialogContent className="flex h-[85vh] max-w-6xl flex-col gap-4 sm:max-w-[90vw] lg:max-w-[1200px]">
                 <DialogHeader>
                     <DialogTitle>Associar Produtos de Marketplaces</DialogTitle>
                     <DialogDescription>
                         Produto interno: <strong>{product?.name}</strong>
                     </DialogDescription>
                 </DialogHeader>
+
+                {/* Input de busca - fora do overflow */}
+                <div className="relative w-full lg:w-[calc(50%-0.5rem)]">
+                    <Search className="absolute top-2.5 left-2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Buscar por nome, SKU ou código..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="pl-8"
+                    />
+                </div>
 
                 <div className="grid flex-1 grid-cols-1 gap-4 overflow-hidden md:grid-cols-2">
                     {/* COLUNA ESQUERDA - Produtos Disponíveis */}
@@ -140,20 +150,9 @@ export function ProductAssociateDialog({
                             </Badge>
                         </div>
 
-                        {/* Busca */}
-                        <div className="relative">
-                            <Search className="absolute top-2.5 left-2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Buscar por nome, SKU ou código..."
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="pl-8"
-                            />
-                        </div>
-
                         {/* Lista de produtos disponíveis */}
-                        <ScrollArea className="flex-1">
-                            <div className="space-y-2 pr-4">
+                        <div className="flex-1 overflow-y-auto">
+                            <div className="space-y-2 pr-2">
                                 {filteredAvailableItems.length > 0 ? (
                                     filteredAvailableItems.map((item) => {
                                         const isAlreadyMapped =
@@ -253,7 +252,7 @@ export function ProductAssociateDialog({
                                     </div>
                                 )}
                             </div>
-                        </ScrollArea>
+                        </div>
                     </div>
 
                     {/* COLUNA DIREITA - Produtos Associados */}
@@ -267,8 +266,8 @@ export function ProductAssociateDialog({
                             </Badge>
                         </div>
 
-                        <ScrollArea className="flex-1">
-                            <div className="space-y-2 pr-4">
+                        <div className="flex-1 overflow-y-auto">
+                            <div className="space-y-2 pr-2">
                                 {mappedItems.length > 0 ? (
                                     mappedItems.map((mapping) => (
                                         <div
@@ -348,7 +347,7 @@ export function ProductAssociateDialog({
                                     </div>
                                 )}
                             </div>
-                        </ScrollArea>
+                        </div>
                     </div>
                 </div>
 
