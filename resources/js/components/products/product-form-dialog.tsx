@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useForm, usePage } from '@inertiajs/react';
 import { Calculator, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { type Product } from './columns';
 
 interface Ingredient {
@@ -58,8 +59,17 @@ export function ProductFormDialog({
     onOpenChange,
     product,
 }: ProductFormDialogProps) {
-    const { ingredients } = usePage<{ ingredients?: Ingredient[] }>().props;
+    const { ingredients, taxCategories } = usePage<{
+        ingredients?: Ingredient[];
+        taxCategories?: Array<{
+            id: number;
+            name: string;
+            tax_calculation_type: string;
+            total_tax_rate: number;
+        }>;
+    }>().props;
     const availableIngredients = ingredients || [];
+    const availableTaxCategories = taxCategories || [];
 
     const { data, setData, post, put, processing, errors, reset } = useForm({
         name: '',
@@ -68,6 +78,7 @@ export function ProductFormDialog({
         unit: 'unit',
         unit_cost: '0',
         sale_price: '',
+        tax_category_id: '',
         active: true,
         recipe: [] as TechnicalSheetItem[],
     });
@@ -112,6 +123,8 @@ export function ProductFormDialog({
                         unit: productData.unit,
                         unit_cost: productData.unit_cost,
                         sale_price: productData.sale_price,
+                        tax_category_id:
+                            productData.tax_category_id?.toString() || '',
                         active: productData.active,
                         recipe,
                     });
@@ -203,15 +216,23 @@ export function ProductFormDialog({
         if (product) {
             put(`/products/${product.id}`, {
                 onSuccess: () => {
+                    toast.success('Produto atualizado com sucesso!');
                     onOpenChange(false);
                     reset();
+                },
+                onError: () => {
+                    toast.error('Erro ao atualizar produto');
                 },
             });
         } else {
             post('/products', {
                 onSuccess: () => {
+                    toast.success('Produto criado com sucesso!');
                     onOpenChange(false);
                     reset();
+                },
+                onError: () => {
+                    toast.error('Erro ao criar produto');
                 },
             });
         }
@@ -443,6 +464,50 @@ export function ProductFormDialog({
                                             </p>
                                         )}
                                     </div>
+                                </div>
+
+                                {/* Categoria Fiscal */}
+                                <div className="grid gap-2">
+                                    <Label htmlFor="tax_category_id">
+                                        Categoria Fiscal
+                                    </Label>
+                                    <Select
+                                        value={data.tax_category_id || 'none'}
+                                        onValueChange={(value) =>
+                                            setData(
+                                                'tax_category_id',
+                                                value === 'none' ? '' : value,
+                                            )
+                                        }
+                                    >
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Selecione uma categoria fiscal" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">
+                                                Sem categoria
+                                            </SelectItem>
+                                            {availableTaxCategories.map(
+                                                (category) => (
+                                                    <SelectItem
+                                                        key={category.id}
+                                                        value={category.id.toString()}
+                                                    >
+                                                        {category.name} (
+                                                        {category.total_tax_rate.toFixed(
+                                                            2,
+                                                        )}
+                                                        %)
+                                                    </SelectItem>
+                                                ),
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                    {errors.tax_category_id && (
+                                        <p className="text-sm text-red-500">
+                                            {errors.tax_category_id}
+                                        </p>
+                                    )}
                                 </div>
 
                                 {/* Status */}

@@ -29,6 +29,12 @@ export type OrderItem = {
         id: number;
         name: string;
         unit_cost: string;
+        tax_category_id?: number | null;
+        tax_category?: {
+            id: number;
+            name: string;
+            total_tax_rate: number;
+        };
     };
 };
 
@@ -46,7 +52,12 @@ export type Order = {
     extra_cost?: number | 0;
     net_total?: number | 0;
     items?: OrderItem[];
-    raw: any;
+    raw: {
+        total?: {
+            orderAmount?: number;
+        };
+        orderType?: string;
+    };
     sale?: {
         id: number;
         sale_uuid: string;
@@ -63,7 +74,7 @@ export type Order = {
         payment_method: string;
         concluded_at: string | null;
         expected_payment_date: string | null;
-        raw?: any;
+        raw?: unknown;
     };
 };
 
@@ -74,13 +85,10 @@ export const columns: ColumnDef<Order>[] = [
         enableSorting: false,
         enableHiding: false,
         cell: ({ row }) => {
-            const {
-                status,
-                total = 0,
-                cost = 0,
-                tax = 0,
-                extra_cost = 0,
-            } = row.original;
+            const items = row.original.items || [];
+            const raw = row.original.raw;
+            const orderTotal = raw?.total?.orderAmount ?? 0;
+            const status = row.original.status;
 
             let color = 'bg-yellow-500';
             let label = 'Não faturado';
@@ -88,8 +96,39 @@ export const columns: ColumnDef<Order>[] = [
             if (status === 'CANCELLED') {
                 color = 'bg-red-500';
                 label = 'Cancelado';
-            } else if (total > 0) {
-                const profit = total - (cost + tax + extra_cost);
+            } else if (orderTotal > 0) {
+                // Calcular custo total
+                const totalCost = items.reduce((sum, item) => {
+                    if (item.internal_product?.unit_cost) {
+                        const quantity = item.qty || item.quantity || 0;
+                        const unitCost = parseFloat(
+                            item.internal_product.unit_cost,
+                        );
+                        return sum + quantity * unitCost;
+                    }
+                    return sum;
+                }, 0);
+
+                // Calcular impostos totais
+                const totalTax = items.reduce((sum, item) => {
+                    if (
+                        item.internal_product?.tax_category?.total_tax_rate !==
+                            undefined &&
+                        item.internal_product?.tax_category?.total_tax_rate !==
+                            null
+                    ) {
+                        const quantity = item.qty || item.quantity || 0;
+                        const unitPrice = item.unit_price || item.price || 0;
+                        const itemTotal = quantity * unitPrice;
+                        const taxRate =
+                            item.internal_product.tax_category.total_tax_rate /
+                            100;
+                        return sum + itemTotal * taxRate;
+                    }
+                    return sum;
+                }, 0);
+
+                const profit = orderTotal - totalCost - totalTax;
                 if (profit > 0) {
                     color = 'bg-green-500';
                     label = 'Faturado';
@@ -242,23 +281,43 @@ export const columns: ColumnDef<Order>[] = [
     {
         accessorKey: 'tax',
         header: 'Imposto',
-        cell: ({ row }) =>
-            row.original.tax !== null && row.original.tax !== undefined ? (
+        cell: ({ row }) => {
+            const items = row.original.items || [];
+
+            // Calcular impostos baseado nas categorias fiscais dos produtos
+            const totalTax = items.reduce((sum, item) => {
+                if (
+                    item.internal_product?.tax_category?.total_tax_rate !==
+                        undefined &&
+                    item.internal_product?.tax_category?.total_tax_rate !== null
+                ) {
+                    const quantity = item.qty || item.quantity || 0;
+                    const unitPrice = item.unit_price || item.price || 0;
+                    const itemTotal = quantity * unitPrice;
+                    const taxRate =
+                        item.internal_product.tax_category.total_tax_rate / 100;
+                    return sum + itemTotal * taxRate;
+                }
+                return sum;
+            }, 0);
+
+            const isCancelled = row.original.status === 'CANCELLED';
+
+            return totalTax > 0 ? (
                 <span
                     className={`text-sm ${
-                        row.original.status === 'CANCELLED'
-                            ? 'text-muted-foreground line-through'
-                            : ''
+                        isCancelled ? 'text-muted-foreground line-through' : ''
                     }`}
                 >
                     {new Intl.NumberFormat('pt-BR', {
                         style: 'currency',
                         currency: 'BRL',
-                    }).format(row.original.tax)}
+                    }).format(totalTax)}
                 </span>
             ) : (
                 <span className="text-muted-foreground">--</span>
-            ),
+            );
+        },
     },
     {
         accessorKey: 'extra_cost',
@@ -285,12 +344,47 @@ export const columns: ColumnDef<Order>[] = [
     {
         accessorKey: 'net_total',
         header: 'Total líquido',
-        cell: ({ row }) =>
-            row.original.net_total !== null &&
-            row.original.net_total !== undefined ? (
+        cell: ({ row }) => {
+            const items = row.original.items || [];
+            const raw = row.original.raw;
+            const orderTotal = raw?.total?.orderAmount ?? 0;
+
+            // Calcular custo total
+            const totalCost = items.reduce((sum, item) => {
+                if (item.internal_product?.unit_cost) {
+                    const quantity = item.qty || item.quantity || 0;
+                    const unitCost = parseFloat(
+                        item.internal_product.unit_cost,
+                    );
+                    return sum + quantity * unitCost;
+                }
+                return sum;
+            }, 0);
+
+            // Calcular impostos totais
+            const totalTax = items.reduce((sum, item) => {
+                if (
+                    item.internal_product?.tax_category?.total_tax_rate !==
+                        undefined &&
+                    item.internal_product?.tax_category?.total_tax_rate !== null
+                ) {
+                    const quantity = item.qty || item.quantity || 0;
+                    const unitPrice = item.unit_price || item.price || 0;
+                    const itemTotal = quantity * unitPrice;
+                    const taxRate =
+                        item.internal_product.tax_category.total_tax_rate / 100;
+                    return sum + itemTotal * taxRate;
+                }
+                return sum;
+            }, 0);
+
+            const netTotal = orderTotal - totalCost - totalTax;
+            const isCancelled = row.original.status === 'CANCELLED';
+
+            return orderTotal > 0 ? (
                 <span
                     className={`${
-                        row.original.status === 'CANCELLED'
+                        isCancelled
                             ? 'font-semibold text-muted-foreground line-through'
                             : 'font-semibold'
                     } text-end`}
@@ -298,23 +392,21 @@ export const columns: ColumnDef<Order>[] = [
                     {new Intl.NumberFormat('pt-BR', {
                         style: 'currency',
                         currency: 'BRL',
-                    }).format(row.original.net_total)}
+                    }).format(netTotal)}
                 </span>
             ) : (
                 <span className="text-muted-foreground">--</span>
-            ),
+            );
+        },
     },
     {
         id: 'margin',
         header: 'Margem',
         cell: ({ row }) => {
-            const {
-                total,
-                cost = 0,
-                tax = 0,
-                extra_cost = 0,
-                status,
-            } = row.original;
+            const items = row.original.items || [];
+            const raw = row.original.raw;
+            const orderTotal = raw?.total?.orderAmount ?? 0;
+            const status = row.original.status;
 
             // Cancelado -> badge secundário
             if (status === 'CANCELLED') {
@@ -328,11 +420,40 @@ export const columns: ColumnDef<Order>[] = [
                 );
             }
 
-            if (!total || total <= 0)
+            if (!orderTotal || orderTotal <= 0)
                 return <span className="text-muted-foreground">--</span>;
 
-            const profit = total - (cost + tax + extra_cost);
-            const margin = (profit / total) * 100;
+            // Calcular custo total
+            const totalCost = items.reduce((sum, item) => {
+                if (item.internal_product?.unit_cost) {
+                    const quantity = item.qty || item.quantity || 0;
+                    const unitCost = parseFloat(
+                        item.internal_product.unit_cost,
+                    );
+                    return sum + quantity * unitCost;
+                }
+                return sum;
+            }, 0);
+
+            // Calcular impostos totais
+            const totalTax = items.reduce((sum, item) => {
+                if (
+                    item.internal_product?.tax_category?.total_tax_rate !==
+                        undefined &&
+                    item.internal_product?.tax_category?.total_tax_rate !== null
+                ) {
+                    const quantity = item.qty || item.quantity || 0;
+                    const unitPrice = item.unit_price || item.price || 0;
+                    const itemTotal = quantity * unitPrice;
+                    const taxRate =
+                        item.internal_product.tax_category.total_tax_rate / 100;
+                    return sum + itemTotal * taxRate;
+                }
+                return sum;
+            }, 0);
+
+            const netTotal = orderTotal - totalCost - totalTax;
+            const margin = (netTotal / orderTotal) * 100;
 
             if (margin === 0) {
                 return (

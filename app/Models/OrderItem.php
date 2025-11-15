@@ -29,6 +29,6 @@ class OrderItem extends Model
             'id', // Foreign key on internal_products table
             'sku', // Local key on order_items table
             'internal_product_id' // Local key on product_mappings table
-        )->select('internal_products.id', 'internal_products.name', 'internal_products.unit_cost');
+        );
     }
 }

@@ -21,7 +21,7 @@ class OrdersController extends Controller
                 'store_id', 'placed_at', 'gross_total', 'discount_total',
                 'delivery_fee', 'tip', 'net_total', 'raw', 'tenant_id',
             ])
-            ->with(['items.internalProduct', 'sale'])
+            ->with(['items.internalProduct.taxCategory', 'sale'])
             ->where('tenant_id', tenant_id())
             ->when($request->input('status'), function ($q, $status) {
                 // Aceita tanto status completo quanto abreviado usando o Enum

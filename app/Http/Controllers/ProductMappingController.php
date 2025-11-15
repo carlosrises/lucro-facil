@@ -92,20 +92,25 @@ class ProductMappingController extends Controller
             ->where('tenant_id', $tenantId)
             ->firstOrFail();
 
-        // Criar ou atualizar mapeamento
-        ProductMapping::updateOrCreate(
-            [
-                'tenant_id' => $tenantId,
-                'external_item_id' => $validated['external_item_id'],
-                'provider' => $validated['provider'] ?? 'ifood',
-            ],
-            [
-                'internal_product_id' => $validated['internal_product_id'],
-                'external_item_name' => $validated['external_item_name'],
-            ]
-        );
+        // Verificar se já existe mapeamento para este external_item_id
+        $existingMapping = ProductMapping::where('tenant_id', $tenantId)
+            ->where('external_item_id', $validated['external_item_id'])
+            ->first();
 
-        return back()->with('success', 'Mapeamento criado/atualizado com sucesso!');
+        if ($existingMapping) {
+            return back()->withErrors(['error' => 'Este produto externo já está associado a outro produto interno. Remova a associação existente primeiro.']);
+        }
+
+        // Criar novo mapeamento
+        ProductMapping::create([
+            'tenant_id' => $tenantId,
+            'external_item_id' => $validated['external_item_id'],
+            'external_item_name' => $validated['external_item_name'],
+            'internal_product_id' => $validated['internal_product_id'],
+            'provider' => $validated['provider'] ?? 'ifood',
+        ]);
+
+        return back()->with('success', 'Mapeamento criado com sucesso!');
     }
 
     public function destroy(Request $request, ProductMapping $productMapping)

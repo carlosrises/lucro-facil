@@ -36,6 +36,11 @@ export type Product = {
     category: string | null;
     active: boolean;
     costs_count: number;
+    tax_category?: {
+        id: number;
+        name: string;
+        total_tax_rate: number;
+    } | null;
     mappings?: Array<{
         id: number;
         provider: string;
@@ -158,12 +163,50 @@ export const createColumns = ({
         },
     },
     {
+        id: 'tax',
+        header: 'Imposto',
+        cell: ({ row }) => {
+            const price = parseFloat(row.original.sale_price);
+            const taxCategory = row.original.tax_category;
+
+            if (!taxCategory || !taxCategory.total_tax_rate) {
+                return <span className="text-muted-foreground">--</span>;
+            }
+
+            const taxAmount = price * (taxCategory.total_tax_rate / 100);
+
+            return (
+                <div className="flex flex-col">
+                    <span className="font-medium text-orange-600">
+                        {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                        }).format(taxAmount)}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                        {taxCategory.total_tax_rate.toFixed(2)}%
+                    </span>
+                </div>
+            );
+        },
+    },
+    {
         accessorKey: 'margin',
         header: 'Margem',
         cell: ({ row }) => {
             const price = parseFloat(row.original.sale_price);
             const cost = parseFloat(row.original.unit_cost);
-            const margin = cost > 0 ? ((price - cost) / cost) * 100 : 0;
+            const taxCategory = row.original.tax_category;
+
+            // Calcular imposto se houver categoria fiscal
+            const taxAmount = taxCategory?.total_tax_rate
+                ? price * (taxCategory.total_tax_rate / 100)
+                : 0;
+
+            // Margem considerando custo + imposto
+            const totalCost = cost + taxAmount;
+            const margin =
+                totalCost > 0 ? ((price - totalCost) / price) * 100 : 0;
 
             // Determina a cor do badge baseado nas configurações
             let variant: 'default' | 'warning' | 'destructive' = 'default';

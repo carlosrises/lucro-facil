@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -13,6 +14,7 @@ class InternalProduct extends Model
 
     protected $fillable = [
         'tenant_id',
+        'tax_category_id',
         'sku',
         'name',
         'category',
@@ -42,6 +44,11 @@ class InternalProduct extends Model
     public function mappings(): HasMany
     {
         return $this->hasMany(ProductMapping::class);
+    }
+
+    public function taxCategory(): BelongsTo
+    {
+        return $this->belongsTo(TaxCategory::class);
     }
 
     public function ingredients(): BelongsToMany

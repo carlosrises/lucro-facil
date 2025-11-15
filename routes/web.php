@@ -9,6 +9,7 @@ use App\Http\Controllers\IngredientsController;
 use App\Http\Controllers\ProductsController;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\ProductMappingController;
+use App\Http\Controllers\TaxCategoriesController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -95,6 +96,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('product-mappings', [ProductMappingController::class, 'store'])->name('product-mappings.store');
     Route::delete('product-mappings/{productMapping}', [ProductMappingController::class, 'destroy'])->name('product-mappings.destroy');
     Route::delete('product-mappings/sku/{sku}', [ProductMappingController::class, 'destroyBySku'])->name('product-mappings.destroyBySku');
+
+    // Tax Categories
+    Route::get('tax-categories', [TaxCategoriesController::class, 'index'])->name('tax-categories.index');
+    Route::post('tax-categories', [TaxCategoriesController::class, 'store'])->name('tax-categories.store');
+    Route::put('tax-categories/{taxCategory}', [TaxCategoriesController::class, 'update'])->name('tax-categories.update');
+    Route::delete('tax-categories/{taxCategory}', [TaxCategoriesController::class, 'destroy'])->name('tax-categories.destroy');
 });
 
 require __DIR__.'/settings.php';

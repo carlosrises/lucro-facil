@@ -120,7 +120,7 @@ export function ProductAssociateDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex max-h-[90vh] min-w-[90vw] flex-col overflow-hidden lg:min-w-[1400px]">
+            <DialogContent className="flex h-[85vh] max-w-6xl flex-col gap-4 overflow-hidden sm:max-w-[90vw] lg:max-w-[1200px]">
                 <DialogHeader>
                     <DialogTitle>Associar Produtos de Marketplaces</DialogTitle>
                     <DialogDescription>
@@ -128,9 +128,9 @@ export function ProductAssociateDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="grid flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-2">
+                <div className="grid flex-1 grid-cols-1 gap-4 overflow-hidden md:grid-cols-2">
                     {/* COLUNA ESQUERDA - Produtos Disponíveis */}
-                    <div className="flex flex-col gap-4 overflow-hidden border-r pr-4">
+                    <div className="flex flex-col gap-4 overflow-hidden">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold">
                                 Produtos Disponíveis
@@ -155,61 +155,96 @@ export function ProductAssociateDialog({
                         <ScrollArea className="flex-1">
                             <div className="space-y-2 pr-4">
                                 {filteredAvailableItems.length > 0 ? (
-                                    filteredAvailableItems.map((item) => (
-                                        <div
-                                            key={item.sku}
-                                            className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-accent"
-                                        >
-                                            {/* Logo do marketplace */}
-                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded border bg-background">
-                                                {getProviderLogo(
-                                                    item.provider || 'ifood',
-                                                ) ? (
-                                                    <img
-                                                        src={
-                                                            getProviderLogo(
+                                    filteredAvailableItems.map((item) => {
+                                        const isAlreadyMapped =
+                                            item.mapped &&
+                                            !product?.mappings?.some(
+                                                (m) =>
+                                                    m.external_item_id ===
+                                                    item.sku,
+                                            );
+
+                                        return (
+                                            <div
+                                                key={item.sku}
+                                                className={`flex items-center gap-3 rounded-lg border p-3 transition-colors ${
+                                                    isAlreadyMapped
+                                                        ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30'
+                                                        : 'hover:bg-accent'
+                                                }`}
+                                            >
+                                                {/* Logo do marketplace */}
+                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded border bg-background">
+                                                    {getProviderLogo(
+                                                        item.provider ||
+                                                            'ifood',
+                                                    ) ? (
+                                                        <img
+                                                            src={
+                                                                getProviderLogo(
+                                                                    item.provider ||
+                                                                        'ifood',
+                                                                )!
+                                                            }
+                                                            alt={getProviderName(
                                                                 item.provider ||
                                                                     'ifood',
-                                                            )!
-                                                        }
-                                                        alt={getProviderName(
-                                                            item.provider ||
-                                                                'ifood',
+                                                            )}
+                                                            className="h-6 w-6 object-contain"
+                                                        />
+                                                    ) : (
+                                                        <Store className="h-5 w-5 text-muted-foreground" />
+                                                    )}
+                                                </div>
+
+                                                {/* Info do produto */}
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <p className="text-sm font-medium">
+                                                            {item.name}
+                                                        </p>
+                                                        {isAlreadyMapped && (
+                                                            <Badge
+                                                                variant="destructive"
+                                                                className="shrink-0 text-xs"
+                                                            >
+                                                                Já associado
+                                                            </Badge>
                                                         )}
-                                                        className="h-6 w-6 object-contain"
-                                                    />
-                                                ) : (
-                                                    <Store className="h-5 w-5 text-muted-foreground" />
-                                                )}
-                                            </div>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        SKU: {item.sku}
+                                                    </p>
+                                                    <p className="mt-1 font-mono text-sm">
+                                                        R${' '}
+                                                        {item.unit_price.toFixed(
+                                                            2,
+                                                        )}
+                                                    </p>
+                                                </div>
 
-                                            {/* Info do produto */}
-                                            <div className="min-w-0 flex-1">
-                                                <p className="truncate text-sm font-medium">
-                                                    {item.name}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    SKU: {item.sku}
-                                                </p>
-                                                <p className="mt-1 font-mono text-sm">
-                                                    R${' '}
-                                                    {item.unit_price.toFixed(2)}
-                                                </p>
+                                                {/* Botão associar */}
+                                                <Button
+                                                    variant={
+                                                        isAlreadyMapped
+                                                            ? 'destructive'
+                                                            : 'outline'
+                                                    }
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        handleAssociate(item)
+                                                    }
+                                                    disabled={isAlreadyMapped}
+                                                    className="shrink-0"
+                                                >
+                                                    <Link2 className="mr-2 h-4 w-4" />
+                                                    {isAlreadyMapped
+                                                        ? 'Bloqueado'
+                                                        : 'Associar'}
+                                                </Button>
                                             </div>
-
-                                            {/* Botão associar */}
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() =>
-                                                    handleAssociate(item)
-                                                }
-                                            >
-                                                <Link2 className="mr-2 h-4 w-4" />
-                                                Associar
-                                            </Button>
-                                        </div>
-                                    ))
+                                        );
+                                    })
                                 ) : (
                                     <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
                                         {search
@@ -222,7 +257,7 @@ export function ProductAssociateDialog({
                     </div>
 
                     {/* COLUNA DIREITA - Produtos Associados */}
-                    <div className="flex flex-col gap-4 overflow-hidden pl-4">
+                    <div className="flex flex-col gap-4 overflow-hidden">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold">
                                 Produtos Associados
@@ -238,7 +273,7 @@ export function ProductAssociateDialog({
                                     mappedItems.map((mapping) => (
                                         <div
                                             key={mapping.id}
-                                            className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-900 dark:bg-green-950/30"
+                                            className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-900 dark:bg-green-950/30"
                                         >
                                             {/* Logo do marketplace */}
                                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded border bg-background">
@@ -264,8 +299,8 @@ export function ProductAssociateDialog({
                                             {/* Info do produto */}
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2">
-                                                    <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
-                                                    <p className="truncate text-sm font-medium">
+                                                    <Check className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
+                                                    <p className="text-sm font-medium">
                                                         {
                                                             mapping.external_item_name
                                                         }
@@ -294,6 +329,7 @@ export function ProductAssociateDialog({
                                                         mapping.id,
                                                     )
                                                 }
+                                                className="shrink-0"
                                             >
                                                 <Trash2 className="h-4 w-4 text-destructive" />
                                             </Button>

@@ -7,6 +7,7 @@ use App\Models\Ingredient;
 use App\Models\ProductCost;
 use App\Models\OrderItem;
 use App\Models\ProductMapping;
+use App\Models\TaxCategory;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -17,9 +18,12 @@ class ProductsController extends Controller
     {
         $query = InternalProduct::query()
             ->where('tenant_id', tenant_id())
-            ->with(['mappings' => function ($query) {
-                $query->select('id', 'internal_product_id', 'external_item_id', 'external_item_name', 'provider');
-            }])
+            ->with([
+                'mappings' => function ($query) {
+                    $query->select('id', 'internal_product_id', 'external_item_id', 'external_item_name', 'provider');
+                },
+                'taxCategory'
+            ])
             ->withCount('costs')
             ->when($request->input('search'), fn ($q, $search) =>
                 $q->where(function ($query) use ($search) {
@@ -43,6 +47,12 @@ class ProductsController extends Controller
             ->where('active', true)
             ->orderBy('name')
             ->get(['id', 'name', 'unit', 'unit_price']);
+
+        // Buscar categorias fiscais ativas
+        $taxCategories = TaxCategory::where('tenant_id', tenant_id())
+            ->where('active', true)
+            ->orderBy('name')
+            ->get();
 
         // Buscar itens externos (dos pedidos) para associação
         $tenantId = tenant_id();
@@ -79,6 +89,7 @@ class ProductsController extends Controller
         return Inertia::render('products', [
             'products' => $products,
             'ingredients' => $ingredients,
+            'taxCategories' => $taxCategories,
             'externalItems' => $externalItems,
             'marginSettings' => [
                 'margin_excellent' => (float) ($tenant->margin_excellent ?? 100.00),
@@ -104,6 +115,7 @@ class ProductsController extends Controller
             'unit' => ['required', 'in:unit,kg,g,l,ml,hour'],
             'unit_cost' => ['required', 'numeric', 'min:0'],
             'sale_price' => ['required', 'numeric', 'min:0'],
+            'tax_category_id' => ['nullable', 'exists:tax_categories,id'],
             'active' => ['boolean'],
             'recipe' => ['nullable', 'array'],
             'recipe.*.ingredient_id' => ['required', 'exists:ingredients,id'],
@@ -198,6 +210,7 @@ class ProductsController extends Controller
             'unit' => ['required', 'in:unit,kg,g,l,ml,hour'],
             'unit_cost' => ['required', 'numeric', 'min:0'],
             'sale_price' => ['required', 'numeric', 'min:0'],
+            'tax_category_id' => ['nullable', 'exists:tax_categories,id'],
             'active' => ['boolean'],
             'recipe' => ['nullable', 'array'],
             'recipe.*.ingredient_id' => ['required_with:recipe', 'exists:ingredients,id'],
