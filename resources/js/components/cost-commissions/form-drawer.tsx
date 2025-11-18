@@ -17,9 +17,26 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { useForm } from '@inertiajs/react';
+import { useForm, usePage } from '@inertiajs/react';
 import * as React from 'react';
 import { CostCommission } from './columns';
+
+type Provider = {
+    value: string;
+    label: string;
+};
+
+type PaymentMethod = {
+    value: string;
+    label: string;
+};
+
+type PageProps = {
+    providers: Provider[];
+    paymentMethods: {
+        [key: string]: PaymentMethod[];
+    };
+};
 
 type CostCommissionFormDialogProps = {
     open: boolean;
@@ -33,11 +50,15 @@ export function CostCommissionFormDialog({
     item,
 }: CostCommissionFormDialogProps) {
     const isEditing = !!item;
+    const { providers, paymentMethods } = usePage<PageProps>().props;
 
     const { data, setData, post, put, processing, errors, reset } = useForm({
         name: item?.name || '',
+        provider: item?.provider || '',
         type: item?.type || 'percentage',
         value: item?.value || '',
+        applies_to: item?.applies_to || 'all_orders',
+        condition_value: item?.condition_value || '',
         reduces_revenue_base: item?.reduces_revenue_base || false,
         active: item?.active ?? true,
     });
@@ -46,8 +67,11 @@ export function CostCommissionFormDialog({
         if (item) {
             setData({
                 name: item.name,
+                provider: item.provider || '',
                 type: item.type,
                 value: item.value,
+                applies_to: item.applies_to,
+                condition_value: item.condition_value || '',
                 reduces_revenue_base: item.reduces_revenue_base,
                 active: item.active,
             });
@@ -136,6 +160,42 @@ export function CostCommissionFormDialog({
                         )}
                     </div>
 
+                    {/* Marketplace/Provider */}
+                    <div className="space-y-2">
+                        <Label htmlFor="provider">Marketplace</Label>
+                        <Select
+                            value={data.provider || 'none'}
+                            onValueChange={(value) =>
+                                setData(
+                                    'provider',
+                                    value === 'none' ? '' : value,
+                                )
+                            }
+                        >
+                            <SelectTrigger id="provider">
+                                <SelectValue placeholder="Selecione (opcional)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">
+                                    Todos os marketplaces
+                                </SelectItem>
+                                {providers.map((provider) => (
+                                    <SelectItem
+                                        key={provider.value}
+                                        value={provider.value}
+                                    >
+                                        {provider.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {errors.provider && (
+                            <p className="text-sm text-destructive">
+                                {errors.provider}
+                            </p>
+                        )}
+                    </div>
+
                     {/* Tipo e Valor */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
@@ -198,6 +258,132 @@ export function CostCommissionFormDialog({
                             )}
                         </div>
                     </div>
+
+                    {/* Aplica-se a */}
+                    <div className="space-y-2">
+                        <Label htmlFor="applies_to">
+                            Aplica-se a{' '}
+                            <span className="text-destructive">*</span>
+                        </Label>
+                        <Select
+                            value={data.applies_to}
+                            onValueChange={(value) =>
+                                setData(
+                                    'applies_to',
+                                    value as typeof data.applies_to,
+                                )
+                            }
+                        >
+                            <SelectTrigger id="applies_to">
+                                <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all_orders">
+                                    Todos os pedidos
+                                </SelectItem>
+                                <SelectItem value="delivery_only">
+                                    Apenas Delivery
+                                </SelectItem>
+                                <SelectItem value="pickup_only">
+                                    Apenas Retirada
+                                </SelectItem>
+                                <SelectItem value="payment_method">
+                                    Método de pagamento
+                                </SelectItem>
+                                <SelectItem value="custom">
+                                    Personalizado
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        {errors.applies_to && (
+                            <p className="text-sm text-destructive">
+                                {errors.applies_to}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Condição (condicional) */}
+                    {data.applies_to === 'payment_method' && (
+                        <div className="space-y-2">
+                            <Label htmlFor="condition_value">
+                                Método de Pagamento{' '}
+                                <span className="text-destructive">*</span>
+                            </Label>
+                            {data.provider && paymentMethods[data.provider] ? (
+                                <Select
+                                    value={data.condition_value || 'none'}
+                                    onValueChange={(value) =>
+                                        setData(
+                                            'condition_value',
+                                            value === 'none' ? '' : value,
+                                        )
+                                    }
+                                >
+                                    <SelectTrigger id="condition_value">
+                                        <SelectValue placeholder="Selecione o método" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">
+                                            Selecione...
+                                        </SelectItem>
+                                        {paymentMethods[data.provider].map(
+                                            (method) => (
+                                                <SelectItem
+                                                    key={method.value}
+                                                    value={method.value}
+                                                >
+                                                    {method.label}
+                                                </SelectItem>
+                                            ),
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <Input
+                                    id="condition_value"
+                                    value={data.condition_value}
+                                    onChange={(e) =>
+                                        setData(
+                                            'condition_value',
+                                            e.target.value,
+                                        )
+                                    }
+                                    placeholder={
+                                        !data.provider
+                                            ? 'Selecione um marketplace primeiro'
+                                            : 'Digite o método de pagamento'
+                                    }
+                                    disabled={!data.provider}
+                                />
+                            )}
+                            {errors.condition_value && (
+                                <p className="text-sm text-destructive">
+                                    {errors.condition_value}
+                                </p>
+                            )}
+                        </div>
+                    )}
+
+                    {data.applies_to === 'custom' && (
+                        <div className="space-y-2">
+                            <Label htmlFor="condition_value">
+                                Condição Personalizada
+                            </Label>
+                            <Input
+                                id="condition_value"
+                                value={data.condition_value}
+                                onChange={(e) =>
+                                    setData('condition_value', e.target.value)
+                                }
+                                placeholder="Descreva a condição"
+                            />
+                            {errors.condition_value && (
+                                <p className="text-sm text-destructive">
+                                    {errors.condition_value}
+                                </p>
+                            )}
+                        </div>
+                    )}
 
                     {/* Switches */}
                     <div className="space-y-3 rounded-md border p-4">

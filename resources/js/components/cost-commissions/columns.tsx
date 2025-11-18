@@ -19,8 +19,16 @@ declare global {
 export type CostCommission = {
     id: number;
     name: string;
+    provider: string | null;
     type: 'percentage' | 'fixed';
     value: string;
+    applies_to:
+        | 'all_orders'
+        | 'delivery_only'
+        | 'pickup_only'
+        | 'payment_method'
+        | 'custom';
+    condition_value: string | null;
     affects_revenue_base: boolean;
     enters_tax_base: boolean;
     reduces_revenue_base: boolean;
@@ -63,6 +71,41 @@ export const columns = (
         cell: ({ row }) => (
             <div className="font-medium">{row.getValue('name')}</div>
         ),
+    },
+    {
+        accessorKey: 'provider',
+        header: 'Marketplace',
+        cell: ({ row }) => {
+            const provider = row.getValue('provider') as string | null;
+            if (!provider) {
+                return <Badge variant="outline">Todos</Badge>;
+            }
+            const labels: Record<string, string> = {
+                ifood: 'iFood',
+                rappi: 'Rappi',
+                uber_eats: 'Uber Eats',
+            };
+            return <Badge>{labels[provider] || provider}</Badge>;
+        },
+    },
+    {
+        accessorKey: 'applies_to',
+        header: 'Aplica-se a',
+        cell: ({ row }) => {
+            const appliesTo = row.getValue('applies_to') as string;
+            const labels: Record<string, string> = {
+                all_orders: 'Todos os pedidos',
+                delivery_only: 'Apenas Delivery',
+                pickup_only: 'Apenas Retirada',
+                payment_method: 'Método de pagamento',
+                custom: 'Personalizado',
+            };
+            return (
+                <span className="text-sm">
+                    {labels[appliesTo] || appliesTo}
+                </span>
+            );
+        },
     },
     {
         accessorKey: 'type',

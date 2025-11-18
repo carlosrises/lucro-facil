@@ -19,6 +19,11 @@ class CostCommissionsController extends Controller
             $query->where('type', $request->type);
         }
 
+        // Filtro por provider
+        if ($request->filled('provider')) {
+            $query->where('provider', $request->provider);
+        }
+
         // Filtro por status ativo
         if ($request->filled('active')) {
             $query->where('active', $request->boolean('active'));
@@ -42,7 +47,14 @@ class CostCommissionsController extends Controller
             'filters' => [
                 'search' => $request->search,
                 'type' => $request->type,
+                'provider' => $request->provider,
                 'active' => $request->active,
+            ],
+            'providers' => get_all_providers(),
+            'paymentMethods' => [
+                'ifood' => get_payment_methods_by_provider('ifood'),
+                'rappi' => get_payment_methods_by_provider('rappi'),
+                'uber_eats' => get_payment_methods_by_provider('uber_eats'),
             ],
         ]);
     }
@@ -51,8 +63,11 @@ class CostCommissionsController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'provider' => 'nullable|string|in:ifood,rappi,uber_eats',
             'type' => 'required|in:percentage,fixed',
             'value' => 'required|numeric|min:0',
+            'applies_to' => 'required|in:all_orders,delivery_only,pickup_only,payment_method,custom',
+            'condition_value' => 'nullable|string',
             'affects_revenue_base' => 'nullable|boolean',
             'enters_tax_base' => 'nullable|boolean',
             'reduces_revenue_base' => 'nullable|boolean',
@@ -81,8 +96,11 @@ class CostCommissionsController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'provider' => 'nullable|string|in:ifood,rappi,uber_eats',
             'type' => 'required|in:percentage,fixed',
             'value' => 'required|numeric|min:0',
+            'applies_to' => 'required|in:all_orders,delivery_only,pickup_only,payment_method,custom',
+            'condition_value' => 'nullable|string',
             'affects_revenue_base' => 'nullable|boolean',
             'enters_tax_base' => 'nullable|boolean',
             'reduces_revenue_base' => 'nullable|boolean',

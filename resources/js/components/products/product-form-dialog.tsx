@@ -257,7 +257,7 @@ export function ProductFormDialog({
                         </div>
                     </div>
                 ) : (
-                    <form onSubmit={handleSubmit}>
+                    <form onSubmit={handleSubmit} className="px-2">
                         <DialogHeader>
                             <DialogTitle>
                                 {product ? 'Editar Produto' : 'Novo Produto'}

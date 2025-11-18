@@ -37,7 +37,12 @@ type CostCommissionsPageProps = {
     filters: {
         search?: string;
         type?: string;
+        provider?: string;
         active?: string;
+    };
+    providers: Array<{ value: string; label: string }>;
+    paymentMethods: {
+        [key: string]: Array<{ value: string; label: string }>;
     };
 };
 

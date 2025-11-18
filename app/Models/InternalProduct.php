@@ -68,4 +68,21 @@ class InternalProduct extends Model
             ->selectRaw('SUM(product_costs.qty * ingredients.unit_price) as total')
             ->value('total') ?? 0;
     }
+
+    /**
+     * Retorna o custo final do produto.
+     * Se houver ficha técnica (ingredientes), calcula pelo CMV.
+     * Caso contrário, usa o unit_cost cadastrado manualmente.
+     */
+    public function getFinalCostAttribute(): float
+    {
+        // Verifica se tem ficha técnica
+        $hasCosts = $this->costs()->exists();
+
+        if ($hasCosts) {
+            return $this->calculateCMV();
+        }
+
+        return (float) $this->unit_cost;
+    }
 }

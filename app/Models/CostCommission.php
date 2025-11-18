@@ -11,9 +11,12 @@ class CostCommission extends Model
 
     protected $fillable = [
         'tenant_id',
+        'provider',
         'name',
         'type',
         'value',
+        'applies_to',
+        'condition_value',
         'affects_revenue_base',
         'enters_tax_base',
         'reduces_revenue_base',
@@ -39,6 +42,31 @@ class CostCommission extends Model
     public function scopeActive($query)
     {
         return $query->where('active', true);
+    }
+
+    /**
+     * Scope para filtrar por provider
+     */
+    public function scopeForProvider($query, ?string $provider)
+    {
+        return $query->where(function ($q) use ($provider) {
+            $q->whereNull('provider')
+              ->orWhere('provider', $provider);
+        });
+    }
+
+    /**
+     * Scope para filtrar por contexto de aplicação
+     */
+    public function scopeForContext($query, string $appliesTo, ?string $conditionValue = null)
+    {
+        $query->where('applies_to', $appliesTo);
+
+        if ($conditionValue) {
+            $query->where('condition_value', $conditionValue);
+        }
+
+        return $query;
     }
 
     /**

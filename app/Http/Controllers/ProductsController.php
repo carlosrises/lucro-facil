@@ -132,6 +132,7 @@ class ProductsController extends Controller
                 'unit' => $validated['unit'],
                 'unit_cost' => $validated['unit_cost'],
                 'sale_price' => $validated['sale_price'],
+                'tax_category_id' => $validated['tax_category_id'] ?? null,
                 'active' => $validated['active'] ?? true,
             ]);
 
@@ -146,10 +147,11 @@ class ProductsController extends Controller
                     ]);
                 }
 
-                // Recalcular o CMV
+                // Recalcular o CMV e salvar
                 $cmv = $product->calculateCMV();
                 $product->update(['unit_cost' => $cmv]);
             }
+            // Se não tiver receita, mantém o unit_cost cadastrado manualmente
 
             DB::commit();
             return redirect()->back()->with('success', 'Produto criado com sucesso!');
@@ -220,10 +222,20 @@ class ProductsController extends Controller
         DB::beginTransaction();
 
         try {
-            $product->update($validated);
+            // Atualizar dados básicos do produto
+            $product->update([
+                'name' => $validated['name'],
+                'sku' => $validated['sku'] ?? null,
+                'type' => $validated['type'],
+                'unit' => $validated['unit'],
+                'unit_cost' => $validated['unit_cost'], // Sempre salva o valor manual
+                'sale_price' => $validated['sale_price'],
+                'tax_category_id' => $validated['tax_category_id'] ?? null,
+                'active' => $validated['active'] ?? true,
+            ]);
 
             // Se houver recipe, atualizar os custos (ficha técnica)
-            if (isset($validated['recipe']) && is_array($validated['recipe'])) {
+            if (isset($validated['recipe']) && is_array($validated['recipe']) && count($validated['recipe']) > 0) {
                 // Remover custos existentes
                 ProductCost::where('internal_product_id', $product->id)->delete();
 
@@ -242,9 +254,13 @@ class ProductsController extends Controller
                     ]);
                 }
 
-                // Recalcular CMV
+                // Recalcular CMV e sobrescrever unit_cost
                 $cmv = $product->calculateCMV();
                 $product->update(['unit_cost' => $cmv]);
+            } else {
+                // Se não há receita ou receita vazia, remove todos os custos
+                // e mantém o unit_cost cadastrado manualmente
+                ProductCost::where('internal_product_id', $product->id)->delete();
             }
 
             DB::commit();

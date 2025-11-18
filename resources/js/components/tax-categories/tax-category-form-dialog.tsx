@@ -130,7 +130,7 @@ export function TaxCategoryFormDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[800px]">
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={handleSubmit} className="px-2">
                     <DialogHeader>
                         <DialogTitle>
                             {category
