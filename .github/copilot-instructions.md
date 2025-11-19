@@ -1,5 +1,9 @@
 # Instruções Copilot para lucro-facil2
 
+## 🚨 REGRA FUNDAMENTAL - GIT
+
+**NUNCA faça commit automaticamente**. Sempre aguarde solicitação explícita do usuário para commitar e fazer push das alterações. O usuário precisa testar antes de enviar para o repositório.
+
 ## Visão Geral do Projeto
 
 Este é um monorepo Laravel + React (Inertia.js) para uma plataforma de gestão financeira/pedidos. O backend é em PHP (Laravel), o frontend em TypeScript/React, com Inertia.js para navegação tipo SPA. Diretórios principais:

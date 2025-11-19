@@ -114,6 +114,18 @@ export function DataTable({
         setIsFormOpen(true);
     };
 
+    const handleDuplicate = (ingredient: Ingredient) => {
+        // Cria uma cópia do ingrediente para duplicar
+        const duplicatedIngredient = {
+            ...ingredient,
+            name: `${ingredient.name} (Cópia)`,
+        };
+        // Remove o id para criar um novo ingrediente
+        delete (duplicatedIngredient as Partial<Ingredient>).id;
+        setEditingIngredient(duplicatedIngredient as unknown as Ingredient);
+        setIsFormOpen(true);
+    };
+
     const handleDelete = (ingredient: Ingredient) => {
         if (
             confirm(
@@ -127,7 +139,12 @@ export function DataTable({
     };
 
     const columns = React.useMemo(
-        () => createColumns({ onEdit: handleEdit, onDelete: handleDelete }),
+        () =>
+            createColumns({
+                onEdit: handleEdit,
+                onDuplicate: handleDuplicate,
+                onDelete: handleDelete,
+            }),
         [],
     );
 

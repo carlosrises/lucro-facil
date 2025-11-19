@@ -17,6 +17,7 @@ import {
 import { router } from '@inertiajs/react';
 import { ColumnDef } from '@tanstack/react-table';
 import {
+    Copy,
     FileText,
     Link2,
     MoreHorizontal,
@@ -65,6 +66,7 @@ const unitLabels: Record<string, string> = {
 
 interface ColumnsProps {
     onEdit: (product: Product) => void;
+    onDuplicate: (product: Product) => void;
     onDelete: (product: Product) => void;
     onAssociate: (product: Product) => void;
     marginSettings: {
@@ -77,6 +79,7 @@ interface ColumnsProps {
 
 export const createColumns = ({
     onEdit,
+    onDuplicate,
     onDelete,
     onAssociate,
     marginSettings,
@@ -357,6 +360,12 @@ export const createColumns = ({
                             <DropdownMenuItem onClick={() => onEdit(product)}>
                                 <Pencil className="mr-2 h-4 w-4" />
                                 Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => onDuplicate(product)}
+                            >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Duplicar
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 onClick={() => onDelete(product)}

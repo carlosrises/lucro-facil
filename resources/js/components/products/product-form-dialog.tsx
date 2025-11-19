@@ -213,7 +213,13 @@ export function ProductFormDialog({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (product) {
+        // Se tem produto E não é duplicação, então é edição
+        const isDuplicate =
+            product &&
+            '_isDuplicate' in product &&
+            (product as { _isDuplicate?: boolean })._isDuplicate;
+
+        if (product && !isDuplicate) {
             put(`/products/${product.id}`, {
                 onSuccess: () => {
                     toast.success('Produto atualizado com sucesso!');
@@ -225,6 +231,7 @@ export function ProductFormDialog({
                 },
             });
         } else {
+            // Criar novo produto (tanto para novo quanto para duplicação)
             post('/products', {
                 onSuccess: () => {
                     toast.success('Produto criado com sucesso!');

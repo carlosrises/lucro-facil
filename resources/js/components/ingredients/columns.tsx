@@ -9,7 +9,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ColumnDef } from '@tanstack/react-table';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Copy, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
 export type Ingredient = {
     id: number;
@@ -43,11 +43,13 @@ const unitLabels: Record<string, string> = {
 
 interface ColumnsProps {
     onEdit: (ingredient: Ingredient) => void;
+    onDuplicate: (ingredient: Ingredient) => void;
     onDelete: (ingredient: Ingredient) => void;
 }
 
 export const createColumns = ({
     onEdit,
+    onDuplicate,
     onDelete,
 }: ColumnsProps): ColumnDef<Ingredient>[] => [
     {
@@ -172,6 +174,12 @@ export const createColumns = ({
                         <DropdownMenuItem onClick={() => onEdit(ingredient)}>
                             <Pencil className="mr-2 h-4 w-4" />
                             Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            onClick={() => onDuplicate(ingredient)}
+                        >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Duplicar
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             onClick={() => onDelete(ingredient)}

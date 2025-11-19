@@ -119,6 +119,29 @@ export function DataTable({
         setIsFormOpen(true);
     };
 
+    const handleDuplicate = async (product: Product) => {
+        try {
+            // Carregar dados completos do produto incluindo ficha técnica
+            const response = await fetch(`/products/${product.id}/data`);
+            const productData = await response.json();
+
+            // Cria uma cópia com todos os dados
+            const duplicatedProduct = {
+                ...productData,
+                id: product.id, // Mantém ID temporariamente para o modal carregar a receita
+                name: `${productData.name} (Cópia)`,
+                sku: null, // Remove SKU para evitar duplicação
+                _isDuplicate: true, // Flag para indicar que é duplicação
+            };
+
+            setEditingProduct(duplicatedProduct as unknown as Product);
+            setIsFormOpen(true);
+        } catch (error) {
+            console.error('Erro ao carregar produto para duplicar:', error);
+            alert('Erro ao carregar dados do produto. Tente novamente.');
+        }
+    };
+
     const handleDelete = (product: Product) => {
         if (
             confirm(
@@ -135,6 +158,7 @@ export function DataTable({
         () =>
             createColumns({
                 onEdit: handleEdit,
+                onDuplicate: handleDuplicate,
                 onDelete: handleDelete,
                 onAssociate,
                 marginSettings,
