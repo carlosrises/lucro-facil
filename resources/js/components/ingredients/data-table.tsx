@@ -119,6 +119,7 @@ export function DataTable({
         const duplicatedIngredient = {
             ...ingredient,
             name: `${ingredient.name} (Cópia)`,
+            _isDuplicate: true,
         };
         // Remove o id para criar um novo ingrediente
         delete (duplicatedIngredient as Partial<Ingredient>).id;

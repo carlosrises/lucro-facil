@@ -90,50 +90,78 @@ export function ProductFormDialog({
 
     useEffect(() => {
         if (product && open) {
-            // Carregar dados completos do produto incluindo a ficha técnica
-            setLoadingProduct(true);
-            fetch(`/products/${product.id}/data`)
-                .then((res) => res.json())
-                .then((productData) => {
-                    interface Cost {
-                        ingredient: {
-                            id: number;
-                            name: string;
-                            unit: string;
-                            unit_price: string;
-                        };
-                        qty: string;
-                    }
+            // Verificar se é duplicação (tem _recipe pré-carregada)
+            const isDuplicate =
+                '_isDuplicate' in product &&
+                (product as { _isDuplicate?: boolean })._isDuplicate;
+            const preloadedRecipe =
+                '_recipe' in product
+                    ? (product as { _recipe?: TechnicalSheetItem[] })._recipe
+                    : undefined;
 
-                    const recipe: TechnicalSheetItem[] =
-                        productData.costs?.map((cost: Cost) => ({
-                            ingredient_id: cost.ingredient.id,
-                            ingredient_name: cost.ingredient.name,
-                            ingredient_unit: cost.ingredient.unit,
-                            ingredient_price: parseFloat(
-                                cost.ingredient.unit_price,
-                            ),
-                            qty: parseFloat(cost.qty),
-                        })) || [];
-
-                    setData({
-                        name: productData.name,
-                        sku: productData.sku || '',
-                        type: productData.type,
-                        unit: productData.unit,
-                        unit_cost: productData.unit_cost,
-                        sale_price: productData.sale_price,
-                        tax_category_id:
-                            productData.tax_category_id?.toString() || '',
-                        active: productData.active,
-                        recipe,
-                    });
-                    setLoadingProduct(false);
-                })
-                .catch((error) => {
-                    console.error('Erro ao carregar produto:', error);
-                    setLoadingProduct(false);
+            if (isDuplicate && preloadedRecipe) {
+                // Duplicação: usar dados pré-carregados
+                setData({
+                    name: (product as { name: string }).name,
+                    sku: (product as { sku?: string }).sku || '',
+                    type: (product as { type: string }).type,
+                    unit: (product as { unit: string }).unit,
+                    unit_cost: (product as { unit_cost: string }).unit_cost,
+                    sale_price: (product as { sale_price: string }).sale_price,
+                    tax_category_id:
+                        (
+                            product as { tax_category_id?: number }
+                        ).tax_category_id?.toString() || '',
+                    active: (product as { active: boolean }).active,
+                    recipe: preloadedRecipe,
                 });
+                setLoadingProduct(false);
+            } else if (product.id) {
+                // Edição: carregar dados completos do produto incluindo a ficha técnica
+                setLoadingProduct(true);
+                fetch(`/products/${product.id}/data`)
+                    .then((res) => res.json())
+                    .then((productData) => {
+                        interface Cost {
+                            ingredient: {
+                                id: number;
+                                name: string;
+                                unit: string;
+                                unit_price: string;
+                            };
+                            qty: string;
+                        }
+
+                        const recipe: TechnicalSheetItem[] =
+                            productData.costs?.map((cost: Cost) => ({
+                                ingredient_id: cost.ingredient.id,
+                                ingredient_name: cost.ingredient.name,
+                                ingredient_unit: cost.ingredient.unit,
+                                ingredient_price: parseFloat(
+                                    cost.ingredient.unit_price,
+                                ),
+                                qty: parseFloat(cost.qty),
+                            })) || [];
+
+                        setData({
+                            name: productData.name,
+                            sku: productData.sku || '',
+                            type: productData.type,
+                            unit: productData.unit,
+                            unit_cost: productData.unit_cost,
+                            sale_price: productData.sale_price,
+                            tax_category_id:
+                                productData.tax_category_id?.toString() || '',
+                            active: productData.active,
+                            recipe,
+                        });
+                        setLoadingProduct(false);
+                    })
+                    .catch((error) => {
+                        console.error('Erro ao carregar produto:', error);
+                        setLoadingProduct(false);
+                    });
+            }
         } else if (!open) {
             reset();
         }
@@ -267,10 +295,12 @@ export function ProductFormDialog({
                     <form onSubmit={handleSubmit} className="px-2">
                         <DialogHeader>
                             <DialogTitle>
-                                {product ? 'Editar Produto' : 'Novo Produto'}
+                                {product && !('_isDuplicate' in product)
+                                    ? 'Editar Produto'
+                                    : 'Novo Produto'}
                             </DialogTitle>
                             <DialogDescription>
-                                {product
+                                {product && !('_isDuplicate' in product)
                                     ? 'Atualize as informações do produto.'
                                     : 'Preencha os dados para criar um novo produto com sua ficha técnica.'}
                             </DialogDescription>
@@ -686,7 +716,7 @@ export function ProductFormDialog({
                             <Button type="submit" disabled={processing}>
                                 {processing
                                     ? 'Salvando...'
-                                    : product
+                                    : product && !('_isDuplicate' in product)
                                       ? 'Atualizar'
                                       : 'Criar'}
                             </Button>

@@ -80,7 +80,11 @@ export function IngredientFormDialog({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (ingredient) {
+        // Verificar se é duplicação
+        const isDuplicate = ingredient && '_isDuplicate' in ingredient;
+
+        if (ingredient && !isDuplicate) {
+            // Edição de ingrediente existente
             put(`/ingredients/${ingredient.id}`, {
                 onSuccess: () => {
                     onOpenChange(false);
@@ -88,6 +92,7 @@ export function IngredientFormDialog({
                 },
             });
         } else {
+            // Criar novo ingrediente (tanto para novo quanto para duplicação)
             post('/ingredients', {
                 onSuccess: () => {
                     onOpenChange(false);
@@ -103,10 +108,12 @@ export function IngredientFormDialog({
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
                         <DialogTitle>
-                            {ingredient ? 'Editar Insumo' : 'Novo Insumo'}
+                            {ingredient && !('_isDuplicate' in ingredient)
+                                ? 'Editar Insumo'
+                                : 'Novo Insumo'}
                         </DialogTitle>
                         <DialogDescription>
-                            {ingredient
+                            {ingredient && !('_isDuplicate' in ingredient)
                                 ? 'Atualize as informações do insumo.'
                                 : 'Preencha os dados para criar um novo insumo.'}
                         </DialogDescription>
@@ -287,7 +294,7 @@ export function IngredientFormDialog({
                         <Button type="submit" disabled={processing}>
                             {processing
                                 ? 'Salvando...'
-                                : ingredient
+                                : ingredient && !('_isDuplicate' in ingredient)
                                   ? 'Atualizar'
                                   : 'Criar'}
                         </Button>

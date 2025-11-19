@@ -125,13 +125,38 @@ export function DataTable({
             const response = await fetch(`/products/${product.id}/data`);
             const productData = await response.json();
 
-            // Cria uma cópia com todos os dados
+            // Preparar a receita (ficha técnica) se existir
+            interface Cost {
+                ingredient: {
+                    id: number;
+                    name: string;
+                    unit: string;
+                    unit_price: string;
+                };
+                qty: string;
+            }
+
+            const recipe =
+                productData.costs?.map((cost: Cost) => ({
+                    ingredient_id: cost.ingredient.id,
+                    ingredient_name: cost.ingredient.name,
+                    ingredient_unit: cost.ingredient.unit,
+                    ingredient_price: parseFloat(cost.ingredient.unit_price),
+                    qty: parseFloat(cost.qty),
+                })) || [];
+
+            // Cria uma cópia SEM ID para criar novo produto
             const duplicatedProduct = {
-                ...productData,
-                id: product.id, // Mantém ID temporariamente para o modal carregar a receita
                 name: `${productData.name} (Cópia)`,
-                sku: null, // Remove SKU para evitar duplicação
-                _isDuplicate: true, // Flag para indicar que é duplicação
+                sku: productData.sku,
+                type: productData.type,
+                unit: productData.unit,
+                unit_cost: productData.unit_cost,
+                sale_price: productData.sale_price,
+                tax_category_id: productData.tax_category_id,
+                active: productData.active,
+                _recipe: recipe, // Receita pré-carregada
+                _isDuplicate: true,
             };
 
             setEditingProduct(duplicatedProduct as unknown as Product);
