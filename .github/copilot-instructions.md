@@ -105,6 +105,20 @@ Este é um monorepo Laravel + React (Inertia.js) para uma plataforma de gestão 
     - Exemplo prático: Antes de implementar relacionamento Tenant->users(), verificar se ele existe no model Tenant
 - Antes de criar código novo, sempre verifique o schema atual das tabelas e a estrutura do projeto (ex: use as migrations e models para checar campos e relações). Para integrações, confira onde os tokens e dados realmente estão salvos (exemplo: o token do iFood está em `oauth_tokens`, e todas as lojas com provider 'ifood' em `stores` já estão integradas).
 - Para agendar jobs/commands no Laravel 12, utilize o sistema de agendamento em `routes/console.php` com `Schedule::command()` ou `Schedule::job()`. Consulte a documentação oficial para o método mais atual de scheduling.
+- **PADRÃO DE EXCLUSÃO (OBRIGATÓRIO)**: NUNCA use `confirm()` ou `alert()` nativos do JavaScript. SEMPRE use o componente `AlertDialog` do shadcn/ui para confirmações de exclusão:
+    - Adicione estados: `const [deletingItem, setDeletingItem] = useState<Item | null>(null)` e `const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)`
+    - Handler de exclusão: `handleDelete` apenas abre o dialog setando o item
+    - Handler de confirmação: `confirmDelete` executa a exclusão via `router.delete()`
+    - Dialog com título "Confirmar exclusão", descrição clara com nome do item em negrito, botão vermelho "Excluir"
+    - Exemplo: Ver `resources/js/components/products/data-table.tsx` ou `resources/js/components/ingredients/data-table.tsx`
+- **PADRÃO DE TOASTS (OBRIGATÓRIO)**: SEMPRE use toasts do Sonner para feedback de ações do usuário:
+    - Import: `import { toast } from 'sonner';`
+    - Sucesso: `toast.success('Mensagem de sucesso')` - Use nos callbacks `onSuccess` do Inertia
+    - Erro: `toast.error('Mensagem de erro')` - Use nos callbacks `onError` do Inertia
+    - Aplicar em TODAS as operações CRUD: criar, atualizar, excluir
+    - Mensagens claras e objetivas: "Item criado com sucesso!", "Erro ao atualizar item"
+    - Sempre adicionar tanto onSuccess quanto onError nos métodos do Inertia (post, put, delete)
+    - Exemplo: Ver `resources/js/components/products/product-form-dialog.tsx` ou `resources/js/components/ingredients/ingredient-form-dialog.tsx`
 
 ---
 

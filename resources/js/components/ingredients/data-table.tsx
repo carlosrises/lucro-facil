@@ -11,6 +11,16 @@ import {
 } from '@tanstack/react-table';
 import * as React from 'react';
 
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -44,6 +54,7 @@ import {
     LayoutGrid,
     Plus,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { createColumns, type Ingredient } from './columns';
 import { IngredientFormDialog } from './ingredient-form-dialog';
 
@@ -95,6 +106,9 @@ export function DataTable({
     const [isFormOpen, setIsFormOpen] = React.useState(false);
     const [editingIngredient, setEditingIngredient] =
         React.useState<Ingredient | null>(null);
+    const [deletingIngredient, setDeletingIngredient] =
+        React.useState<Ingredient | null>(null);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
     const [searchValue, setSearchValue] = React.useState(filters?.search ?? '');
 
     // Debounce para o search
@@ -128,13 +142,22 @@ export function DataTable({
     };
 
     const handleDelete = (ingredient: Ingredient) => {
-        if (
-            confirm(
-                `Tem certeza que deseja excluir o insumo "${ingredient.name}"?`,
-            )
-        ) {
-            router.delete(`/ingredients/${ingredient.id}`, {
+        setDeletingIngredient(ingredient);
+        setIsDeleteDialogOpen(true);
+    };
+
+    const confirmDelete = () => {
+        if (deletingIngredient) {
+            router.delete(`/ingredients/${deletingIngredient.id}`, {
                 preserveScroll: true,
+                onSuccess: () => {
+                    toast.success('Insumo excluído com sucesso!');
+                    setIsDeleteDialogOpen(false);
+                    setDeletingIngredient(null);
+                },
+                onError: () => {
+                    toast.error('Erro ao excluir insumo');
+                },
             });
         }
     };
@@ -489,6 +512,34 @@ export function DataTable({
                 ingredient={editingIngredient}
                 categories={categories}
             />
+
+            {/* Dialog de Confirmação de Exclusão */}
+            <AlertDialog
+                open={isDeleteDialogOpen}
+                onOpenChange={setIsDeleteDialogOpen}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tem certeza que deseja excluir o insumo{' '}
+                            <span className="font-semibold">
+                                "{deletingIngredient?.name}"
+                            </span>
+                            ? Esta ação não pode ser desfeita.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDelete}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Excluir
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 }

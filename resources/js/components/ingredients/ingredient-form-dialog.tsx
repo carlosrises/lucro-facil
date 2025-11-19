@@ -21,6 +21,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { router, useForm } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { type Ingredient } from './columns';
 
 interface Category {
@@ -87,16 +88,24 @@ export function IngredientFormDialog({
             // Edição de ingrediente existente
             put(`/ingredients/${ingredient.id}`, {
                 onSuccess: () => {
+                    toast.success('Insumo atualizado com sucesso!');
                     onOpenChange(false);
                     reset();
+                },
+                onError: () => {
+                    toast.error('Erro ao atualizar insumo');
                 },
             });
         } else {
             // Criar novo ingrediente (tanto para novo quanto para duplicação)
             post('/ingredients', {
                 onSuccess: () => {
+                    toast.success('Insumo criado com sucesso!');
                     onOpenChange(false);
                     reset();
+                },
+                onError: () => {
+                    toast.error('Erro ao criar insumo');
                 },
             });
         }

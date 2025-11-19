@@ -11,6 +11,16 @@ import {
 } from '@tanstack/react-table';
 import * as React from 'react';
 
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -44,6 +54,7 @@ import {
     LayoutGrid,
     Plus,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { createColumns, type Product } from './columns';
 import { ProductFormDialog } from './product-form-dialog';
 
@@ -100,6 +111,9 @@ export function DataTable({
     const [editingProduct, setEditingProduct] = React.useState<Product | null>(
         null,
     );
+    const [deletingProduct, setDeletingProduct] =
+        React.useState<Product | null>(null);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
     const [searchValue, setSearchValue] = React.useState(filters?.search ?? '');
 
     // Debounce para o search
@@ -168,13 +182,22 @@ export function DataTable({
     };
 
     const handleDelete = (product: Product) => {
-        if (
-            confirm(
-                `Tem certeza que deseja excluir o produto "${product.name}"?`,
-            )
-        ) {
-            router.delete(`/products/${product.id}`, {
+        setDeletingProduct(product);
+        setIsDeleteDialogOpen(true);
+    };
+
+    const confirmDelete = () => {
+        if (deletingProduct) {
+            router.delete(`/products/${deletingProduct.id}`, {
                 preserveScroll: true,
+                onSuccess: () => {
+                    toast.success('Produto excluído com sucesso!');
+                    setIsDeleteDialogOpen(false);
+                    setDeletingProduct(null);
+                },
+                onError: () => {
+                    toast.error('Erro ao excluir produto');
+                },
             });
         }
     };
@@ -521,6 +544,34 @@ export function DataTable({
                 onOpenChange={setIsFormOpen}
                 product={editingProduct}
             />
+
+            {/* Dialog de Confirmação de Exclusão */}
+            <AlertDialog
+                open={isDeleteDialogOpen}
+                onOpenChange={setIsDeleteDialogOpen}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tem certeza que deseja excluir o produto{' '}
+                            <span className="font-semibold">
+                                "{deletingProduct?.name}"
+                            </span>
+                            ? Esta ação não pode ser desfeita.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDelete}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Excluir
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 }
