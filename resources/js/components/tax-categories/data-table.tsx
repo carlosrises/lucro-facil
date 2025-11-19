@@ -76,6 +76,23 @@ export function DataTable({
         React.useState<ColumnFiltersState>([]);
     const [columnVisibility, setColumnVisibility] =
         React.useState<VisibilityState>({});
+    const [searchValue, setSearchValue] = React.useState(filters?.search ?? '');
+
+    // Debounce para o search
+    React.useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            if (searchValue !== filters?.search) {
+                router.get(
+                    '/tax-categories',
+                    { ...filters, search: searchValue, page: 1 },
+                    { preserveState: true, preserveScroll: true },
+                );
+            }
+        }, 500);
+
+        return () => clearTimeout(timeoutId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchValue]);
 
     const table = useReactTable({
         data,
@@ -92,14 +109,6 @@ export function DataTable({
             columnVisibility,
         },
     });
-
-    const handleSearch = (value: string) => {
-        router.get(
-            '/tax-categories',
-            { ...filters, search: value, page: 1 },
-            { preserveState: true, preserveScroll: true },
-        );
-    };
 
     const handleActiveFilter = (value: string) => {
         router.get(
@@ -138,60 +147,65 @@ export function DataTable({
     };
 
     return (
-        <div className="w-full space-y-4">
-            {/* Filtros */}
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-end">
-                    <div className="flex-1 space-y-2">
-                        <Input
-                            placeholder="Buscar por nome, CFOP, CST ou NCM..."
-                            value={filters.search}
-                            onChange={(e) => handleSearch(e.target.value)}
-                            className="max-w-sm"
-                        />
-                    </div>
+        <div className="flex w-full flex-col gap-4 px-4 lg:px-6">
+            {/* 🔎 Filtros */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* Buscar por nome, CFOP, CST ou NCM */}
+                    <Input
+                        placeholder="Buscar por nome, CFOP, CST ou NCM..."
+                        value={searchValue}
+                        onChange={(e) => setSearchValue(e.target.value)}
+                        className="h-9 w-[280px]"
+                    />
 
-                    <div className="space-y-2">
-                        <Select
-                            value={filters.active}
-                            onValueChange={handleActiveFilter}
-                        >
-                            <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todos</SelectItem>
-                                <SelectItem value="1">Ativos</SelectItem>
-                                <SelectItem value="0">Inativos</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
+                    {/* Filtro por status */}
+                    <Select
+                        value={
+                            filters?.active && filters.active !== ''
+                                ? filters.active
+                                : 'all'
+                        }
+                        onValueChange={handleActiveFilter}
+                    >
+                        <SelectTrigger className="h-9 w-[130px]">
+                            <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos</SelectItem>
+                            <SelectItem value="1">Ativos</SelectItem>
+                            <SelectItem value="0">Inativos</SelectItem>
+                        </SelectContent>
+                    </Select>
 
-                    <div className="space-y-2">
-                        <Select
-                            value={filters.tax_calculation_type}
-                            onValueChange={handleCalculationTypeFilter}
-                        >
-                            <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Tipo de cálculo" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">
-                                    Todos os tipos
-                                </SelectItem>
-                                <SelectItem value="detailed">
-                                    📊 Detalhado
-                                </SelectItem>
-                                <SelectItem value="fixed">💰 Fixo</SelectItem>
-                                <SelectItem value="none">🚫 Isento</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
+                    {/* Filtro por tipo de cálculo */}
+                    <Select
+                        value={
+                            filters?.tax_calculation_type &&
+                            filters.tax_calculation_type !== ''
+                                ? filters.tax_calculation_type
+                                : 'all'
+                        }
+                        onValueChange={handleCalculationTypeFilter}
+                    >
+                        <SelectTrigger className="h-9 w-[170px]">
+                            <SelectValue placeholder="Tipo de cálculo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos os tipos</SelectItem>
+                            <SelectItem value="detailed">
+                                📊 Detalhado
+                            </SelectItem>
+                            <SelectItem value="fixed">💰 Fixo</SelectItem>
+                            <SelectItem value="none">🚫 Isento</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
 
+                {/* Dropdown de colunas */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline">
+                        <Button variant="outline" className="h-9">
                             <Columns3 className="mr-2 h-4 w-4" />
                             Colunas
                             <ChevronDown className="ml-2 h-4 w-4" />
@@ -202,16 +216,24 @@ export function DataTable({
                             .getAllColumns()
                             .filter((column) => column.getCanHide())
                             .map((column) => {
+                                const columnLabels: Record<string, string> = {
+                                    name: 'Nome',
+                                    sale_cfop: 'CFOP Venda',
+                                    csosn_cst: 'CSOSN/CST',
+                                    ncm: 'NCM',
+                                    icms_origin: 'Origem ICMS',
+                                    tax_calculation_type: 'Tipo de Cálculo',
+                                    total_tax_rate: 'Total de Impostos',
+                                };
                                 return (
                                     <DropdownMenuCheckboxItem
                                         key={column.id}
-                                        className="capitalize"
                                         checked={column.getIsVisible()}
                                         onCheckedChange={(value) =>
                                             column.toggleVisibility(!!value)
                                         }
                                     >
-                                        {column.id}
+                                        {columnLabels[column.id] || column.id}
                                     </DropdownMenuCheckboxItem>
                                 );
                             })}

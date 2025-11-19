@@ -12,19 +12,20 @@ class TaxCategoriesController extends Controller
     {
         $query = TaxCategory::query()
             ->where('tenant_id', tenant_id())
-            ->when($request->input('search'), fn ($q, $search) =>
-                $q->where(function ($query) use ($search) {
+            ->when($request->filled('search'), fn ($q) =>
+                $q->where(function ($query) use ($request) {
+                    $search = $request->input('search');
                     $query->where('name', 'like', "%{$search}%")
                         ->orWhere('sale_cfop', 'like', "%{$search}%")
                         ->orWhere('csosn_cst', 'like', "%{$search}%")
                         ->orWhere('ncm', 'like', "%{$search}%");
                 })
             )
-            ->when($request->has('active'), fn ($q) =>
+            ->when($request->filled('active'), fn ($q) =>
                 $q->where('active', $request->boolean('active'))
             )
-            ->when($request->input('tax_calculation_type'), fn ($q, $type) =>
-                $q->where('tax_calculation_type', $type)
+            ->when($request->filled('tax_calculation_type'), fn ($q) =>
+                $q->where('tax_calculation_type', $request->input('tax_calculation_type'))
             )
             ->orderBy('name');
 
@@ -34,9 +35,9 @@ class TaxCategoriesController extends Controller
         return Inertia::render('tax-categories', [
             'taxCategories' => $taxCategories,
             'filters' => [
-                'search' => $request->input('search', ''),
-                'active' => $request->input('active', ''),
-                'tax_calculation_type' => $request->input('tax_calculation_type', ''),
+                'search' => $request->input('search') ?? '',
+                'active' => $request->input('active') ?? '',
+                'tax_calculation_type' => $request->input('tax_calculation_type') ?? '',
                 'per_page' => $perPage,
             ],
         ]);

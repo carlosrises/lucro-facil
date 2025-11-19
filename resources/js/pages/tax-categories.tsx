@@ -75,19 +75,17 @@ export default function TaxCategories({ taxCategories, filters }: Props) {
                             </Button>
                         </div>
 
-                        <div className="flex w-full flex-col gap-4 space-x-4 px-4 lg:px-6">
-                            <DataTable
-                                data={taxCategories.data}
-                                columns={columns}
-                                pagination={{
-                                    current_page: taxCategories.current_page,
-                                    last_page: taxCategories.last_page,
-                                    per_page: taxCategories.per_page,
-                                    total: taxCategories.total,
-                                }}
-                                filters={filters}
-                            />
-                        </div>
+                        <DataTable
+                            data={taxCategories.data}
+                            columns={columns}
+                            pagination={{
+                                current_page: taxCategories.current_page,
+                                last_page: taxCategories.last_page,
+                                per_page: taxCategories.per_page,
+                                total: taxCategories.total,
+                            }}
+                            filters={filters}
+                        />
                     </div>
                 </div>
             </div>

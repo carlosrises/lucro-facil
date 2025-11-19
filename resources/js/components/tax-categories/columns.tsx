@@ -1,3 +1,13 @@
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,6 +22,7 @@ import { router } from '@inertiajs/react';
 import { ColumnDef } from '@tanstack/react-table';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { TaxCategoryFormDialog } from './tax-category-form-dialog';
 
 export interface TaxCategory {
@@ -56,13 +67,23 @@ const icmsOriginLabels: Record<string, string> = {
 
 function ActionsCell({ category }: { category: TaxCategory }) {
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
     const handleDelete = () => {
-        if (confirm('Tem certeza que deseja excluir esta categoria fiscal?')) {
-            router.delete(`/tax-categories/${category.id}`, {
-                preserveScroll: true,
-            });
-        }
+        setIsDeleteDialogOpen(true);
+    };
+
+    const confirmDelete = () => {
+        router.delete(`/tax-categories/${category.id}`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.success('Categoria fiscal excluída com sucesso!');
+                setIsDeleteDialogOpen(false);
+            },
+            onError: () => {
+                toast.error('Erro ao excluir categoria fiscal');
+            },
+        });
     };
 
     return (
@@ -96,6 +117,33 @@ function ActionsCell({ category }: { category: TaxCategory }) {
                 onOpenChange={setIsEditDialogOpen}
                 category={category}
             />
+
+            <AlertDialog
+                open={isDeleteDialogOpen}
+                onOpenChange={setIsDeleteDialogOpen}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tem certeza que deseja excluir a categoria fiscal{' '}
+                            <span className="font-semibold">
+                                "{category.name}"
+                            </span>
+                            ? Esta ação não pode ser desfeita.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDelete}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Excluir
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 }
@@ -104,6 +152,7 @@ export const columns: ColumnDef<TaxCategory>[] = [
     {
         accessorKey: 'name',
         header: 'Nome',
+        enableHiding: false,
         cell: ({ row }) => {
             const isActive = row.original.active;
             return (
@@ -198,6 +247,8 @@ export const columns: ColumnDef<TaxCategory>[] = [
     },
     {
         id: 'actions',
+        header: 'Ações',
+        enableHiding: false,
         cell: ({ row }) => <ActionsCell category={row.original} />,
     },
 ];
