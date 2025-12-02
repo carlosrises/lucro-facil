@@ -63,6 +63,7 @@ class SyncOrdersJob implements ShouldQueue
                 logger()->warning('⚠️ Nenhuma loja com token OAuth encontrada para polling', [
                     'tenant_id' => $this->tenantId,
                 ]);
+
                 return;
             }
 
@@ -95,6 +96,7 @@ class SyncOrdersJob implements ShouldQueue
 
             DB::transaction(function () use ($eventsList, $client, $store, $cursor) {
                 $last = $cursor->cursor_key;
+                $processedOrderIds = [];
 
                 foreach ($eventsList as $ev) {
                     $last = $ev['id'] ?? $last;
@@ -103,10 +105,38 @@ class SyncOrdersJob implements ShouldQueue
                         continue;
                     }
 
+                    $orderId = $ev['orderId'];
+                    if (in_array($orderId, $processedOrderIds, true)) {
+                        continue; // já processado neste polling
+                    }
+                    $processedOrderIds[] = $orderId;
+
                     try {
-                        $orderId = $ev['orderId'];
                         $eventCode = $ev['code'] ?? $ev['fullCode'] ?? 'UNKNOWN';
                         $detail = $client->get("order/v1.0/orders/{$orderId}");
+
+                        // Se for evento HANDSHAKE_DISPUTE, extrai todos os campos relevantes conforme documentação
+                        if (in_array($eventCode, ['HSD', 'HANDSHAKE_DISPUTE'])) {
+                            $handshakeDispute = [
+                                'disputeId' => $ev['id'] ?? $ev['disputeId'] ?? null,
+                                'parentDisputeId' => $ev['parentDisputeId'] ?? null,
+                                'action' => $ev['action'] ?? null,
+                                'message' => $ev['message'] ?? null,
+                                'alternatives' => $ev['alternatives'] ?? null,
+                                'expiresAt' => $ev['expiresAt'] ?? null,
+                                'createdAt' => $ev['createdAt'] ?? null,
+                                'handshakeType' => $ev['handshakeType'] ?? null,
+                                'handshakeGroup' => $ev['handshakeGroup'] ?? null,
+                                'timeoutAction' => $ev['timeoutAction'] ?? null,
+                                'items' => $ev['metadata']['items'] ?? null,
+                                'garnishItems' => $ev['metadata']['garnishItems'] ?? null,
+                                'evidences' => $ev['metadata']['evidences'] ?? null,
+                                'acceptCancellationReasons' => $ev['metadata']['acceptCancellationReasons'] ?? null,
+                            ];
+                            // Remove valores null
+                            $handshakeDispute = array_filter($handshakeDispute, fn ($v) => $v !== null);
+                            $detail['handshakeDispute'] = $handshakeDispute;
+                        }
 
                         // Busca pedido existente para detectar mudanças
                         $existingOrder = Order::where('tenant_id', $this->tenantId)

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\RecalculateOrderCostsJob;
 use App\Models\CostCommission;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -10,8 +11,10 @@ class CostCommissionsController extends Controller
 {
     public function index(Request $request)
     {
+        $tenantId = $request->user()->tenant_id;
+
         $query = CostCommission::query()
-            ->where('tenant_id', $request->user()->tenant_id)
+            ->where('tenant_id', $tenantId)
             ->orderBy('created_at', 'desc');
 
         // Filtro por tipo
@@ -36,6 +39,13 @@ class CostCommissionsController extends Controller
 
         $costCommissions = $query->paginate(15)->withQueryString();
 
+        // Busca providers integrados (stores ativas do tenant)
+        $integratedProviders = \App\Models\Store::where('tenant_id', $tenantId)
+            ->where('active', true)
+            ->distinct()
+            ->pluck('provider')
+            ->toArray();
+
         return Inertia::render('cost-commissions', [
             'data' => $costCommissions->items(),
             'pagination' => [
@@ -51,6 +61,7 @@ class CostCommissionsController extends Controller
                 'active' => $request->active,
             ],
             'providers' => get_all_providers(),
+            'integratedProviders' => $integratedProviders,
             'paymentMethods' => [
                 'ifood' => get_payment_methods_by_provider('ifood'),
                 'rappi' => get_payment_methods_by_provider('rappi'),
@@ -72,6 +83,7 @@ class CostCommissionsController extends Controller
             'enters_tax_base' => 'nullable|boolean',
             'reduces_revenue_base' => 'nullable|boolean',
             'active' => 'nullable|boolean',
+            'apply_to_existing_orders' => 'nullable|boolean', // Nova opção
         ]);
 
         $validated['tenant_id'] = $request->user()->tenant_id;
@@ -81,10 +93,22 @@ class CostCommissionsController extends Controller
         $validated['enters_tax_base'] = $validated['enters_tax_base'] ?? false;
         $validated['reduces_revenue_base'] = $validated['reduces_revenue_base'] ?? false;
         $validated['active'] = $validated['active'] ?? true;
+        $applyToExisting = $validated['apply_to_existing_orders'] ?? false;
+        unset($validated['apply_to_existing_orders']);
 
-        CostCommission::create($validated);
+        $costCommission = CostCommission::create($validated);
 
-        return back()->with('success', 'Custo/Comissão criado com sucesso!');
+        // Se aplicar aos pedidos existentes, disparar job para recalcular
+        if ($applyToExisting) {
+            \App\Jobs\RecalculateOrderCostsJob::dispatch(
+                $costCommission->id,
+                true,
+                'cost_commission'
+            );
+        }
+
+        return back()->with('success', 'Custo/Comissão criado com sucesso!' .
+            ($applyToExisting ? ' Recalculando custos dos pedidos existentes...' : ''));
     }
 
     public function update(Request $request, CostCommission $costCommission)
@@ -105,6 +129,7 @@ class CostCommissionsController extends Controller
             'enters_tax_base' => 'nullable|boolean',
             'reduces_revenue_base' => 'nullable|boolean',
             'active' => 'nullable|boolean',
+            'apply_retroactively' => 'nullable|boolean', // Nova opção
         ]);
 
         // Garante valores padrão para os booleanos
@@ -112,10 +137,26 @@ class CostCommissionsController extends Controller
         $validated['enters_tax_base'] = $validated['enters_tax_base'] ?? false;
         $validated['reduces_revenue_base'] = $validated['reduces_revenue_base'] ?? false;
         $validated['active'] = $validated['active'] ?? false;
+        $applyRetroactively = $validated['apply_retroactively'] ?? false;
+        unset($validated['apply_retroactively']);
+
+        // Incrementar versão
+        $validated['version'] = $costCommission->version + 1;
+        $validated['last_modified_at'] = now();
 
         $costCommission->update($validated);
 
-        return back()->with('success', 'Custo/Comissão atualizado com sucesso!');
+        // Se aplicar retroativamente, disparar job para recalcular pedidos
+        if ($applyRetroactively) {
+            RecalculateOrderCostsJob::dispatch(
+                $costCommission->id,
+                true,
+                'cost_commission'
+            );
+        }
+
+        return back()->with('success', 'Custo/Comissão atualizado com sucesso!' .
+            ($applyRetroactively ? ' Recalculando custos dos pedidos existentes...' : ''));
     }
 
     public function toggle(Request $request, CostCommission $costCommission)

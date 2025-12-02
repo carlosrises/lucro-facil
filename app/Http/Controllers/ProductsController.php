@@ -217,11 +217,14 @@ class ProductsController extends Controller
             'recipe' => ['nullable', 'array'],
             'recipe.*.ingredient_id' => ['required_with:recipe', 'exists:ingredients,id'],
             'recipe.*.qty' => ['required_with:recipe', 'numeric', 'min:0'],
+            'update_existing_orders' => ['boolean'],
         ]);
 
         DB::beginTransaction();
 
         try {
+            $oldUnitCost = $product->unit_cost;
+
             // Atualizar dados básicos do produto
             $product->update([
                 'name' => $validated['name'],
@@ -263,8 +266,19 @@ class ProductsController extends Controller
                 ProductCost::where('internal_product_id', $product->id)->delete();
             }
 
+            // Se solicitado, recalcular pedidos existentes
+            if (($validated['update_existing_orders'] ?? false) && $oldUnitCost != $product->unit_cost) {
+                \App\Jobs\RecalculateOrderCostsJob::dispatch($product->id, true, 'product');
+            }
+
             DB::commit();
-            return redirect()->back()->with('success', 'Produto atualizado com sucesso!');
+
+            $message = 'Produto atualizado com sucesso!';
+            if ($validated['update_existing_orders'] ?? false) {
+                $message .= ' Recalculando custos dos pedidos existentes em segundo plano...';
+            }
+
+            return redirect()->back()->with('success', $message);
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;

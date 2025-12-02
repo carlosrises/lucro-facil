@@ -20,6 +20,7 @@ class OrdersController extends Controller
                 'id', 'order_uuid', 'code', 'status', 'provider',
                 'store_id', 'placed_at', 'gross_total', 'discount_total',
                 'delivery_fee', 'tip', 'net_total', 'raw', 'tenant_id',
+                'total_costs', 'total_commissions', 'net_revenue', 'costs_calculated_at',
             ])
             ->with(['items.internalProduct.taxCategory', 'sale'])
             ->where('tenant_id', tenant_id())
@@ -391,6 +392,96 @@ class OrdersController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Erro ao cancelar pedido: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * POST /orders/{id}/dispute/{disputeId}/accept
+     * Aceita uma disputa de cancelamento (Handshake Platform)
+     */
+    public function acceptDispute($id, $disputeId)
+    {
+        try {
+            $order = Order::where('id', $id)
+                ->where('tenant_id', auth()->user()->tenant_id)
+                ->firstOrFail();
+
+            if ($order->provider !== 'ifood') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Apenas pedidos iFood possuem este recurso',
+                ], 400);
+            }
+
+            $client = new \App\Services\IfoodClient($order->tenant_id, $order->store_id);
+            $result = $client->acceptDispute($disputeId);
+
+            // Atualiza status local
+            $order->update(['status' => 'CANCELLED']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Disputa aceita. Pedido será cancelado.',
+                'data' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            logger()->error('Erro ao aceitar disputa', [
+                'order_id' => $id,
+                'dispute_id' => $disputeId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * POST /orders/{id}/dispute/{disputeId}/reject
+     * Rejeita uma disputa de cancelamento (Handshake Platform)
+     */
+    public function rejectDispute(Request $request, $id, $disputeId)
+    {
+        $request->validate([
+            'reason' => 'required|string|max:250',
+        ]);
+
+        try {
+            $order = Order::where('id', $id)
+                ->where('tenant_id', auth()->user()->tenant_id)
+                ->firstOrFail();
+
+            if ($order->provider !== 'ifood') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Apenas pedidos iFood possuem este recurso',
+                ], 400);
+            }
+
+            $client = new \App\Services\IfoodClient($order->tenant_id, $order->store_id);
+            $result = $client->rejectDispute(
+                $disputeId,
+                $request->input('reason')
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Disputa rejeitada. Cancelamento negado.',
+                'data' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            logger()->error('Erro ao rejeitar disputa', [
+                'order_id' => $id,
+                'dispute_id' => $disputeId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro: '.$e->getMessage(),
             ], 500);
         }
     }
