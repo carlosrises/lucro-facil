@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { Combobox } from '@/components/ui/combobox';
 import {
     Dialog,
     DialogContent,
@@ -33,6 +34,7 @@ type PaymentMethod = {
 
 type PageProps = {
     providers: Provider[];
+    integratedProviders: string[];
     paymentMethods: {
         [key: string]: PaymentMethod[];
     };
@@ -50,7 +52,13 @@ export function CostCommissionFormDialog({
     item,
 }: CostCommissionFormDialogProps) {
     const isEditing = !!item;
-    const { providers, paymentMethods } = usePage<PageProps>().props;
+    const { providers, integratedProviders, paymentMethods } =
+        usePage<PageProps>().props;
+
+    // Filtra apenas os providers integrados
+    const availableProviders = providers.filter((provider) =>
+        integratedProviders.includes(provider.value),
+    );
 
     const { data, setData, post, put, processing, errors, reset } = useForm({
         name: item?.name || '',
@@ -61,6 +69,8 @@ export function CostCommissionFormDialog({
         condition_value: item?.condition_value || '',
         reduces_revenue_base: item?.reduces_revenue_base || false,
         active: item?.active ?? true,
+        apply_to_existing_orders: false,
+        apply_retroactively: false,
     });
 
     React.useEffect(() => {
@@ -163,32 +173,23 @@ export function CostCommissionFormDialog({
                     {/* Marketplace/Provider */}
                     <div className="space-y-2">
                         <Label htmlFor="provider">Marketplace</Label>
-                        <Select
-                            value={data.provider || 'none'}
-                            onValueChange={(value) =>
-                                setData(
-                                    'provider',
-                                    value === 'none' ? '' : value,
-                                )
-                            }
-                        >
-                            <SelectTrigger id="provider">
-                                <SelectValue placeholder="Selecione (opcional)" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="none">
-                                    Todos os marketplaces
-                                </SelectItem>
-                                {providers.map((provider) => (
-                                    <SelectItem
-                                        key={provider.value}
-                                        value={provider.value}
-                                    >
-                                        {provider.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <Combobox
+                            options={[
+                                { value: '', label: 'Todos os marketplaces' },
+                                ...availableProviders.map((provider) => ({
+                                    value: provider.value,
+                                    label: provider.label,
+                                })),
+                            ]}
+                            value={data.provider || ''}
+                            onChange={(value) => setData('provider', value)}
+                            placeholder="Selecione um marketplace..."
+                            searchPlaceholder="Buscar marketplace..."
+                            emptyMessage="Nenhum marketplace integrado"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Apenas marketplaces integrados estão disponíveis
+                        </p>
                         {errors.provider && (
                             <p className="text-sm text-destructive">
                                 {errors.provider}
@@ -422,6 +423,45 @@ export function CostCommissionFormDialog({
                                 }
                             />
                         </div>
+
+                        {!isEditing && (
+                            <div className="flex items-center justify-between space-x-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+                                <Label
+                                    htmlFor="apply_to_existing_orders"
+                                    className="text-sm font-normal"
+                                >
+                                    Aplicar aos pedidos já existentes
+                                </Label>
+                                <Switch
+                                    id="apply_to_existing_orders"
+                                    checked={data.apply_to_existing_orders}
+                                    onCheckedChange={(checked) =>
+                                        setData(
+                                            'apply_to_existing_orders',
+                                            checked,
+                                        )
+                                    }
+                                />
+                            </div>
+                        )}
+
+                        {isEditing && (
+                            <div className="flex items-center justify-between space-x-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+                                <Label
+                                    htmlFor="apply_retroactively"
+                                    className="text-sm font-normal"
+                                >
+                                    Aplicar alterações aos pedidos existentes
+                                </Label>
+                                <Switch
+                                    id="apply_retroactively"
+                                    checked={data.apply_retroactively}
+                                    onCheckedChange={(checked) =>
+                                        setData('apply_retroactively', checked)
+                                    }
+                                />
+                            </div>
+                        )}
                     </div>
                 </form>
 

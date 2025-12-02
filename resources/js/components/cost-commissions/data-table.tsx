@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { Combobox } from '@/components/ui/combobox';
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
@@ -40,7 +41,7 @@ import {
     getSortedRowModel,
     useReactTable,
 } from '@tanstack/react-table';
-import { ChevronDown, Search } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import * as React from 'react';
 import { columns, type CostCommission } from './columns';
 
@@ -54,6 +55,7 @@ type Pagination = {
 type Filters = {
     search?: string;
     type?: string;
+    provider?: string;
     active?: string;
 };
 
@@ -61,6 +63,7 @@ type DataTableProps = {
     data: CostCommission[];
     pagination: Pagination;
     filters: Filters;
+    integratedProviders: string[];
     onEdit: (item: CostCommission) => void;
     onDelete: (item: CostCommission) => void;
     onToggle: (item: CostCommission) => void;
@@ -70,6 +73,7 @@ export function DataTable({
     data,
     pagination,
     filters,
+    integratedProviders,
     onEdit,
     onDelete,
     onToggle,
@@ -81,11 +85,29 @@ export function DataTable({
         React.useState<VisibilityState>({});
     const [rowSelection, setRowSelection] = React.useState({});
 
-    const [localSearch, setLocalSearch] = React.useState(filters.search || '');
-    const [localType, setLocalType] = React.useState(filters.type || 'all');
-    const [localActive, setLocalActive] = React.useState(
-        filters.active || 'all',
-    );
+    const [searchValue, setSearchValue] = React.useState(filters?.search ?? '');
+
+    // Opções de providers para o Combobox - apenas os integrados
+    const providerOptions = [
+        { value: '', label: 'Todos os marketplaces' },
+        ...[
+            { value: 'ifood', label: 'iFood' },
+            { value: 'rappi', label: 'Rappi' },
+            { value: 'uber_eats', label: 'Uber Eats' },
+        ].filter((p) => integratedProviders.includes(p.value)),
+    ];
+
+    // Debounce para o search
+    React.useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            if (searchValue !== filters?.search) {
+                updateFilters({ search: searchValue });
+            }
+        }, 500);
+
+        return () => clearTimeout(timeoutId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchValue]);
 
     const table = useReactTable({
         data,
@@ -107,26 +129,10 @@ export function DataTable({
         pageCount: pagination.last_page,
     });
 
-    const handleSearch = () => {
-        const params: Record<string, string> = {};
-
-        if (localSearch) params.search = localSearch;
-        if (localType !== 'all') params.type = localType;
-        if (localActive !== 'all') params.active = localActive;
-
-        router.get('/cost-commissions', params, {
-            preserveState: true,
-            preserveScroll: true,
-        });
-    };
-
-    const handleClearFilters = () => {
-        setLocalSearch('');
-        setLocalType('all');
-        setLocalActive('all');
+    const updateFilters = (newFilters: Partial<Filters>) => {
         router.get(
             '/cost-commissions',
-            {},
+            { ...filters, ...newFilters, page: 1 },
             {
                 preserveState: true,
                 preserveScroll: true,
@@ -147,31 +153,57 @@ export function DataTable({
         });
     };
 
+    const columnLabels: Record<string, string> = {
+        name: 'Nome',
+        type: 'Tipo',
+        value: 'Valor',
+        provider: 'Marketplace',
+        applies_to: 'Aplica-se a',
+        active: 'Status',
+    };
+
     return (
         <div className="flex w-full flex-col gap-4 px-4 lg:px-6">
-            {/* Filtros */}
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-end">
-                    {/* Busca */}
-                    <div className="flex-1">
-                        <Input
-                            placeholder="Buscar por nome..."
-                            value={localSearch}
-                            onChange={(e) => setLocalSearch(e.target.value)}
-                            onKeyDown={(e) =>
-                                e.key === 'Enter' && handleSearch()
-                            }
-                            className="max-w-sm"
-                        />
-                    </div>
+            {/* 🔎 Filtros */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* Buscar por nome */}
+                    <Input
+                        placeholder="Buscar por nome..."
+                        value={searchValue}
+                        onChange={(e) => setSearchValue(e.target.value)}
+                        className="h-9 w-[200px]"
+                    />
 
-                    {/* Filtro Tipo */}
-                    <Select value={localType} onValueChange={setLocalType}>
-                        <SelectTrigger className="w-[180px]">
+                    {/* Filtro por Marketplace/Provider com Combobox */}
+                    <Combobox
+                        options={providerOptions}
+                        value={filters?.provider ?? ''}
+                        onChange={(value) => updateFilters({ provider: value })}
+                        placeholder="Marketplace..."
+                        searchPlaceholder="Buscar marketplace..."
+                        emptyMessage="Nenhum marketplace integrado"
+                        className="w-[200px]"
+                    />
+
+                    {/* Filtro por tipo */}
+                    <Select
+                        value={
+                            filters?.type && filters.type !== ''
+                                ? filters.type
+                                : 'all'
+                        }
+                        onValueChange={(value) =>
+                            updateFilters({
+                                type: value === 'all' ? '' : value,
+                            })
+                        }
+                    >
+                        <SelectTrigger className="h-9 w-[150px]">
                             <SelectValue placeholder="Tipo" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">Todos os tipos</SelectItem>
+                            <SelectItem value="all">Todos</SelectItem>
                             <SelectItem value="percentage">
                                 Percentual %
                             </SelectItem>
@@ -179,34 +211,34 @@ export function DataTable({
                         </SelectContent>
                     </Select>
 
-                    {/* Filtro Status */}
-                    <Select value={localActive} onValueChange={setLocalActive}>
-                        <SelectTrigger className="w-[180px]">
+                    {/* Filtro por status */}
+                    <Select
+                        value={
+                            filters?.active && filters.active !== ''
+                                ? filters.active
+                                : 'all'
+                        }
+                        onValueChange={(value) =>
+                            updateFilters({
+                                active: value === 'all' ? '' : value,
+                            })
+                        }
+                    >
+                        <SelectTrigger className="h-9 w-[150px]">
                             <SelectValue placeholder="Status" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">Todos os status</SelectItem>
-                            <SelectItem value="1">Ativo</SelectItem>
-                            <SelectItem value="0">Inativo</SelectItem>
+                            <SelectItem value="all">Todos</SelectItem>
+                            <SelectItem value="1">Ativos</SelectItem>
+                            <SelectItem value="0">Inativos</SelectItem>
                         </SelectContent>
                     </Select>
-
-                    {/* Botões de Ação */}
-                    <div className="flex gap-2">
-                        <Button onClick={handleSearch} variant="default">
-                            <Search className="mr-2 h-4 w-4" />
-                            Filtrar
-                        </Button>
-                        <Button onClick={handleClearFilters} variant="outline">
-                            Limpar
-                        </Button>
-                    </div>
                 </div>
 
-                {/* Dropdown de Colunas */}
+                {/* Dropdown de colunas */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="ml-auto">
+                        <Button variant="outline" className="h-9">
                             Colunas <ChevronDown className="ml-2 h-4 w-4" />
                         </Button>
                     </DropdownMenuTrigger>
@@ -218,13 +250,12 @@ export function DataTable({
                                 return (
                                     <DropdownMenuCheckboxItem
                                         key={column.id}
-                                        className="capitalize"
                                         checked={column.getIsVisible()}
                                         onCheckedChange={(value) =>
                                             column.toggleVisibility(!!value)
                                         }
                                     >
-                                        {column.id}
+                                        {columnLabels[column.id] || column.id}
                                     </DropdownMenuCheckboxItem>
                                 );
                             })}

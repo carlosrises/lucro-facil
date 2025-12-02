@@ -1,5 +1,4 @@
 import { NavAdmin } from '@/components/nav-admin';
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -33,10 +32,8 @@ import {
     CreditCard,
     FileText,
     LayoutGrid,
-    LifeBuoy,
     LineChart,
     PieChart,
-    Send,
     Settings,
     Store,
     Ticket,
@@ -72,9 +69,27 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
         icon: Wallet,
     },
     {
+        title: 'Financeiro',
+        icon: LineChart,
+        items: [
+            {
+                title: 'Resumo (DRE)',
+                href: '/financial/summary',
+            },
+            {
+                title: 'Categorias Operacionais',
+                href: '/financial/categories',
+            },
+            {
+                title: 'Movimentações Operacionais',
+                href: '/financial/entries',
+            },
+        ],
+    },
+    {
         title: 'Fluxo de Caixa',
         href: '#',
-        icon: LineChart,
+        icon: Wallet,
         locked: true,
     },
     {
@@ -210,19 +225,6 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
     },
 ];
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Suporte',
-        href: '#',
-        icon: LifeBuoy,
-    },
-    {
-        title: 'Feedback',
-        href: '#',
-        icon: Send,
-    },
-];
-
 export function AppSidebar() {
     const { auth } = usePage<SharedData>().props;
     // Considera qualquer role que comece com 'admin' (ex: 'admin', 'admin:system', 'admin:tenant')
@@ -282,7 +284,6 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
                 <NavUser />
             </SidebarFooter>
         </Sidebar>
