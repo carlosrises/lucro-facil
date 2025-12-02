@@ -1,4 +1,14 @@
 import { CancelOrderDialog } from '@/components/orders/cancel-order-dialog';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -8,7 +18,17 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { CheckCircle2, MoreVertical, Send, Truck, XCircle } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+    CheckCircle2,
+    MoreVertical,
+    Send,
+    ThumbsDown,
+    ThumbsUp,
+    Truck,
+    XCircle,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -17,6 +37,7 @@ type OrderActionsCellProps = {
     orderStatus: string;
     orderType: string;
     provider: string;
+    handshakeDispute?: Record<string, unknown> | null;
 };
 
 export function OrderActionsCell({
@@ -24,12 +45,58 @@ export function OrderActionsCell({
     orderStatus,
     orderType,
     provider,
+    handshakeDispute,
 }: OrderActionsCellProps) {
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+    const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+    const [rejectReason, setRejectReason] = useState('');
     const [loading, setLoading] = useState(false);
 
-    // Apenas pedidos iFood podem usar estas ações
-    if (provider !== 'ifood') {
+    // Só mostra ações para pedidos do iFood que não estão concluídos/cancelados (full ou código)
+    const finishedStatuses = ['CANCELLED', 'CONCLUDED', 'CAN', 'CON'];
+    if (provider !== 'ifood' || finishedStatuses.includes(orderStatus)) {
+        return null;
+    }
+
+    // Verifica se há alguma ação permitida para o status atual
+    const hasDisputeActions =
+        (orderStatus === 'HANDSHAKE_DISPUTE' || orderStatus === 'HSD') &&
+        handshakeDispute;
+    const hasConfirmAction = ['PLACED', 'PLC'].includes(orderStatus);
+    const hasDispatchAction =
+        [
+            'CONFIRMED',
+            'CFM',
+            'SEPARATION_STARTED',
+            'SPS',
+            'SEPARATION_ENDED',
+            'SPE',
+            'READY_TO_PICKUP',
+            'RTP',
+            'DELIVERY_DROP_CODE_REQUESTED',
+            'DDCR',
+            'DELIVERY_PICKUP_CODE_REQUESTED',
+            'DPCR',
+            'CANCELLATION_REQUEST_FAILED',
+            'CARF',
+        ].includes(orderStatus) && orderType === 'DELIVERY';
+    const hasReadyAction =
+        [
+            'CONFIRMED',
+            'CFM',
+            'SEPARATION_STARTED',
+            'SPS',
+            'SEPARATION_ENDED',
+            'SPE',
+            'CANCELLATION_REQUEST_FAILED',
+            'CARF',
+        ].includes(orderStatus) && orderType === 'TAKEOUT';
+    if (
+        !hasDisputeActions &&
+        !hasConfirmAction &&
+        !hasDispatchAction &&
+        !hasReadyAction
+    ) {
         return null;
     }
 
@@ -145,6 +212,112 @@ export function OrderActionsCell({
         }
     };
 
+    const handleAcceptDispute = async () => {
+        if (loading || !handshakeDispute) return;
+
+        setLoading(true);
+        try {
+            const response = await fetch(
+                `/orders/${orderId}/dispute/${handshakeDispute.disputeId}/accept`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN':
+                            document
+                                .querySelector('meta[name="csrf-token"]')
+                                ?.getAttribute('content') || '',
+                    },
+                },
+            );
+
+            const data = await response.json();
+
+            if (data.success) {
+                toast.success('Disputa aceita', {
+                    description:
+                        'O pedido será cancelado conforme solicitado pelo cliente',
+                });
+                window.location.reload();
+            } else {
+                toast.error('Erro ao aceitar disputa', {
+                    description: data.message || 'Ocorreu um erro inesperado',
+                });
+            }
+        } catch {
+            toast.error('Erro ao aceitar disputa', {
+                description: 'Ocorreu um erro inesperado',
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleRejectDispute = async () => {
+        if (loading) return;
+
+        if (!handshakeDispute) {
+            toast.error('Dados da disputa não encontrados', {
+                description: 'Não foi possível identificar a disputa',
+            });
+            return;
+        }
+
+        if (!rejectReason.trim()) {
+            toast.error('Motivo obrigatório', {
+                description:
+                    'Informe o motivo da rejeição (máx 250 caracteres)',
+            });
+            return;
+        }
+
+        if (rejectReason.length > 250) {
+            toast.error('Motivo muito longo', {
+                description: 'O motivo deve ter no máximo 250 caracteres',
+            });
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const response = await fetch(
+                `/orders/${orderId}/dispute/${handshakeDispute.disputeId}/reject`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN':
+                            document
+                                .querySelector('meta[name="csrf-token"]')
+                                ?.getAttribute('content') || '',
+                    },
+                    body: JSON.stringify({ reason: rejectReason }),
+                },
+            );
+
+            const data = await response.json();
+
+            if (data.success) {
+                toast.success('Disputa rejeitada', {
+                    description: 'O cancelamento foi negado',
+                });
+                setRejectDialogOpen(false);
+                setRejectReason('');
+                window.location.reload();
+            } else {
+                toast.error('Erro ao rejeitar disputa', {
+                    description: data.message || 'Ocorreu um erro inesperado',
+                });
+            }
+        } catch {
+            toast.error('Erro ao rejeitar disputa', {
+                description: 'Ocorreu um erro inesperado',
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // Determina quais ações estão disponíveis baseado no status
     // Aceita tanto fullCode (completo) quanto code (abreviado) conforme API iFood
     // PLC = PLACED, CFM = CONFIRMED, CAN = CANCELLED, etc
@@ -165,6 +338,8 @@ export function OrderActionsCell({
             'DDCR',
             'DELIVERY_PICKUP_CODE_REQUESTED',
             'DPCR',
+            'CANCELLATION_REQUEST_FAILED', // Permite despachar se falha no cancelamento
+            'CARF',
         ].includes(orderStatus) && orderType === 'DELIVERY';
 
     // Pode marcar como pronto quando confirmado ou durante separação
@@ -176,16 +351,15 @@ export function OrderActionsCell({
             'SPS',
             'SEPARATION_ENDED',
             'SPE',
+            'CANCELLATION_REQUEST_FAILED', // Permite marcar pronto se falha no cancelamento
+            'CARF',
         ].includes(orderStatus) && orderType === 'TAKEOUT';
 
     const canCancel = ['PLACED', 'PLC', 'CONFIRMED', 'CFM'].includes(
         orderStatus,
     );
 
-    // Se não há ações disponíveis, não mostra o dropdown
-    if (!canConfirm && !canDispatch && !canReady && !canCancel) {
-        return null;
-    }
+    // Mostra o menu de ações apenas para pedidos com status de disputa aberta
 
     return (
         <>
@@ -203,6 +377,24 @@ export function OrderActionsCell({
                 <DropdownMenuContent align="end">
                     <DropdownMenuLabel>Ações</DropdownMenuLabel>
                     <DropdownMenuSeparator />
+
+                    {/* Ações de disputa: só aparecem se status for HANDSHAKE_DISPUTE e handshakeDispute existir */}
+                    {orderStatus === 'HANDSHAKE_DISPUTE' &&
+                        handshakeDispute && (
+                            <>
+                                <DropdownMenuItem onClick={handleAcceptDispute}>
+                                    <ThumbsUp className="mr-2 h-4 w-4 text-green-600" />
+                                    Aceitar Cancelamento
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    onClick={() => setRejectDialogOpen(true)}
+                                >
+                                    <ThumbsDown className="mr-2 h-4 w-4 text-red-600" />
+                                    Rejeitar Cancelamento
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                            </>
+                        )}
 
                     {canConfirm && (
                         <DropdownMenuItem onClick={handleConfirm}>
@@ -249,6 +441,58 @@ export function OrderActionsCell({
                     window.location.reload();
                 }}
             />
+
+            <AlertDialog
+                open={rejectDialogOpen}
+                onOpenChange={setRejectDialogOpen}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            Rejeitar Disputa de Cancelamento
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Informe o motivo para rejeitar a solicitação de
+                            cancelamento do cliente (máximo 250 caracteres).
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+
+                    <div className="space-y-2 py-4">
+                        <Label htmlFor="reject-reason">
+                            Motivo da rejeição *
+                        </Label>
+                        <Textarea
+                            id="reject-reason"
+                            placeholder="Ex: Pedido já foi preparado e está pronto para entrega..."
+                            value={rejectReason}
+                            onChange={(e) => setRejectReason(e.target.value)}
+                            className="min-h-[100px]"
+                            maxLength={250}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            {rejectReason.length}/250 caracteres
+                        </p>
+                    </div>
+
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={loading}>
+                            Cancelar
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleRejectDispute();
+                            }}
+                            disabled={loading || !rejectReason.trim()}
+                            className="bg-red-600 hover:bg-red-700"
+                        >
+                            {loading
+                                ? 'Rejeitando...'
+                                : 'Rejeitar Cancelamento'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 }

@@ -81,6 +81,7 @@ export function ProductFormDialog({
         tax_category_id: '',
         active: true,
         recipe: [] as TechnicalSheetItem[],
+        update_existing_orders: false,
     });
 
     const [selectedIngredientId, setSelectedIngredientId] =
@@ -703,6 +704,29 @@ export function ProductFormDialog({
                                 )}
                             </TabsContent>
                         </Tabs>
+
+                        {/* Switch para atualizar pedidos existentes - apenas na edição */}
+                        {product && !('_isDuplicate' in product) && (
+                            <div className="mt-4 flex items-center justify-between space-x-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+                                <Label
+                                    htmlFor="update_existing_orders"
+                                    className="text-sm font-normal"
+                                >
+                                    Atualizar custos dos pedidos existentes com
+                                    este produto
+                                </Label>
+                                <Switch
+                                    id="update_existing_orders"
+                                    checked={data.update_existing_orders}
+                                    onCheckedChange={(checked) =>
+                                        setData(
+                                            'update_existing_orders',
+                                            checked,
+                                        )
+                                    }
+                                />
+                            </div>
+                        )}
 
                         <DialogFooter className="mt-6">
                             <Button

@@ -10,7 +10,7 @@ import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
 import { type User } from '@/types';
 import { Link, router } from '@inertiajs/react';
-import { LogOut, Settings } from 'lucide-react';
+import { LifeBuoy, LogOut, Send, Settings } from 'lucide-react';
 
 interface UserMenuContentProps {
     user: User;
@@ -44,6 +44,34 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
                         <Settings className="mr-2" />
                         Configurações
                     </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                    <a
+                        className="flex w-full cursor-pointer items-center"
+                        href="#"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            cleanup();
+                            // TODO: Abrir modal/link de suporte
+                        }}
+                    >
+                        <LifeBuoy className="mr-2 h-4 w-4" />
+                        Suporte
+                    </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                    <a
+                        className="flex w-full cursor-pointer items-center"
+                        href="#"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            cleanup();
+                            // TODO: Abrir modal/link de feedback
+                        }}
+                    >
+                        <Send className="mr-2 h-4 w-4" />
+                        Feedback
+                    </a>
                 </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />

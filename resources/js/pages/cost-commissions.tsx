@@ -41,13 +41,14 @@ type CostCommissionsPageProps = {
         active?: string;
     };
     providers: Array<{ value: string; label: string }>;
+    integratedProviders: string[];
     paymentMethods: {
         [key: string]: Array<{ value: string; label: string }>;
     };
 };
 
 export default function CostCommissions() {
-    const { data, pagination, filters } =
+    const { data, pagination, filters, integratedProviders } =
         usePage<CostCommissionsPageProps>().props;
 
     const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
@@ -122,6 +123,7 @@ export default function CostCommissions() {
                             data={data}
                             pagination={pagination}
                             filters={filters}
+                            integratedProviders={integratedProviders}
                             onEdit={handleEdit}
                             onDelete={handleDelete}
                             onToggle={handleToggle}
