@@ -14,12 +14,18 @@ class Order extends Model
         'tenant_id', 'store_id', 'order_uuid', 'provider',
         'status', 'code', 'origin',
         'gross_total', 'discount_total', 'delivery_fee',
-        'tip', 'net_total', 'placed_at', 'raw'
+        'tip', 'net_total', 'placed_at', 'raw',
+        'calculated_costs', 'total_costs', 'total_commissions',
+        'net_revenue', 'costs_calculated_at',
     ];
 
     protected $casts = [
         'placed_at' => 'datetime',
         'raw'       => 'array',
+        'total_costs' => 'decimal:2',
+        'total_commissions' => 'decimal:2',
+        'net_revenue' => 'decimal:2',
+        'costs_calculated_at' => 'datetime',
     ];
 
     public function tenant()

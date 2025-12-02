@@ -323,4 +323,26 @@ class IfoodClient
             'cancellationCode' => $cancellationCode,
         ]);
     }
+
+    /**
+     * POST /disputes/{disputeId}/accept
+     * Aceita uma disputa de cancelamento (Handshake Platform)
+     * Body opcional: { "reason": "HIGH_STORE_DEMAND", "detailReason": "..." }
+     */
+    public function acceptDispute(string $disputeId, ?array $body = null): ?array
+    {
+        return $this->post("order/v1.0/disputes/{$disputeId}/accept", $body ?? []);
+    }
+
+    /**
+     * POST /disputes/{disputeId}/reject
+     * Rejeita uma disputa de cancelamento (Handshake Platform)
+     * Reason é obrigatório (máx 250 caracteres)
+     */
+    public function rejectDispute(string $disputeId, string $reason): ?array
+    {
+        return $this->post("order/v1.0/disputes/{$disputeId}/reject", [
+            'reason' => $reason,
+        ]);
+    }
 }
