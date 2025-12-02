@@ -134,7 +134,7 @@ export function DataTable({
             id: 'unmapped_products',
             header: 'Produtos',
             enableSorting: false,
-            cell: ({ row }: { row: any }) => {
+            cell: ({ row }: { row: import('./columns').Order }) => {
                 const order = row.original as Order;
 
                 // Contar items sem internal_product diretamente da relação carregada
@@ -594,7 +594,7 @@ export function DataTable({
                                                                     {/* Itens do pedido */}
                                                                     {row.original.raw?.items?.map(
                                                                         (
-                                                                            item: any,
+                                                                            item: import('./columns').OrderItem,
                                                                         ) => (
                                                                             <li
                                                                                 key={
@@ -675,7 +675,7 @@ export function DataTable({
                                                                                     <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
                                                                                         {item.options.map(
                                                                                             (
-                                                                                                opt: any,
+                                                                                                opt: unknown,
                                                                                             ) => (
                                                                                                 <li
                                                                                                     key={
@@ -730,7 +730,7 @@ export function DataTable({
                                                                                                         <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
                                                                                                             {opt.customizations.map(
                                                                                                                 (
-                                                                                                                    cust: any,
+                                                                                                                    cust: unknown,
                                                                                                                 ) => (
                                                                                                                     <li
                                                                                                                         key={
@@ -797,15 +797,266 @@ export function DataTable({
                                                                             itens
                                                                         </span>
                                                                         <span className="leading-4 font-semibold">
-                                                                            R$
-                                                                            21,00
+                                                                            {(() => {
+                                                                                const items =
+                                                                                    row
+                                                                                        .original
+                                                                                        .raw
+                                                                                        ?.items ||
+                                                                                    [];
+                                                                                const total =
+                                                                                    items.reduce(
+                                                                                        (
+                                                                                            sum,
+                                                                                            item,
+                                                                                        ) =>
+                                                                                            sum +
+                                                                                            (item.totalPrice ||
+                                                                                                0),
+                                                                                        0,
+                                                                                    );
+                                                                                return new Intl.NumberFormat(
+                                                                                    'pt-BR',
+                                                                                    {
+                                                                                        style: 'currency',
+                                                                                        currency:
+                                                                                            'BRL',
+                                                                                    },
+                                                                                ).format(
+                                                                                    total,
+                                                                                );
+                                                                            })()}
                                                                         </span>
                                                                     </div>
                                                                 </div>
                                                             </CardContent>
                                                         </Card>
 
-                                                        {/* Card: Observações da Entrega */}
+                                                        {/* Card: Dados do Cliente */}
+                                                        {row.original.raw
+                                                            ?.customer && (
+                                                            <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+                                                                <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                                                                    <CardTitle className="flex h-[18px] items-center font-semibold">
+                                                                        Dados do
+                                                                        Cliente
+                                                                    </CardTitle>
+                                                                </CardHeader>
+                                                                <CardContent className="rounded-md bg-card p-0">
+                                                                    <ul className="m-0 flex w-full flex-col ps-0">
+                                                                        <li className="flex flex-col gap-1 px-3 py-2">
+                                                                            {typeof row
+                                                                                .original
+                                                                                .raw
+                                                                                .customer
+                                                                                .name ===
+                                                                                'string' && (
+                                                                                <span className="text-xs text-muted-foreground">
+                                                                                    {
+                                                                                        row
+                                                                                            .original
+                                                                                            .raw
+                                                                                            .customer
+                                                                                            .name
+                                                                                    }
+                                                                                </span>
+                                                                            )}
+                                                                            {row
+                                                                                .original
+                                                                                .raw
+                                                                                .customer
+                                                                                .phone
+                                                                                ?.number && (
+                                                                                <span className="text-xs text-muted-foreground">
+                                                                                    Telefone:{' '}
+                                                                                    {
+                                                                                        row
+                                                                                            .original
+                                                                                            .raw
+                                                                                            .customer
+                                                                                            .phone
+                                                                                            .number
+                                                                                    }
+                                                                                </span>
+                                                                            )}
+                                                                            {typeof row
+                                                                                .original
+                                                                                .raw
+                                                                                .customer
+                                                                                .documentNumber ===
+                                                                                'string' && (
+                                                                                <span className="text-xs text-muted-foreground">
+                                                                                    Documento:{' '}
+                                                                                    {
+                                                                                        row
+                                                                                            .original
+                                                                                            .raw
+                                                                                            .customer
+                                                                                            .documentNumber
+                                                                                    }
+                                                                                </span>
+                                                                            )}
+                                                                        </li>
+                                                                    </ul>
+                                                                </CardContent>
+                                                            </Card>
+                                                        )}
+
+                                                        {/* Card: Endereço de Entrega */}
+                                                        {row.original.raw
+                                                            ?.delivery
+                                                            ?.deliveryAddress && (
+                                                            <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+                                                                <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                                                                    <CardTitle className="flex h-[18px] items-center font-semibold">
+                                                                        Endereço
+                                                                        de
+                                                                        Entrega
+                                                                    </CardTitle>
+                                                                </CardHeader>
+                                                                <CardContent className="rounded-md bg-card p-0">
+                                                                    <ul className="m-0 flex w-full flex-col ps-0">
+                                                                        <li className="flex flex-col gap-1 px-3 py-2">
+                                                                            {row
+                                                                                .original
+                                                                                .raw
+                                                                                .delivery
+                                                                                .deliveryAddress
+                                                                                .streetName && (
+                                                                                <span className="text-xs text-muted-foreground">
+                                                                                    {
+                                                                                        row
+                                                                                            .original
+                                                                                            .raw
+                                                                                            .delivery
+                                                                                            .deliveryAddress
+                                                                                            .streetName
+                                                                                    }
+
+                                                                                    ,{' '}
+                                                                                    {
+                                                                                        row
+                                                                                            .original
+                                                                                            .raw
+                                                                                            .delivery
+                                                                                            .deliveryAddress
+                                                                                            .streetNumber
+                                                                                    }
+                                                                                </span>
+                                                                            )}
+                                                                            {row
+                                                                                .original
+                                                                                .raw
+                                                                                .delivery
+                                                                                .deliveryAddress
+                                                                                .neighborhood && (
+                                                                                <span className="text-xs text-muted-foreground">
+                                                                                    Bairro:{' '}
+                                                                                    {
+                                                                                        row
+                                                                                            .original
+                                                                                            .raw
+                                                                                            .delivery
+                                                                                            .deliveryAddress
+                                                                                            .neighborhood
+                                                                                    }
+                                                                                </span>
+                                                                            )}
+                                                                            {row
+                                                                                .original
+                                                                                .raw
+                                                                                .delivery
+                                                                                .deliveryAddress
+                                                                                .city && (
+                                                                                <span className="text-xs text-muted-foreground">
+                                                                                    Cidade:{' '}
+                                                                                    {
+                                                                                        row
+                                                                                            .original
+                                                                                            .raw
+                                                                                            .delivery
+                                                                                            .deliveryAddress
+                                                                                            .city
+                                                                                    }
+                                                                                </span>
+                                                                            )}
+                                                                            {row
+                                                                                .original
+                                                                                .raw
+                                                                                .delivery
+                                                                                .deliveryAddress
+                                                                                .state && (
+                                                                                <span className="text-xs text-muted-foreground">
+                                                                                    UF:{' '}
+                                                                                    {
+                                                                                        row
+                                                                                            .original
+                                                                                            .raw
+                                                                                            .delivery
+                                                                                            .deliveryAddress
+                                                                                            .state
+                                                                                    }
+                                                                                </span>
+                                                                            )}
+                                                                            {row
+                                                                                .original
+                                                                                .raw
+                                                                                .delivery
+                                                                                .deliveryAddress
+                                                                                .complement && (
+                                                                                <span className="text-xs text-muted-foreground">
+                                                                                    Complemento:{' '}
+                                                                                    {
+                                                                                        row
+                                                                                            .original
+                                                                                            .raw
+                                                                                            .delivery
+                                                                                            .deliveryAddress
+                                                                                            .complement
+                                                                                    }
+                                                                                </span>
+                                                                            )}
+                                                                            {row
+                                                                                .original
+                                                                                .raw
+                                                                                .delivery
+                                                                                .deliveryAddress
+                                                                                .reference && (
+                                                                                <span className="text-xs text-muted-foreground">
+                                                                                    Referência:{' '}
+                                                                                    {
+                                                                                        row
+                                                                                            .original
+                                                                                            .raw
+                                                                                            .delivery
+                                                                                            .deliveryAddress
+                                                                                            .reference
+                                                                                    }
+                                                                                </span>
+                                                                            )}
+                                                                            {row
+                                                                                .original
+                                                                                .raw
+                                                                                .delivery
+                                                                                .deliveryAddress
+                                                                                .postalCode && (
+                                                                                <span className="text-xs text-muted-foreground">
+                                                                                    CEP:{' '}
+                                                                                    {
+                                                                                        row
+                                                                                            .original
+                                                                                            .raw
+                                                                                            .delivery
+                                                                                            .deliveryAddress
+                                                                                            .postalCode
+                                                                                    }
+                                                                                </span>
+                                                                            )}
+                                                                        </li>
+                                                                    </ul>
+                                                                </CardContent>
+                                                            </Card>
+                                                        )}
                                                         {row.original.raw
                                                             ?.delivery
                                                             ?.observations && (
@@ -859,10 +1110,52 @@ export function DataTable({
                                                                         </CardTitle>
                                                                     </CardHeader>
                                                                     <CardContent className="rounded-md bg-card p-0">
+                                                                        {/* Total do pedido */}
+                                                                        <div className="flex w-full flex-row justify-between gap-2 border-b px-3 py-2">
+                                                                            <span className="text-sm font-semibold">
+                                                                                Total
+                                                                                do
+                                                                                pedido
+                                                                            </span>
+                                                                            <span className="text-sm font-semibold">
+                                                                                {new Intl.NumberFormat(
+                                                                                    'pt-BR',
+                                                                                    {
+                                                                                        style: 'currency',
+                                                                                        currency:
+                                                                                            'BRL',
+                                                                                    },
+                                                                                ).format(
+                                                                                    row
+                                                                                        .original
+                                                                                        .raw
+                                                                                        .total
+                                                                                        ?.orderAmount ??
+                                                                                        0,
+                                                                                )}
+                                                                            </span>
+                                                                        </div>
+                                                                        {/* Status de pagamento */}
+                                                                        <div className="flex w-full flex-row justify-between gap-2 border-b px-3 py-2">
+                                                                            <span className="text-sm font-semibold">
+                                                                                Pagamento
+                                                                            </span>
+                                                                            <span className="text-sm font-semibold">
+                                                                                {row
+                                                                                    .original
+                                                                                    .raw
+                                                                                    .payments
+                                                                                    .methods[0]
+                                                                                    ?.type ===
+                                                                                'ONLINE'
+                                                                                    ? 'Online'
+                                                                                    : 'Offline'}
+                                                                            </span>
+                                                                        </div>
                                                                         <ul className="m-0 flex w-full flex-col ps-0">
                                                                             {row.original.raw.payments.methods.map(
                                                                                 (
-                                                                                    payment: any,
+                                                                                    payment: unknown,
                                                                                     index: number,
                                                                                 ) => (
                                                                                     <li
@@ -949,7 +1242,7 @@ export function DataTable({
                                                                                                                 .replace(
                                                                                                                     /\b\w/g,
                                                                                                                     (
-                                                                                                                        l,
+                                                                                                                        l: string,
                                                                                                                     ) =>
                                                                                                                         l.toUpperCase(),
                                                                                                                 )}
@@ -987,14 +1280,12 @@ export function DataTable({
                                                                     </CardContent>
                                                                 </Card>
                                                             )}
-                                                    </div>
-                                                </div>
 
-                                                {/* Outros detalhes: Cupons, CPF, Agendamento, etc. */}
-                                                <div className="p-4 pt-0">
-                                                    <OrderExpandedDetails
-                                                        order={row.original}
-                                                    />
+                                                        {/* Outros detalhes: Cupons, CPF, Agendamento, etc. */}
+                                                        <OrderExpandedDetails
+                                                            order={row.original}
+                                                        />
+                                                    </div>
                                                 </div>
                                             </TableCell>
                                         </TableRow>

@@ -51,12 +51,70 @@ export type Order = {
     tax?: number | 0;
     extra_cost?: number | 0;
     net_total?: number | 0;
+    total_costs?: number | string | null;
+    total_commissions?: number | string | null;
+    net_revenue?: number | string | null;
+    costs_calculated_at?: string | null;
     items?: OrderItem[];
     raw: {
+        id?: string;
+        items?: any[];
         total?: {
+            benefits?: number;
+            subTotal?: number;
+            deliveryFee?: number;
             orderAmount?: number;
+            additionalFees?: number;
         };
+        isTest?: boolean;
+        picking?: any;
+        category?: string;
+        customer?: {
+            id?: string;
+            name?: string;
+            phone?: {
+                number?: string;
+                localizer?: string;
+                localizerExpiration?: string;
+            };
+            segmentation?: string;
+            ordersCountOnMerchant?: number;
+            documentNumber?: string;
+        };
+        delivery?: {
+            mode?: string;
+            pickupCode?: string;
+            deliveredBy?: string;
+            description?: string;
+            observations?: string;
+            deliveryAddress?: {
+                city?: string;
+                state?: string;
+                country?: string;
+                reference?: string;
+                complement?: string;
+                postalCode?: string;
+                streetName?: string;
+                coordinates?: {
+                    latitude?: number;
+                    longitude?: number;
+                };
+                neighborhood?: string;
+                streetNumber?: string;
+                formattedAddress?: string;
+            };
+            deliveryDateTime?: string;
+        };
+        merchant?: any;
+        payments?: any;
+        createdAt?: string;
+        displayId?: string;
         orderType?: string;
+        orderTiming?: string;
+        salesChannel?: string;
+        additionalFees?: any[];
+        preparationStartDateTime?: string;
+        [key: string]: any;
     };
     sale?: {
         id: number;
@@ -342,6 +400,66 @@ export const columns: ColumnDef<Order>[] = [
             ),
     },
     {
+        accessorKey: 'total_costs',
+        header: 'Custos',
+        cell: ({ row }) => {
+            const totalCosts = row.original.total_costs;
+            const isCancelled = row.original.status === 'CANCELLED';
+
+            if (totalCosts === null || totalCosts === undefined) {
+                return <span className="text-muted-foreground">--</span>;
+            }
+
+            const value =
+                typeof totalCosts === 'string'
+                    ? parseFloat(totalCosts)
+                    : totalCosts;
+
+            return (
+                <span
+                    className={`text-sm ${
+                        isCancelled ? 'text-muted-foreground line-through' : ''
+                    }`}
+                >
+                    {new Intl.NumberFormat('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL',
+                    }).format(value)}
+                </span>
+            );
+        },
+    },
+    {
+        accessorKey: 'total_commissions',
+        header: 'Comissões',
+        cell: ({ row }) => {
+            const totalCommissions = row.original.total_commissions;
+            const isCancelled = row.original.status === 'CANCELLED';
+
+            if (totalCommissions === null || totalCommissions === undefined) {
+                return <span className="text-muted-foreground">--</span>;
+            }
+
+            const value =
+                typeof totalCommissions === 'string'
+                    ? parseFloat(totalCommissions)
+                    : totalCommissions;
+
+            return (
+                <span
+                    className={`text-sm ${
+                        isCancelled ? 'text-muted-foreground line-through' : ''
+                    }`}
+                >
+                    {new Intl.NumberFormat('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL',
+                    }).format(value)}
+                </span>
+            );
+        },
+    },
+    {
         accessorKey: 'net_total',
         header: 'Total líquido',
         cell: ({ row }) => {
@@ -349,7 +467,7 @@ export const columns: ColumnDef<Order>[] = [
             const raw = row.original.raw;
             const orderTotal = raw?.total?.orderAmount ?? 0;
 
-            // Calcular custo total
+            // Calcular custo total dos produtos
             const totalCost = items.reduce((sum, item) => {
                 if (item.internal_product?.unit_cost) {
                     const quantity = item.qty || item.quantity || 0;
@@ -378,7 +496,18 @@ export const columns: ColumnDef<Order>[] = [
                 return sum;
             }, 0);
 
-            const netTotal = orderTotal - totalCost - totalTax;
+            // Adicionar custos e comissões da página "Custos e Comissões"
+            const extraCosts =
+                typeof row.original.total_costs === 'string'
+                    ? parseFloat(row.original.total_costs)
+                    : (row.original.total_costs ?? 0);
+            const commissions =
+                typeof row.original.total_commissions === 'string'
+                    ? parseFloat(row.original.total_commissions)
+                    : (row.original.total_commissions ?? 0);
+
+            const netTotal =
+                orderTotal - totalCost - totalTax - extraCosts - commissions;
             const isCancelled = row.original.status === 'CANCELLED';
 
             return orderTotal > 0 ? (
@@ -423,7 +552,7 @@ export const columns: ColumnDef<Order>[] = [
             if (!orderTotal || orderTotal <= 0)
                 return <span className="text-muted-foreground">--</span>;
 
-            // Calcular custo total
+            // Calcular custo total dos produtos
             const totalCost = items.reduce((sum, item) => {
                 if (item.internal_product?.unit_cost) {
                     const quantity = item.qty || item.quantity || 0;
@@ -452,7 +581,18 @@ export const columns: ColumnDef<Order>[] = [
                 return sum;
             }, 0);
 
-            const netTotal = orderTotal - totalCost - totalTax;
+            // Adicionar custos e comissões da página "Custos e Comissões"
+            const extraCosts =
+                typeof row.original.total_costs === 'string'
+                    ? parseFloat(row.original.total_costs)
+                    : (row.original.total_costs ?? 0);
+            const commissions =
+                typeof row.original.total_commissions === 'string'
+                    ? parseFloat(row.original.total_commissions)
+                    : (row.original.total_commissions ?? 0);
+
+            const netTotal =
+                orderTotal - totalCost - totalTax - extraCosts - commissions;
             const margin = (netTotal / orderTotal) * 100;
 
             if (margin === 0) {
@@ -485,6 +625,8 @@ export const columns: ColumnDef<Order>[] = [
             const order = row.original;
             // Extrai orderType do raw JSON
             const orderType = order.raw?.orderType || 'DELIVERY';
+            // Passe o objeto handshakeDispute completo, sem filtrar campos
+            const handshakeDispute = order.raw?.handshakeDispute ?? null;
 
             return (
                 <OrderActionsCell
@@ -492,6 +634,7 @@ export const columns: ColumnDef<Order>[] = [
                     orderStatus={order.status}
                     orderType={orderType}
                     provider={order.provider}
+                    handshakeDispute={handshakeDispute}
                 />
             );
         },
