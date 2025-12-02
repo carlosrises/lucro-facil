@@ -10,6 +10,9 @@ use App\Http\Controllers\ProductsController;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\ProductMappingController;
 use App\Http\Controllers\TaxCategoriesController;
+use App\Http\Controllers\FinanceCategoriesController;
+use App\Http\Controllers\FinanceEntriesController;
+use App\Http\Controllers\FinancialSummaryController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -30,6 +33,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('orders/{id}/ready', [OrdersController::class, 'ready'])->name('orders.ready');
     Route::post('orders/{id}/cancel', [OrdersController::class, 'cancel'])->name('orders.cancel');
     Route::get('orders/{id}/cancellation-reasons', [OrdersController::class, 'cancellationReasons'])->name('orders.cancellationReasons');
+
+    // Handshake Platform - Dispute actions (customer-initiated cancellation)
+    Route::post('orders/{id}/dispute/{disputeId}/accept', [OrdersController::class, 'acceptDispute'])->name('orders.acceptDispute');
+    Route::post('orders/{id}/dispute/{disputeId}/reject', [OrdersController::class, 'rejectDispute'])->name('orders.rejectDispute');
 
     Route::get('sales', [SalesController::class, 'index'])->name('sales.index');
 
@@ -102,6 +109,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('tax-categories', [TaxCategoriesController::class, 'store'])->name('tax-categories.store');
     Route::put('tax-categories/{taxCategory}', [TaxCategoriesController::class, 'update'])->name('tax-categories.update');
     Route::delete('tax-categories/{taxCategory}', [TaxCategoriesController::class, 'destroy'])->name('tax-categories.destroy');
+
+    // Financial
+    Route::get('financial/summary', [FinancialSummaryController::class, 'index'])->name('financial.summary');
+    Route::get('financial/categories', [FinanceCategoriesController::class, 'index'])->name('financial.categories');
+    Route::post('financial/categories', [FinanceCategoriesController::class, 'store'])->name('financial.categories.store');
+    Route::put('financial/categories/{category}', [FinanceCategoriesController::class, 'update'])->name('financial.categories.update');
+    Route::delete('financial/categories/{category}', [FinanceCategoriesController::class, 'destroy'])->name('financial.categories.destroy');
+    Route::get('financial/entries', [FinanceEntriesController::class, 'index'])->name('financial.entries');
+    Route::post('financial/entries', [FinanceEntriesController::class, 'store'])->name('financial.entries.store');
+    Route::put('financial/entries/{entry}', [FinanceEntriesController::class, 'update'])->name('financial.entries.update');
+    Route::delete('financial/entries/{entry}', [FinanceEntriesController::class, 'destroy'])->name('financial.entries.destroy');
 });
 
 require __DIR__.'/settings.php';

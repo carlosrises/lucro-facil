@@ -30,3 +30,10 @@ Schedule::command('ifood:sync-historical-sales --from=-7days')
     ->dailyAt('02:00')
     ->withoutOverlapping()
     ->runInBackground();
+
+// Gerar parcelas de movimentações financeiras recorrentes
+// Executa diariamente às 03:00
+Schedule::command('entries:generate-recurring')
+    ->dailyAt('03:00')
+    ->withoutOverlapping()
+    ->runInBackground();
