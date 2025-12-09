@@ -111,7 +111,7 @@ class TakeatIntegrationController extends Controller
     {
         $request->validate([
             'excluded_channels' => 'required|array',
-            'excluded_channels.*' => 'string|in:ifood,99food,keeta,pdv,delivery,totem',
+            'excluded_channels.*' => 'string|in:ifood,99food,neemo,keeta,pdv,delivery,totem',
         ]);
 
         logger()->info('⚙️ Takeat: Atualizando canais excluídos', [

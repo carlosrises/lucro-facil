@@ -199,6 +199,33 @@ class SyncTakeatOrders extends Command
         $deliveryFee = $session['is_delivery'] ? (float) ($session['delivery_tax_price'] ?? 0) : 0;
         $discount = (float) ($session['discount_total'] ?? 0);
 
+        // Calcular net_total baseado nos pagamentos reais (excluindo subsidiados)
+        // Pagamentos subsidiados geralmente têm keywords como "subsidiado", "desconto", "cupom"
+        $payments = $session['payments'] ?? [];
+        $realPaymentTotal = 0;
+        
+        foreach ($payments as $payment) {
+            $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+            $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
+            
+            // Ignorar pagamentos subsidiados (cupons/descontos do marketplace)
+            if (
+                str_contains($paymentName, 'subsidiado') ||
+                str_contains($paymentName, 'desconto') ||
+                str_contains($paymentName, 'cupom') ||
+                str_contains($paymentKeyword, 'subsidiado') ||
+                str_contains($paymentKeyword, 'desconto') ||
+                str_contains($paymentKeyword, 'cupom')
+            ) {
+                continue;
+            }
+            
+            $realPaymentTotal += (float) ($payment['payment_value'] ?? 0);
+        }
+        
+        // Se não houver pagamentos ou todos forem subsidiados, usar cálculo tradicional
+        $netTotal = $realPaymentTotal > 0 ? $realPaymentTotal : ($grossTotal - $discount);
+
         // Status baseado no order_status e completed_at
         $status = $this->mapTakeatStatus($basket['order_status'] ?? null, $session['status'] ?? null);
 
@@ -221,7 +248,7 @@ class SyncTakeatOrders extends Command
                 'discount_total' => $discount,
                 'delivery_fee' => $deliveryFee,
                 'tip' => 0, // Takeat não tem tip separado
-                'net_total' => $grossTotal - $discount,
+                'net_total' => $netTotal,
                 'placed_at' => $placedAt,
                 'raw' => [
                     'session' => $session,
@@ -239,6 +266,9 @@ class SyncTakeatOrders extends Command
             'basket_id' => $basketId,
             'channel' => $channel,
             'gross_total' => $grossTotal,
+            'net_total' => $netTotal,
+            'real_payment_total' => $realPaymentTotal,
+            'payments_count' => count($payments),
         ]);
     }
 

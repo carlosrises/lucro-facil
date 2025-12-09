@@ -51,6 +51,7 @@ interface Store {
 const AVAILABLE_CHANNELS = [
     { value: 'ifood', label: 'iFood' },
     { value: '99food', label: '99Food' },
+    { value: 'neemo', label: 'Neemo' },
     { value: 'keeta', label: 'Keeta' },
     { value: 'pdv', label: 'PDV/Presencial' },
     { value: 'delivery', label: 'Delivery Próprio' },

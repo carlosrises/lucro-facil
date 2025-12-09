@@ -174,28 +174,30 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                 </li>
                             )}
 
-                        {/* Total final (após descontos) */}
+                        {/* Total pago (após descontos, antes de impostos) */}
                         <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
                             <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
                                 <div className="flex items-center justify-center rounded-full bg-gray-200 p-1 text-gray-700">
                                     <ArrowRightLeft className="h-3 w-3" />
                                 </div>
                                 <span className="flex-grow text-sm leading-4 font-semibold">
-                                    Total final
+                                    Total pago pelo cliente
                                 </span>
                                 <span className="text-sm leading-4 font-semibold whitespace-nowrap">
                                     {new Intl.NumberFormat('pt-BR', {
                                         style: 'currency',
                                         currency: 'BRL',
-                                    }).format(
-                                        session.total_delivery_price
-                                            ? parseFloat(
-                                                  session.total_delivery_price,
-                                              )
-                                            : netTotal,
-                                    )}
+                                    }).format(netTotal)}
                                 </span>
                             </div>
+                            <ul className="flex w-full flex-col items-center justify-between pl-0">
+                                <li className="flex w-full flex-row items-start justify-between px-3 py-0">
+                                    <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                        Total do pedido após descontos, antes de
+                                        custos e impostos
+                                    </span>
+                                </li>
+                            </ul>
                         </li>
 
                         {/* Custos dos produtos */}
@@ -222,7 +224,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                             <ArrowDownLeft className="h-4 w-4" />
                                         </div>
                                         <span className="flex-grow text-sm leading-4 font-semibold">
-                                            Custos
+                                            Custo do Pedido
                                         </span>
                                         <span className="text-sm leading-4 whitespace-nowrap">
                                             -{' '}
@@ -348,12 +350,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                     <span className="positive text-sm leading-4 font-semibold text-green-700">
                                         {(() => {
                                             // Calcular total líquido: total_final - custos - impostos - taxas - comissões
-                                            const totalFinal =
-                                                session.total_delivery_price
-                                                    ? parseFloat(
-                                                          session.total_delivery_price,
-                                                      )
-                                                    : netTotal;
+                                            const totalFinal = netTotal;
 
                                             // Custos dos produtos
                                             const totalCost = (
