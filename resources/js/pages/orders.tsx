@@ -43,6 +43,12 @@ type OrdersPageProps = {
     stores: Store[];
     unmappedProductsCount: number;
     internalProducts: InternalProduct[];
+    marginSettings: {
+        margin_excellent: number;
+        margin_good_min: number;
+        margin_good_max: number;
+        margin_poor: number;
+    };
 };
 
 export default function Orders() {
@@ -52,6 +58,7 @@ export default function Orders() {
         stores,
         unmappedProductsCount,
         internalProducts,
+        marginSettings,
         auth,
     } = usePage<OrdersPageProps>().props;
 
@@ -82,6 +89,7 @@ export default function Orders() {
                             stores={stores}
                             unmappedProductsCount={unmappedProductsCount}
                             internalProducts={internalProducts}
+                            marginSettings={marginSettings}
                         />
                     </div>
                 </div>

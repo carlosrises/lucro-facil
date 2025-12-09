@@ -10,7 +10,11 @@ class Store extends Model
     use BelongsToTenant;
 
     protected $fillable = [
-        'tenant_id', 'provider', 'external_store_id', 'display_name', 'active',
+        'tenant_id', 'provider', 'external_store_id', 'display_name', 'active', 'excluded_channels',
+    ];
+
+    protected $casts = [
+        'excluded_channels' => 'array',
     ];
 
     public function tenant()

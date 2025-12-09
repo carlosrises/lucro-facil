@@ -14,8 +14,10 @@ import {
 } from '@/components/ui/tooltip';
 import { index as integrations } from '@/routes/integrations';
 import { AlertCircle } from 'lucide-react';
+import { NineNineFoodDrawer } from '../../components/settings/integrations/99food-drawer';
 import { IntegrationDrawer } from '../../components/settings/integrations/integration-drawer';
 import { MarketplaceCard } from '../../components/settings/integrations/marketplace-card';
+import { TakeatDrawer } from '../../components/settings/integrations/takeat-drawer';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -32,6 +34,12 @@ const marketplaces = [
         available: true,
     },
     {
+        name: 'Takeat',
+        logo: '/images/integrations/takeat.svg',
+        description: 'Integração com pedidos Takeat',
+        available: true,
+    },
+    {
         name: '99Food',
         logo: '/images/integrations/99food.jpg',
         description: 'Integração com pedidos 99Food',
@@ -43,12 +51,7 @@ const marketplaces = [
         description: 'Integração com pedidos Keeta',
         available: false,
     },
-    {
-        name: 'Takeat',
-        logo: '/images/integrations/takeat.svg',
-        description: 'Integração com pedidos Takeat',
-        available: false,
-    },
+
     {
         name: 'Saipos',
         logo: '/images/integrations/saipos.png',
@@ -94,6 +97,33 @@ export default function Integration() {
                             const showAlert =
                                 market.name.toLowerCase() === 'ifood' &&
                                 storesWithError.length > 0;
+
+                            // Renderiza drawer específico para 99Food
+                            if (market.name === '99Food' && market.available) {
+                                return (
+                                    <NineNineFoodDrawer
+                                        key={market.name}
+                                        name={market.name}
+                                        logo={market.logo}
+                                        description={market.description}
+                                        available={market.available}
+                                    />
+                                );
+                            }
+
+                            // Renderiza drawer específico para Takeat
+                            if (market.name === 'Takeat' && market.available) {
+                                return (
+                                    <TakeatDrawer
+                                        key={market.name}
+                                        name={market.name}
+                                        logo={market.logo}
+                                        description={market.description}
+                                        available={market.available}
+                                    />
+                                );
+                            }
+
                             return market.available ? (
                                 <div className="relative" key={market.name}>
                                     {showAlert && (

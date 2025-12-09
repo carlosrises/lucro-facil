@@ -43,6 +43,7 @@ export type Order = {
     code: string;
     status: string;
     provider: string;
+    origin: string; // Canal/origem do pedido (ifood, 99food, takeat, etc)
     placed_at: string | null;
     subtotal?: number | 0;
     fee?: number | 0;
@@ -256,7 +257,42 @@ export const columns: ColumnDef<Order>[] = [
     {
         accessorKey: 'provider',
         header: 'Canal',
-        cell: ({ row }) => <ProviderBadge provider={row.original.provider} />,
+        cell: ({ row }) => {
+            const { provider, origin } = row.original;
+            // Marketplaces que vêm via Takeat
+            const marketplaces = ['ifood', '99food', 'neemo', 'keeta'];
+
+            // Se for Takeat com origin de marketplace, mostra o marketplace com indicador
+            if (
+                provider === 'takeat' &&
+                origin &&
+                marketplaces.includes(origin)
+            ) {
+                return (
+                    <div className="flex items-center gap-1.5">
+                        <ProviderBadge provider={origin} />
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Badge
+                                        variant="outline"
+                                        className="h-5 px-1.5 text-[10px] font-normal"
+                                    >
+                                        via Takeat
+                                    </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Pedido integrado via Takeat</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                );
+            }
+
+            // Caso contrário, mostra o provider
+            return <ProviderBadge provider={provider} />;
+        },
     },
     {
         accessorKey: 'code',
@@ -282,10 +318,14 @@ export const columns: ColumnDef<Order>[] = [
         header: 'Total do pedido',
         cell: ({ row }) => {
             const raw = row.original.raw;
-            const amount = raw?.total?.orderAmount ?? null;
+            // iFood: raw.total.orderAmount
+            // Takeat: gross_total do banco
+            const amount =
+                raw?.total?.orderAmount ??
+                parseFloat(row.original.gross_total || '0');
             const isCancelled = row.original.status === 'CANCELLED';
 
-            return amount !== null ? (
+            return amount > 0 ? (
                 <span
                     className={`${isCancelled ? 'text-muted-foreground line-through' : ''}`}
                 >
@@ -531,11 +571,23 @@ export const columns: ColumnDef<Order>[] = [
     {
         id: 'margin',
         header: 'Margem',
-        cell: ({ row }) => {
+        cell: ({ row, table }) => {
             const items = row.original.items || [];
             const raw = row.original.raw;
             const orderTotal = raw?.total?.orderAmount ?? 0;
             const status = row.original.status;
+
+            // Pega marginSettings do table.options.meta
+            const marginSettings = (
+                table.options.meta as {
+                    marginSettings?: {
+                        margin_excellent: number;
+                        margin_good_min: number;
+                        margin_good_max: number;
+                        margin_poor: number;
+                    };
+                }
+            )?.marginSettings;
 
             // Cancelado -> badge secundário
             if (status === 'CANCELLED') {
@@ -603,17 +655,23 @@ export const columns: ColumnDef<Order>[] = [
                 );
             }
 
-            return (
-                <Badge
-                    className={
-                        margin > 0
-                            ? 'bg-green-500 text-white'
-                            : 'bg-red-500 text-white'
-                    }
-                >
-                    {margin.toFixed(1)}%
-                </Badge>
-            );
+            // Usa configurações de margem se disponíveis, senão usa valores padrão
+            let variant: 'default' | 'warning' | 'destructive' = 'default';
+
+            if (marginSettings) {
+                if (margin <= marginSettings.margin_poor) {
+                    variant = 'destructive'; // Vermelho - margem ruim
+                } else if (margin >= marginSettings.margin_excellent) {
+                    variant = 'default'; // Verde - margem excelente
+                } else {
+                    variant = 'warning'; // Laranja - margem boa
+                }
+            } else {
+                // Fallback para cores antigas se não houver configurações
+                variant = margin > 0 ? 'default' : 'destructive';
+            }
+
+            return <Badge variant={variant}>{margin.toFixed(1)}%</Badge>;
         },
     },
     {

@@ -41,4 +41,14 @@ return [
         'client_secret' => env('IFOOD_CLIENT_SECRET'),
     ],
 
+    '99food' => [
+        'base_url' => env('99FOOD_BASE_URL', 'https://api.99food.com.br/'), // TODO: Confirmar URL base
+        'client_id' => env('99FOOD_CLIENT_ID'),
+        'client_secret' => env('99FOOD_CLIENT_SECRET'),
+    ],
+
+    'takeat' => [
+        'base_url' => env('TAKEAT_BASE_URL', 'https://backend-pdv.takeat.app'),
+    ],
+
 ];

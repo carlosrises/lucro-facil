@@ -1,0 +1,220 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Store;
+use App\Services\TakeatClient;
+use Illuminate\Http\Request;
+
+class TakeatIntegrationController extends Controller
+{
+    /**
+     * Autentica com Takeat e salva token + informações do restaurante
+     */
+    public function login(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        logger()->info('🔐 Takeat: Tentativa de login', [
+            'tenant_id' => auth()->user()->tenant_id,
+            'user_id' => auth()->id(),
+            'email' => $request->email,
+        ]);
+
+        try {
+            $authData = TakeatClient::authenticate(
+                $request->email,
+                $request->password
+            );
+
+            $restaurantId = (string) $authData['restaurant']['id'];
+            $token = $authData['token'];
+            $tenantId = auth()->user()->tenant_id;
+
+            // Criar ou atualizar Store usando restaurant.id como identificador único
+            $store = Store::updateOrCreate(
+                [
+                    'tenant_id' => $tenantId,
+                    'provider' => 'takeat',
+                    'external_store_id' => $restaurantId, // ID do restaurante na Takeat
+                ],
+                [
+                    'display_name' => $authData['restaurant']['fantasy_name'] ?? $authData['restaurant']['name'],
+                    'active' => true,
+                    'excluded_channels' => [], // Inicialmente vazio
+                ]
+            );
+
+            // Salvar token JWT no OauthToken (expira em 15 dias)
+            $expiresAt = now()->addDays(15);
+
+            \App\Models\OauthToken::updateOrCreate(
+                [
+                    'tenant_id' => $tenantId,
+                    'store_id' => $store->id,
+                    'provider' => 'takeat',
+                ],
+                [
+                    'access_token' => $token,
+                    'refresh_token' => null, // Takeat não usa refresh token
+                    'expires_at' => $expiresAt,
+                    'scopes' => null,
+                ]
+            );
+
+            logger()->info('✅ Takeat: Login concluído com sucesso', [
+                'tenant_id' => $tenantId,
+                'store_id' => $store->id,
+                'restaurant_id' => $restaurantId,
+                'restaurant_name' => $store->display_name,
+                'token_expires_at' => $expiresAt->toIso8601String(),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'store' => $store,
+                'restaurant' => $authData['restaurant'],
+            ]);
+        } catch (\Throwable $e) {
+            logger()->error('❌ Takeat: Erro no login', [
+                'tenant_id' => auth()->user()->tenant_id,
+                'email' => $request->email,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao autenticar com Takeat',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }    /**
+     * Lista todas as lojas Takeat integradas
+     */
+    public function stores()
+    {
+        $stores = Store::where('tenant_id', auth()->user()->tenant_id)
+            ->where('provider', 'takeat')
+            ->get();
+
+        return response()->json(['stores' => $stores]);
+    }
+
+    /**
+     * Atualiza os canais excluídos de uma loja Takeat
+     */
+    public function updateExcludedChannels(Request $request, $id)
+    {
+        $request->validate([
+            'excluded_channels' => 'required|array',
+            'excluded_channels.*' => 'string|in:ifood,99food,keeta,pdv,delivery,totem',
+        ]);
+
+        logger()->info('⚙️ Takeat: Atualizando canais excluídos', [
+            'tenant_id' => auth()->user()->tenant_id,
+            'store_id' => $id,
+            'excluded_channels' => $request->excluded_channels,
+        ]);
+
+        try {
+            $store = Store::where('tenant_id', auth()->user()->tenant_id)
+                ->where('provider', 'takeat')
+                ->findOrFail($id);
+
+            $store->update([
+                'excluded_channels' => $request->excluded_channels,
+            ]);
+
+            logger()->info('✅ Takeat: Canais atualizados', [
+                'tenant_id' => auth()->user()->tenant_id,
+                'store_id' => $id,
+                'store_name' => $store->display_name,
+                'excluded_channels' => $request->excluded_channels,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'store' => $store,
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            logger()->warning('⚠️ Takeat: Loja não encontrada ao atualizar canais', [
+                'tenant_id' => auth()->user()->tenant_id,
+                'store_id' => $id,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Loja não encontrada.',
+            ], 404);
+        } catch (\Throwable $e) {
+            logger()->error('❌ Takeat: Erro ao atualizar canais', [
+                'tenant_id' => auth()->user()->tenant_id,
+                'store_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao atualizar canais excluídos.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Remove uma loja Takeat
+     */
+    public function destroy($id)
+    {
+        logger()->info('🗑️ Takeat: Tentativa de remover loja', [
+            'tenant_id' => auth()->user()->tenant_id,
+            'store_id' => $id,
+        ]);
+
+        try {
+            $store = Store::where('tenant_id', auth()->user()->tenant_id)
+                ->where('provider', 'takeat')
+                ->findOrFail($id);
+
+            $storeName = $store->display_name;
+            $store->delete();
+
+            logger()->info('✅ Takeat: Loja removida', [
+                'tenant_id' => auth()->user()->tenant_id,
+                'store_id' => $id,
+                'store_name' => $storeName,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Loja removida com sucesso.',
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            logger()->warning('⚠️ Takeat: Loja não encontrada ao tentar remover', [
+                'tenant_id' => auth()->user()->tenant_id,
+                'store_id' => $id,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Loja não encontrada.',
+            ], 404);
+        } catch (\Throwable $e) {
+            logger()->error('❌ Takeat: Erro ao remover loja', [
+                'tenant_id' => auth()->user()->tenant_id,
+                'store_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao remover a loja.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+}

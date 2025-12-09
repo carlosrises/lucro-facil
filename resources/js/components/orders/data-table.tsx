@@ -88,6 +88,7 @@ export function DataTable({
     stores,
     unmappedProductsCount = 0,
     internalProducts = [],
+    marginSettings,
 }: {
     data: Order[];
     pagination: Pagination;
@@ -100,6 +101,12 @@ export function DataTable({
         sku: string | null;
         unit_cost: string;
     }>;
+    marginSettings?: {
+        margin_excellent: number;
+        margin_good_min: number;
+        margin_good_max: number;
+        margin_poor: number;
+    };
 }) {
     const [sorting, setSorting] = React.useState<SortingState>([
         { id: 'placed_at', desc: true }, // 🔧 padrão: ordenado por data
@@ -219,6 +226,9 @@ export function DataTable({
         getFilteredRowModel: getFilteredRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getExpandedRowModel: getExpandedRowModel(),
+        meta: {
+            marginSettings,
+        },
     });
 
     return (
@@ -568,7 +578,18 @@ export function DataTable({
                                                                     Itens do
                                                                     Pedido{' '}
                                                                     <Badge className="text-14px/[16px] bg-gray-200 px-3 py-0 text-gray-600">
-                                                                        2
+                                                                        {(() => {
+                                                                            const items =
+                                                                                row
+                                                                                    .original
+                                                                                    .raw
+                                                                                    ?.items ||
+                                                                                row
+                                                                                    .original
+                                                                                    .items ||
+                                                                                [];
+                                                                            return items.length;
+                                                                        })()}
                                                                     </Badge>
                                                                 </CardTitle>
                                                             </CardHeader>
@@ -592,200 +613,246 @@ export function DataTable({
                                                                     </li>
 
                                                                     {/* Itens do pedido */}
-                                                                    {row.original.raw?.items?.map(
-                                                                        (
-                                                                            item: import('./columns').OrderItem,
-                                                                        ) => (
-                                                                            <li
-                                                                                key={
-                                                                                    item.id
-                                                                                }
-                                                                                className="flex flex-wrap items-center gap-2 px-3 py-2"
-                                                                            >
-                                                                                {/* Produto principal (1º nível) */}
-                                                                                <span className="md:min-w-[32px]">
-                                                                                    {
-                                                                                        item.quantity
-                                                                                    }
+                                                                    {(() => {
+                                                                        // Para iFood: usa raw.items
+                                                                        // Para Takeat: usa items do banco
+                                                                        const items =
+                                                                            row
+                                                                                .original
+                                                                                .raw
+                                                                                ?.items ||
+                                                                            row
+                                                                                .original
+                                                                                .items ||
+                                                                            [];
+                                                                        const displayItems =
+                                                                            items.map(
+                                                                                (
+                                                                                    item: any,
+                                                                                ) => ({
+                                                                                    id: item.id,
+                                                                                    quantity:
+                                                                                        item.quantity ||
+                                                                                        item.qty ||
+                                                                                        0,
+                                                                                    name: item.name,
+                                                                                    unitPrice:
+                                                                                        item.unitPrice ||
+                                                                                        item.unit_price ||
+                                                                                        item.price ||
+                                                                                        0,
+                                                                                    totalPrice:
+                                                                                        item.totalPrice ||
+                                                                                        item.price *
+                                                                                            (item.quantity ||
+                                                                                                item.qty ||
+                                                                                                0) ||
+                                                                                        0,
+                                                                                    observations:
+                                                                                        item.observations,
+                                                                                    options:
+                                                                                        item.options ||
+                                                                                        [],
+                                                                                    internal_product:
+                                                                                        item.internal_product,
+                                                                                }),
+                                                                            );
 
-                                                                                    x
-                                                                                </span>
-                                                                                <span className="grow font-medium">
-                                                                                    {
-                                                                                        item.name
+                                                                        return displayItems.map(
+                                                                            (
+                                                                                item: any,
+                                                                            ) => (
+                                                                                <li
+                                                                                    key={
+                                                                                        item.id
                                                                                     }
-                                                                                    {item.internal_product && (
-                                                                                        <div className="mt-1 text-xs font-semibold text-emerald-600">
-                                                                                            Custo:{' '}
-                                                                                            {new Intl.NumberFormat(
-                                                                                                'pt-BR',
+                                                                                    className="flex flex-wrap items-center gap-2 px-3 py-2"
+                                                                                >
+                                                                                    {/* Produto principal (1º nível) */}
+                                                                                    <span className="md:min-w-[32px]">
+                                                                                        {
+                                                                                            item.quantity
+                                                                                        }
+
+                                                                                        x
+                                                                                    </span>
+                                                                                    <span className="grow font-medium">
+                                                                                        {
+                                                                                            item.name
+                                                                                        }
+                                                                                        {item.internal_product && (
+                                                                                            <div className="mt-1 text-xs font-semibold text-emerald-600">
+                                                                                                Custo:{' '}
+                                                                                                {new Intl.NumberFormat(
+                                                                                                    'pt-BR',
+                                                                                                    {
+                                                                                                        style: 'currency',
+                                                                                                        currency:
+                                                                                                            'BRL',
+                                                                                                    },
+                                                                                                ).format(
+                                                                                                    parseFloat(
+                                                                                                        item
+                                                                                                            .internal_product
+                                                                                                            .unit_cost,
+                                                                                                    ),
+                                                                                                )}
+                                                                                            </div>
+                                                                                        )}
+                                                                                        {item.observations && (
+                                                                                            <div className="mt-1 text-xs text-muted-foreground italic">
+                                                                                                Obs:{' '}
                                                                                                 {
-                                                                                                    style: 'currency',
-                                                                                                    currency:
-                                                                                                        'BRL',
-                                                                                                },
-                                                                                            ).format(
-                                                                                                parseFloat(
-                                                                                                    item
-                                                                                                        .internal_product
-                                                                                                        .unit_cost,
+                                                                                                    item.observations
+                                                                                                }
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </span>
+                                                                                    <span className="hidden justify-end md:flex md:min-w-[120px]">
+                                                                                        {new Intl.NumberFormat(
+                                                                                            'pt-BR',
+                                                                                            {
+                                                                                                style: 'currency',
+                                                                                                currency:
+                                                                                                    'BRL',
+                                                                                            },
+                                                                                        ).format(
+                                                                                            item.unitPrice,
+                                                                                        )}
+                                                                                    </span>
+                                                                                    <span className="text-end md:min-w-[120px]">
+                                                                                        {new Intl.NumberFormat(
+                                                                                            'pt-BR',
+                                                                                            {
+                                                                                                style: 'currency',
+                                                                                                currency:
+                                                                                                    'BRL',
+                                                                                            },
+                                                                                        ).format(
+                                                                                            item.totalPrice,
+                                                                                        )}
+                                                                                    </span>
+
+                                                                                    {/* Segundo nível (options) */}
+                                                                                    {item
+                                                                                        .options
+                                                                                        ?.length >
+                                                                                        0 && (
+                                                                                        <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
+                                                                                            {item.options.map(
+                                                                                                (
+                                                                                                    opt: unknown,
+                                                                                                ) => (
+                                                                                                    <li
+                                                                                                        key={
+                                                                                                            opt.id
+                                                                                                        }
+                                                                                                        className="flex flex-wrap items-center gap-2 py-2 text-muted-foreground"
+                                                                                                    >
+                                                                                                        <span className="text-start md:min-w-[32px]">
+                                                                                                            {
+                                                                                                                opt.quantity
+                                                                                                            }
+
+                                                                                                            x
+                                                                                                        </span>
+                                                                                                        <span className="grow">
+                                                                                                            {
+                                                                                                                opt.name
+                                                                                                            }
+                                                                                                        </span>
+                                                                                                        <span className="hidden justify-end text-end md:flex md:min-w-[120px]">
+                                                                                                            {new Intl.NumberFormat(
+                                                                                                                'pt-BR',
+                                                                                                                {
+                                                                                                                    style: 'currency',
+                                                                                                                    currency:
+                                                                                                                        'BRL',
+                                                                                                                },
+                                                                                                            ).format(
+                                                                                                                opt.unitPrice,
+                                                                                                            )}
+                                                                                                        </span>
+                                                                                                        <span className="text-end md:min-w-[120px]">
+                                                                                                            {new Intl.NumberFormat(
+                                                                                                                'pt-BR',
+                                                                                                                {
+                                                                                                                    style: 'currency',
+                                                                                                                    currency:
+                                                                                                                        'BRL',
+                                                                                                                },
+                                                                                                            ).format(
+                                                                                                                opt.price ??
+                                                                                                                    opt.totalPrice ??
+                                                                                                                    0,
+                                                                                                            )}
+                                                                                                        </span>
+
+                                                                                                        {/* Terceiro nível (customizations) */}
+                                                                                                        {opt
+                                                                                                            .customizations
+                                                                                                            ?.length >
+                                                                                                            0 && (
+                                                                                                            <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
+                                                                                                                {opt.customizations.map(
+                                                                                                                    (
+                                                                                                                        cust: unknown,
+                                                                                                                    ) => (
+                                                                                                                        <li
+                                                                                                                            key={
+                                                                                                                                cust.id
+                                                                                                                            }
+                                                                                                                            className="flex flex-wrap items-center gap-2 py-2"
+                                                                                                                        >
+                                                                                                                            <span className="ms-5 grow border-s-2 border-muted-foreground ps-5 text-muted-foreground">
+                                                                                                                                {
+                                                                                                                                    cust.quantity
+                                                                                                                                }
+
+                                                                                                                                x{' '}
+                                                                                                                                {
+                                                                                                                                    cust.name
+                                                                                                                                }
+                                                                                                                            </span>
+                                                                                                                            <span className="hidden justify-end text-end text-muted-foreground md:flex md:min-w-[120px]">
+                                                                                                                                {new Intl.NumberFormat(
+                                                                                                                                    'pt-BR',
+                                                                                                                                    {
+                                                                                                                                        style: 'currency',
+                                                                                                                                        currency:
+                                                                                                                                            'BRL',
+                                                                                                                                    },
+                                                                                                                                ).format(
+                                                                                                                                    cust.unitPrice,
+                                                                                                                                )}
+                                                                                                                            </span>
+                                                                                                                            <span className="text-end text-muted-foreground md:min-w-[120px]">
+                                                                                                                                {new Intl.NumberFormat(
+                                                                                                                                    'pt-BR',
+                                                                                                                                    {
+                                                                                                                                        style: 'currency',
+                                                                                                                                        currency:
+                                                                                                                                            'BRL',
+                                                                                                                                    },
+                                                                                                                                ).format(
+                                                                                                                                    cust.price ??
+                                                                                                                                        0,
+                                                                                                                                )}
+                                                                                                                            </span>
+                                                                                                                        </li>
+                                                                                                                    ),
+                                                                                                                )}
+                                                                                                            </ul>
+                                                                                                        )}
+                                                                                                    </li>
                                                                                                 ),
                                                                                             )}
-                                                                                        </div>
+                                                                                        </ul>
                                                                                     )}
-                                                                                    {item.observations && (
-                                                                                        <div className="mt-1 text-xs text-muted-foreground italic">
-                                                                                            Obs:{' '}
-                                                                                            {
-                                                                                                item.observations
-                                                                                            }
-                                                                                        </div>
-                                                                                    )}
-                                                                                </span>
-                                                                                <span className="hidden justify-end md:flex md:min-w-[120px]">
-                                                                                    {new Intl.NumberFormat(
-                                                                                        'pt-BR',
-                                                                                        {
-                                                                                            style: 'currency',
-                                                                                            currency:
-                                                                                                'BRL',
-                                                                                        },
-                                                                                    ).format(
-                                                                                        item.unitPrice,
-                                                                                    )}
-                                                                                </span>
-                                                                                <span className="text-end md:min-w-[120px]">
-                                                                                    {new Intl.NumberFormat(
-                                                                                        'pt-BR',
-                                                                                        {
-                                                                                            style: 'currency',
-                                                                                            currency:
-                                                                                                'BRL',
-                                                                                        },
-                                                                                    ).format(
-                                                                                        item.totalPrice,
-                                                                                    )}
-                                                                                </span>
-
-                                                                                {/* Segundo nível (options) */}
-                                                                                {item
-                                                                                    .options
-                                                                                    ?.length >
-                                                                                    0 && (
-                                                                                    <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
-                                                                                        {item.options.map(
-                                                                                            (
-                                                                                                opt: unknown,
-                                                                                            ) => (
-                                                                                                <li
-                                                                                                    key={
-                                                                                                        opt.id
-                                                                                                    }
-                                                                                                    className="flex flex-wrap items-center gap-2 py-2 text-muted-foreground"
-                                                                                                >
-                                                                                                    <span className="text-start md:min-w-[32px]">
-                                                                                                        {
-                                                                                                            opt.quantity
-                                                                                                        }
-
-                                                                                                        x
-                                                                                                    </span>
-                                                                                                    <span className="grow">
-                                                                                                        {
-                                                                                                            opt.name
-                                                                                                        }
-                                                                                                    </span>
-                                                                                                    <span className="hidden justify-end text-end md:flex md:min-w-[120px]">
-                                                                                                        {new Intl.NumberFormat(
-                                                                                                            'pt-BR',
-                                                                                                            {
-                                                                                                                style: 'currency',
-                                                                                                                currency:
-                                                                                                                    'BRL',
-                                                                                                            },
-                                                                                                        ).format(
-                                                                                                            opt.unitPrice,
-                                                                                                        )}
-                                                                                                    </span>
-                                                                                                    <span className="text-end md:min-w-[120px]">
-                                                                                                        {new Intl.NumberFormat(
-                                                                                                            'pt-BR',
-                                                                                                            {
-                                                                                                                style: 'currency',
-                                                                                                                currency:
-                                                                                                                    'BRL',
-                                                                                                            },
-                                                                                                        ).format(
-                                                                                                            opt.price ??
-                                                                                                                opt.totalPrice ??
-                                                                                                                0,
-                                                                                                        )}
-                                                                                                    </span>
-
-                                                                                                    {/* Terceiro nível (customizations) */}
-                                                                                                    {opt
-                                                                                                        .customizations
-                                                                                                        ?.length >
-                                                                                                        0 && (
-                                                                                                        <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
-                                                                                                            {opt.customizations.map(
-                                                                                                                (
-                                                                                                                    cust: unknown,
-                                                                                                                ) => (
-                                                                                                                    <li
-                                                                                                                        key={
-                                                                                                                            cust.id
-                                                                                                                        }
-                                                                                                                        className="flex flex-wrap items-center gap-2 py-2"
-                                                                                                                    >
-                                                                                                                        <span className="ms-5 grow border-s-2 border-muted-foreground ps-5 text-muted-foreground">
-                                                                                                                            {
-                                                                                                                                cust.quantity
-                                                                                                                            }
-
-                                                                                                                            x{' '}
-                                                                                                                            {
-                                                                                                                                cust.name
-                                                                                                                            }
-                                                                                                                        </span>
-                                                                                                                        <span className="hidden justify-end text-end text-muted-foreground md:flex md:min-w-[120px]">
-                                                                                                                            {new Intl.NumberFormat(
-                                                                                                                                'pt-BR',
-                                                                                                                                {
-                                                                                                                                    style: 'currency',
-                                                                                                                                    currency:
-                                                                                                                                        'BRL',
-                                                                                                                                },
-                                                                                                                            ).format(
-                                                                                                                                cust.unitPrice,
-                                                                                                                            )}
-                                                                                                                        </span>
-                                                                                                                        <span className="text-end text-muted-foreground md:min-w-[120px]">
-                                                                                                                            {new Intl.NumberFormat(
-                                                                                                                                'pt-BR',
-                                                                                                                                {
-                                                                                                                                    style: 'currency',
-                                                                                                                                    currency:
-                                                                                                                                        'BRL',
-                                                                                                                                },
-                                                                                                                            ).format(
-                                                                                                                                cust.price ??
-                                                                                                                                    0,
-                                                                                                                            )}
-                                                                                                                        </span>
-                                                                                                                    </li>
-                                                                                                                ),
-                                                                                                            )}
-                                                                                                        </ul>
-                                                                                                    )}
-                                                                                                </li>
-                                                                                            ),
-                                                                                        )}
-                                                                                    </ul>
-                                                                                )}
-                                                                            </li>
-                                                                        ),
-                                                                    )}
+                                                                                </li>
+                                                                            ),
+                                                                        );
+                                                                    })()}
                                                                 </ul>
 
                                                                 {/* Rodapé com total */}
@@ -798,21 +865,35 @@ export function DataTable({
                                                                         </span>
                                                                         <span className="leading-4 font-semibold">
                                                                             {(() => {
+                                                                                // Para iFood: usa raw.items
+                                                                                // Para Takeat: usa items do banco
                                                                                 const items =
                                                                                     row
                                                                                         .original
                                                                                         .raw
                                                                                         ?.items ||
+                                                                                    row
+                                                                                        .original
+                                                                                        .items ||
                                                                                     [];
                                                                                 const total =
                                                                                     items.reduce(
                                                                                         (
                                                                                             sum,
-                                                                                            item,
-                                                                                        ) =>
-                                                                                            sum +
-                                                                                            (item.totalPrice ||
-                                                                                                0),
+                                                                                            item: any,
+                                                                                        ) => {
+                                                                                            const price =
+                                                                                                item.totalPrice ||
+                                                                                                item.price *
+                                                                                                    (item.quantity ||
+                                                                                                        item.qty ||
+                                                                                                        0) ||
+                                                                                                0;
+                                                                                            return (
+                                                                                                sum +
+                                                                                                price
+                                                                                            );
+                                                                                        },
                                                                                         0,
                                                                                     );
                                                                                 return new Intl.NumberFormat(
@@ -1096,66 +1177,218 @@ export function DataTable({
                                                         />
 
                                                         {/* Card: Pagamento (abaixo do detalhamento) */}
-                                                        {row.original.raw
-                                                            ?.payments
-                                                            ?.methods &&
-                                                            row.original.raw
-                                                                .payments
-                                                                .methods
-                                                                .length > 0 && (
-                                                                <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
-                                                                    <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
-                                                                        <CardTitle className="flex h-[18px] items-center font-semibold">
-                                                                            Pagamento
-                                                                        </CardTitle>
-                                                                    </CardHeader>
-                                                                    <CardContent className="rounded-md bg-card p-0">
-                                                                        {/* Total do pedido */}
-                                                                        <div className="flex w-full flex-row justify-between gap-2 border-b px-3 py-2">
-                                                                            <span className="text-sm font-semibold">
-                                                                                Total
-                                                                                do
-                                                                                pedido
-                                                                            </span>
-                                                                            <span className="text-sm font-semibold">
-                                                                                {new Intl.NumberFormat(
-                                                                                    'pt-BR',
-                                                                                    {
-                                                                                        style: 'currency',
-                                                                                        currency:
-                                                                                            'BRL',
-                                                                                    },
-                                                                                ).format(
+                                                        <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+                                                            <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                                                                <CardTitle className="flex h-[18px] items-center font-semibold">
+                                                                    Pagamento
+                                                                </CardTitle>
+                                                            </CardHeader>
+                                                            <CardContent className="rounded-md bg-card p-0">
+                                                                {/* Total do pedido */}
+                                                                <div className="flex w-full flex-row justify-between gap-2 border-b px-3 py-2">
+                                                                    <span className="text-sm font-semibold">
+                                                                        Total do
+                                                                        pedido
+                                                                    </span>
+                                                                    <span className="text-sm font-semibold">
+                                                                        {new Intl.NumberFormat(
+                                                                            'pt-BR',
+                                                                            {
+                                                                                style: 'currency',
+                                                                                currency:
+                                                                                    'BRL',
+                                                                            },
+                                                                        ).format(
+                                                                            // iFood: raw.total.orderAmount
+                                                                            // Takeat: gross_total
+                                                                            row
+                                                                                .original
+                                                                                .raw
+                                                                                ?.total
+                                                                                ?.orderAmount ??
+                                                                                parseFloat(
                                                                                     row
                                                                                         .original
+                                                                                        .gross_total ||
+                                                                                        '0',
+                                                                                ),
+                                                                        )}
+                                                                    </span>
+                                                                </div>
+
+                                                                {/* Detalhes de pagamento - iFood */}
+                                                                {row.original
+                                                                    .raw
+                                                                    ?.payments
+                                                                    ?.methods &&
+                                                                    row.original
+                                                                        .raw
+                                                                        .payments
+                                                                        .methods
+                                                                        .length >
+                                                                        0 && (
+                                                                        <>
+                                                                            <div className="flex w-full flex-row justify-between gap-2 border-b px-3 py-2">
+                                                                                <span className="text-sm font-semibold">
+                                                                                    Pagamento
+                                                                                </span>
+                                                                                <span className="text-sm font-semibold">
+                                                                                    {row
+                                                                                        .original
                                                                                         .raw
-                                                                                        .total
-                                                                                        ?.orderAmount ??
-                                                                                        0,
+                                                                                        .payments
+                                                                                        .methods[0]
+                                                                                        ?.type ===
+                                                                                    'ONLINE'
+                                                                                        ? 'Online'
+                                                                                        : 'Offline'}
+                                                                                </span>
+                                                                            </div>
+                                                                            <ul className="m-0 flex w-full flex-col ps-0">
+                                                                                {row.original.raw.payments.methods.map(
+                                                                                    (
+                                                                                        payment: unknown,
+                                                                                        index: number,
+                                                                                    ) => (
+                                                                                        <li
+                                                                                            key={
+                                                                                                index
+                                                                                            }
+                                                                                            className="flex flex-col gap-2 border-b-1 px-3 py-4 last:border-b-0"
+                                                                                        >
+                                                                                            <div className="flex w-full flex-row items-center justify-between gap-2">
+                                                                                                <div className="flex items-center gap-2">
+                                                                                                    <span className="text-sm leading-4 font-medium">
+                                                                                                        {payment.method ===
+                                                                                                        'CASH'
+                                                                                                            ? 'Dinheiro'
+                                                                                                            : payment.method ===
+                                                                                                                'CREDIT'
+                                                                                                              ? 'Crédito'
+                                                                                                              : payment.method ===
+                                                                                                                  'DEBIT'
+                                                                                                                ? 'Débito'
+                                                                                                                : payment.method ===
+                                                                                                                    'MEAL_VOUCHER'
+                                                                                                                  ? 'Vale Refeição'
+                                                                                                                  : payment.method ===
+                                                                                                                      'FOOD_VOUCHER'
+                                                                                                                    ? 'Vale Alimentação'
+                                                                                                                    : payment.method ===
+                                                                                                                        'DIGITAL_WALLET'
+                                                                                                                      ? 'Carteira Digital'
+                                                                                                                      : payment.method ===
+                                                                                                                          'PIX'
+                                                                                                                        ? 'PIX'
+                                                                                                                        : payment.method}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                                <span className="text-sm leading-4 font-semibold whitespace-nowrap">
+                                                                                                    {new Intl.NumberFormat(
+                                                                                                        'pt-BR',
+                                                                                                        {
+                                                                                                            style: 'currency',
+                                                                                                            currency:
+                                                                                                                'BRL',
+                                                                                                        },
+                                                                                                    ).format(
+                                                                                                        payment.value ||
+                                                                                                            0,
+                                                                                                    )}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            {(payment
+                                                                                                .card
+                                                                                                ?.brand ||
+                                                                                                payment
+                                                                                                    .wallet
+                                                                                                    ?.name ||
+                                                                                                payment
+                                                                                                    .cash
+                                                                                                    ?.changeFor) && (
+                                                                                                <ul className="flex w-full flex-col gap-2 pl-0">
+                                                                                                    {payment
+                                                                                                        .card
+                                                                                                        ?.brand && (
+                                                                                                        <li className="flex w-full flex-row items-start justify-between px-0 py-0">
+                                                                                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                                                                {
+                                                                                                                    payment
+                                                                                                                        .card
+                                                                                                                        .brand
+                                                                                                                }
+                                                                                                            </span>
+                                                                                                        </li>
+                                                                                                    )}
+                                                                                                    {payment
+                                                                                                        .wallet
+                                                                                                        ?.name && (
+                                                                                                        <li className="flex w-full flex-row items-start justify-between px-0 py-0">
+                                                                                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                                                                {payment.wallet.name
+                                                                                                                    .replace(
+                                                                                                                        '_',
+                                                                                                                        ' ',
+                                                                                                                    )
+                                                                                                                    .toLowerCase()
+                                                                                                                    .replace(
+                                                                                                                        /\b\w/g,
+                                                                                                                        (
+                                                                                                                            l: string,
+                                                                                                                        ) =>
+                                                                                                                            l.toUpperCase(),
+                                                                                                                    )}
+                                                                                                            </span>
+                                                                                                        </li>
+                                                                                                    )}
+                                                                                                    {payment
+                                                                                                        .cash
+                                                                                                        ?.changeFor && (
+                                                                                                        <li className="flex w-full flex-row items-start justify-between px-0 py-0">
+                                                                                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                                                                Troco
+                                                                                                                para:{' '}
+                                                                                                                {new Intl.NumberFormat(
+                                                                                                                    'pt-BR',
+                                                                                                                    {
+                                                                                                                        style: 'currency',
+                                                                                                                        currency:
+                                                                                                                            'BRL',
+                                                                                                                    },
+                                                                                                                ).format(
+                                                                                                                    payment
+                                                                                                                        .cash
+                                                                                                                        .changeFor,
+                                                                                                                )}
+                                                                                                            </span>
+                                                                                                        </li>
+                                                                                                    )}
+                                                                                                </ul>
+                                                                                            )}
+                                                                                        </li>
+                                                                                    ),
                                                                                 )}
-                                                                            </span>
-                                                                        </div>
-                                                                        {/* Status de pagamento */}
-                                                                        <div className="flex w-full flex-row justify-between gap-2 border-b px-3 py-2">
-                                                                            <span className="text-sm font-semibold">
-                                                                                Pagamento
-                                                                            </span>
-                                                                            <span className="text-sm font-semibold">
-                                                                                {row
-                                                                                    .original
-                                                                                    .raw
-                                                                                    .payments
-                                                                                    .methods[0]
-                                                                                    ?.type ===
-                                                                                'ONLINE'
-                                                                                    ? 'Online'
-                                                                                    : 'Offline'}
-                                                                            </span>
-                                                                        </div>
+                                                                            </ul>
+                                                                        </>
+                                                                    )}
+
+                                                                {/* Detalhes de pagamento - Takeat */}
+                                                                {row.original
+                                                                    .raw
+                                                                    ?.session
+                                                                    ?.bills?.[0]
+                                                                    ?.payments &&
+                                                                    row.original
+                                                                        .raw
+                                                                        .session
+                                                                        .bills[0]
+                                                                        .payments
+                                                                        .length >
+                                                                        0 && (
                                                                         <ul className="m-0 flex w-full flex-col ps-0">
-                                                                            {row.original.raw.payments.methods.map(
+                                                                            {row.original.raw.session.bills[0].payments.map(
                                                                                 (
-                                                                                    payment: unknown,
+                                                                                    payment: any,
                                                                                     index: number,
                                                                                 ) => (
                                                                                     <li
@@ -1167,31 +1400,13 @@ export function DataTable({
                                                                                         <div className="flex w-full flex-row items-center justify-between gap-2">
                                                                                             <div className="flex items-center gap-2">
                                                                                                 <span className="text-sm leading-4 font-medium">
-                                                                                                    {payment.method ===
-                                                                                                    'CASH'
-                                                                                                        ? 'Dinheiro'
-                                                                                                        : payment.method ===
-                                                                                                            'CREDIT'
-                                                                                                          ? 'Crédito'
-                                                                                                          : payment.method ===
-                                                                                                              'DEBIT'
-                                                                                                            ? 'Débito'
-                                                                                                            : payment.method ===
-                                                                                                                'MEAL_VOUCHER'
-                                                                                                              ? 'Vale Refeição'
-                                                                                                              : payment.method ===
-                                                                                                                  'FOOD_VOUCHER'
-                                                                                                                ? 'Vale Alimentação'
-                                                                                                                : payment.method ===
-                                                                                                                    'DIGITAL_WALLET'
-                                                                                                                  ? 'Carteira Digital'
-                                                                                                                  : payment.method ===
-                                                                                                                      'PIX'
-                                                                                                                    ? 'PIX'
-                                                                                                                    : payment.method}
+                                                                                                    {payment
+                                                                                                        .payment_method
+                                                                                                        ?.name ||
+                                                                                                        'Pagamento'}
                                                                                                 </span>
                                                                                             </div>
-                                                                                            <span className="text-sm leading-4 font-semibold whitespace-nowrap">
+                                                                                            <span className="text-sm font-semibold">
                                                                                                 {new Intl.NumberFormat(
                                                                                                     'pt-BR',
                                                                                                     {
@@ -1200,86 +1415,46 @@ export function DataTable({
                                                                                                             'BRL',
                                                                                                     },
                                                                                                 ).format(
-                                                                                                    payment.value ||
-                                                                                                        0,
+                                                                                                    parseFloat(
+                                                                                                        payment.payment_value ||
+                                                                                                            '0',
+                                                                                                    ),
                                                                                                 )}
                                                                                             </span>
                                                                                         </div>
-                                                                                        {(payment
-                                                                                            .card
-                                                                                            ?.brand ||
-                                                                                            payment
-                                                                                                .wallet
-                                                                                                ?.name ||
-                                                                                            payment
-                                                                                                .cash
-                                                                                                ?.changeFor) && (
-                                                                                            <ul className="flex w-full flex-col gap-2 pl-0">
-                                                                                                {payment
-                                                                                                    .card
-                                                                                                    ?.brand && (
-                                                                                                    <li className="flex w-full flex-row items-start justify-between px-0 py-0">
-                                                                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+
+                                                                                        {payment.change &&
+                                                                                            parseFloat(
+                                                                                                payment.change,
+                                                                                            ) >
+                                                                                                0 && (
+                                                                                                <div className="flex w-full flex-row justify-between gap-2 text-xs text-muted-foreground">
+                                                                                                    <span>
+                                                                                                        Troco
+                                                                                                    </span>
+                                                                                                    <span>
+                                                                                                        {new Intl.NumberFormat(
+                                                                                                            'pt-BR',
                                                                                                             {
-                                                                                                                payment
-                                                                                                                    .card
-                                                                                                                    .brand
-                                                                                                            }
-                                                                                                        </span>
-                                                                                                    </li>
-                                                                                                )}
-                                                                                                {payment
-                                                                                                    .wallet
-                                                                                                    ?.name && (
-                                                                                                    <li className="flex w-full flex-row items-start justify-between px-0 py-0">
-                                                                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                                                                            {payment.wallet.name
-                                                                                                                .replace(
-                                                                                                                    '_',
-                                                                                                                    ' ',
-                                                                                                                )
-                                                                                                                .toLowerCase()
-                                                                                                                .replace(
-                                                                                                                    /\b\w/g,
-                                                                                                                    (
-                                                                                                                        l: string,
-                                                                                                                    ) =>
-                                                                                                                        l.toUpperCase(),
-                                                                                                                )}
-                                                                                                        </span>
-                                                                                                    </li>
-                                                                                                )}
-                                                                                                {payment
-                                                                                                    .cash
-                                                                                                    ?.changeFor && (
-                                                                                                    <li className="flex w-full flex-row items-start justify-between px-0 py-0">
-                                                                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                                                                            Troco
-                                                                                                            para:{' '}
-                                                                                                            {new Intl.NumberFormat(
-                                                                                                                'pt-BR',
-                                                                                                                {
-                                                                                                                    style: 'currency',
-                                                                                                                    currency:
-                                                                                                                        'BRL',
-                                                                                                                },
-                                                                                                            ).format(
-                                                                                                                payment
-                                                                                                                    .cash
-                                                                                                                    .changeFor,
-                                                                                                            )}
-                                                                                                        </span>
-                                                                                                    </li>
-                                                                                                )}
-                                                                                            </ul>
-                                                                                        )}
+                                                                                                                style: 'currency',
+                                                                                                                currency:
+                                                                                                                    'BRL',
+                                                                                                            },
+                                                                                                        ).format(
+                                                                                                            parseFloat(
+                                                                                                                payment.change,
+                                                                                                            ),
+                                                                                                        )}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                            )}
                                                                                     </li>
                                                                                 ),
                                                                             )}
                                                                         </ul>
-                                                                    </CardContent>
-                                                                </Card>
-                                                            )}
+                                                                    )}
+                                                            </CardContent>
+                                                        </Card>
 
                                                         {/* Outros detalhes: Cupons, CPF, Agendamento, etc. */}
                                                         <OrderExpandedDetails

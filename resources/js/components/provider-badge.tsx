@@ -25,6 +25,11 @@ const providerConfig: Record<
         style: 'h-3 w-auto',
         logo: '/images/99food.png',
     },
+    neemo: {
+        label: 'Neemo',
+        style: 'h-5 w-auto',
+        logo: '/images/neemo.png',
+    },
 };
 
 export function ProviderBadge({ provider }: Props) {

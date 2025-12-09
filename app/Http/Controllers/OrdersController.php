@@ -17,7 +17,7 @@ class OrdersController extends Controller
     {
         $query = Order::query()
             ->select([
-                'id', 'order_uuid', 'code', 'status', 'provider',
+                'id', 'order_uuid', 'code', 'status', 'provider', 'origin',
                 'store_id', 'placed_at', 'gross_total', 'discount_total',
                 'delivery_fee', 'tip', 'net_total', 'raw', 'tenant_id',
                 'total_costs', 'total_commissions', 'net_revenue', 'costs_calculated_at',
@@ -83,6 +83,9 @@ class OrdersController extends Controller
             ->orderBy('name')
             ->get();
 
+        // Buscar configurações de margem do tenant
+        $tenant = \App\Models\Tenant::find(tenant_id());
+
         return Inertia::render('orders', [
             'orders' => $orders,
             'filters' => [
@@ -97,6 +100,12 @@ class OrdersController extends Controller
             'stores' => $stores,
             'unmappedProductsCount' => $unmappedProductsCount,
             'internalProducts' => $internalProducts,
+            'marginSettings' => [
+                'margin_excellent' => (float) ($tenant->margin_excellent ?? 100.00),
+                'margin_good_min' => (float) ($tenant->margin_good_min ?? 30.00),
+                'margin_good_max' => (float) ($tenant->margin_good_max ?? 99.99),
+                'margin_poor' => (float) ($tenant->margin_poor ?? 0.00),
+            ],
         ]);
     }
 

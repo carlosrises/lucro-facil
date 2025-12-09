@@ -12,6 +12,20 @@ return Application::configure(basePath: dirname(__DIR__))
         web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        then: function () {
+            Route::middleware('web')
+                ->group(base_path('routes/auth.php'));
+            Route::middleware('web')
+                ->group(base_path('routes/settings.php'));
+            Route::middleware('web')
+                ->group(base_path('routes/admin.php'));
+            Route::middleware('web')
+                ->group(base_path('routes/ifood.php'));
+            Route::middleware('web')
+                ->group(base_path('routes/99food.php'));
+            Route::middleware('web')
+                ->group(base_path('routes/takeat.php'));
+        },
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
