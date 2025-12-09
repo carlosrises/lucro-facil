@@ -52,6 +52,9 @@ export type Order = {
     tax?: number | 0;
     extra_cost?: number | 0;
     net_total?: number | 0;
+    gross_total?: string | null;
+    discount_total?: string | null;
+    delivery_fee?: string | null;
     total_costs?: number | string | null;
     total_commissions?: number | string | null;
     net_revenue?: number | string | null;
@@ -505,6 +508,83 @@ export const columns: ColumnDef<Order>[] = [
         cell: ({ row }) => {
             const items = row.original.items || [];
             const raw = row.original.raw;
+
+            // Para Takeat, calcular net_total considerando custos, impostos e taxas
+            if (row.original.provider === 'takeat') {
+                // Pegar o total final do pedido
+                const totalFinal =
+                    typeof row.original.net_total === 'string'
+                        ? parseFloat(row.original.net_total)
+                        : (row.original.net_total ?? 0);
+
+                // Calcular custo total dos produtos
+                const totalCost = items.reduce((sum, item) => {
+                    if (item.internal_product?.unit_cost) {
+                        const quantity = item.qty || item.quantity || 0;
+                        const unitCost = parseFloat(
+                            item.internal_product.unit_cost,
+                        );
+                        return sum + quantity * unitCost;
+                    }
+                    return sum;
+                }, 0);
+
+                // Calcular impostos totais
+                const totalTax = items.reduce((sum, item) => {
+                    if (
+                        item.internal_product?.tax_category?.total_tax_rate !==
+                            undefined &&
+                        item.internal_product?.tax_category?.total_tax_rate !==
+                            null
+                    ) {
+                        const quantity = item.qty || item.quantity || 0;
+                        const unitPrice = item.unit_price || item.price || 0;
+                        const itemTotal = quantity * unitPrice;
+                        const taxRate =
+                            item.internal_product.tax_category.total_tax_rate /
+                            100;
+                        return sum + itemTotal * taxRate;
+                    }
+                    return sum;
+                }, 0);
+
+                // Adicionar custos e comissões personalizadas
+                const extraCosts =
+                    typeof row.original.total_costs === 'string'
+                        ? parseFloat(row.original.total_costs)
+                        : (row.original.total_costs ?? 0);
+                const commissions =
+                    typeof row.original.total_commissions === 'string'
+                        ? parseFloat(row.original.total_commissions)
+                        : (row.original.total_commissions ?? 0);
+
+                const netTotal =
+                    totalFinal -
+                    totalCost -
+                    totalTax -
+                    extraCosts -
+                    commissions;
+                const isCancelled = row.original.status === 'CANCELLED';
+
+                return totalFinal > 0 ? (
+                    <span
+                        className={`${
+                            isCancelled
+                                ? 'font-semibold text-muted-foreground line-through'
+                                : 'font-semibold'
+                        } text-end`}
+                    >
+                        {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                        }).format(netTotal)}
+                    </span>
+                ) : (
+                    <span className="text-muted-foreground">--</span>
+                );
+            }
+
+            // Para iFood e outros, calcular net_total
             const orderTotal = raw?.total?.orderAmount ?? 0;
 
             // Calcular custo total dos produtos
@@ -574,8 +654,16 @@ export const columns: ColumnDef<Order>[] = [
         cell: ({ row, table }) => {
             const items = row.original.items || [];
             const raw = row.original.raw;
-            const orderTotal = raw?.total?.orderAmount ?? 0;
             const status = row.original.status;
+            const provider = row.original.provider;
+
+            // Para Takeat, usar net_total; para outros, usar raw.total.orderAmount
+            const orderTotal =
+                provider === 'takeat'
+                    ? typeof row.original.net_total === 'string'
+                        ? parseFloat(row.original.net_total)
+                        : (row.original.net_total ?? 0)
+                    : (raw?.total?.orderAmount ?? 0);
 
             // Pega marginSettings do table.options.meta
             const marginSettings = (

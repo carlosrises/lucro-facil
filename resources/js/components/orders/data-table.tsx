@@ -632,20 +632,23 @@ export function DataTable({
                                                                                 ) => ({
                                                                                     id: item.id,
                                                                                     quantity:
-                                                                                        item.quantity ||
                                                                                         item.qty ||
+                                                                                        item.quantity ||
                                                                                         0,
                                                                                     name: item.name,
                                                                                     unitPrice:
-                                                                                        item.unitPrice ||
                                                                                         item.unit_price ||
+                                                                                        item.unitPrice ||
                                                                                         item.price ||
                                                                                         0,
                                                                                     totalPrice:
                                                                                         item.totalPrice ||
-                                                                                        item.price *
-                                                                                            (item.quantity ||
-                                                                                                item.qty ||
+                                                                                        (item.unit_price ||
+                                                                                            item.unitPrice ||
+                                                                                            item.price ||
+                                                                                            0) *
+                                                                                            (item.qty ||
+                                                                                                item.quantity ||
                                                                                                 0) ||
                                                                                         0,
                                                                                     observations:
@@ -882,12 +885,19 @@ export function DataTable({
                                                                                             sum,
                                                                                             item: any,
                                                                                         ) => {
+                                                                                            const quantity =
+                                                                                                item.qty ||
+                                                                                                item.quantity ||
+                                                                                                0;
+                                                                                            const unitPrice =
+                                                                                                item.unit_price ||
+                                                                                                item.unitPrice ||
+                                                                                                item.price ||
+                                                                                                0;
                                                                                             const price =
                                                                                                 item.totalPrice ||
-                                                                                                item.price *
-                                                                                                    (item.quantity ||
-                                                                                                        item.qty ||
-                                                                                                        0) ||
+                                                                                                unitPrice *
+                                                                                                    quantity ||
                                                                                                 0;
                                                                                             return (
                                                                                                 sum +
@@ -1174,6 +1184,7 @@ export function DataTable({
                                                                 row.original
                                                                     .sale
                                                             }
+                                                            order={row.original}
                                                         />
 
                                                         {/* Card: Pagamento (abaixo do detalhamento) */}
@@ -1184,38 +1195,6 @@ export function DataTable({
                                                                 </CardTitle>
                                                             </CardHeader>
                                                             <CardContent className="rounded-md bg-card p-0">
-                                                                {/* Total do pedido */}
-                                                                <div className="flex w-full flex-row justify-between gap-2 border-b px-3 py-2">
-                                                                    <span className="text-sm font-semibold">
-                                                                        Total do
-                                                                        pedido
-                                                                    </span>
-                                                                    <span className="text-sm font-semibold">
-                                                                        {new Intl.NumberFormat(
-                                                                            'pt-BR',
-                                                                            {
-                                                                                style: 'currency',
-                                                                                currency:
-                                                                                    'BRL',
-                                                                            },
-                                                                        ).format(
-                                                                            // iFood: raw.total.orderAmount
-                                                                            // Takeat: gross_total
-                                                                            row
-                                                                                .original
-                                                                                .raw
-                                                                                ?.total
-                                                                                ?.orderAmount ??
-                                                                                parseFloat(
-                                                                                    row
-                                                                                        .original
-                                                                                        .gross_total ||
-                                                                                        '0',
-                                                                                ),
-                                                                        )}
-                                                                    </span>
-                                                                </div>
-
                                                                 {/* Detalhes de pagamento - iFood */}
                                                                 {row.original
                                                                     .raw
@@ -1376,82 +1355,211 @@ export function DataTable({
                                                                 {row.original
                                                                     .raw
                                                                     ?.session
-                                                                    ?.bills?.[0]
                                                                     ?.payments &&
                                                                     row.original
                                                                         .raw
                                                                         .session
-                                                                        .bills[0]
                                                                         .payments
                                                                         .length >
                                                                         0 && (
-                                                                        <ul className="m-0 flex w-full flex-col ps-0">
-                                                                            {row.original.raw.session.bills[0].payments.map(
-                                                                                (
-                                                                                    payment: any,
-                                                                                    index: number,
-                                                                                ) => (
-                                                                                    <li
-                                                                                        key={
-                                                                                            index
-                                                                                        }
-                                                                                        className="flex flex-col gap-2 border-b-1 px-3 py-4 last:border-b-0"
-                                                                                    >
-                                                                                        <div className="flex w-full flex-row items-center justify-between gap-2">
-                                                                                            <div className="flex items-center gap-2">
-                                                                                                <span className="text-sm leading-4 font-medium">
-                                                                                                    {payment
-                                                                                                        .payment_method
-                                                                                                        ?.name ||
-                                                                                                        'Pagamento'}
+                                                                        <>
+                                                                            {/* Total pago */}
+                                                                            <div className="flex w-full flex-row justify-between gap-2 border-b px-3 py-2">
+                                                                                <span className="text-sm font-semibold">
+                                                                                    Total
+                                                                                    pago
+                                                                                </span>
+                                                                                <span className="text-sm font-semibold">
+                                                                                    {new Intl.NumberFormat(
+                                                                                        'pt-BR',
+                                                                                        {
+                                                                                            style: 'currency',
+                                                                                            currency:
+                                                                                                'BRL',
+                                                                                        },
+                                                                                    ).format(
+                                                                                        row.original.raw.session.payments.reduce(
+                                                                                            (
+                                                                                                sum: number,
+                                                                                                p: any,
+                                                                                            ) =>
+                                                                                                sum +
+                                                                                                parseFloat(
+                                                                                                    p.payment_value ||
+                                                                                                        '0',
+                                                                                                ),
+                                                                                            0,
+                                                                                        ),
+                                                                                    )}
+                                                                                </span>
+                                                                            </div>
+                                                                            {/* Detalhes dos métodos de pagamento */}
+                                                                            <ul className="m-0 flex w-full flex-col gap-0 ps-0">
+                                                                                {row.original.raw.session.payments.map(
+                                                                                    (
+                                                                                        payment: any,
+                                                                                        index: number,
+                                                                                    ) => (
+                                                                                        <li
+                                                                                            key={
+                                                                                                index
+                                                                                            }
+                                                                                            className="flex flex-col gap-2 border-b-1 px-3 py-4 last:border-b-0"
+                                                                                        >
+                                                                                            <div className="flex w-full flex-row items-center justify-between gap-2">
+                                                                                                <div className="flex flex-col gap-1">
+                                                                                                    <div className="flex items-center gap-2">
+                                                                                                        <span className="text-sm leading-4 font-medium">
+                                                                                                            {payment
+                                                                                                                .payment_method
+                                                                                                                ?.name ||
+                                                                                                                'Pagamento'}
+                                                                                                        </span>
+                                                                                                        {(() => {
+                                                                                                            const keyword =
+                                                                                                                payment
+                                                                                                                    .payment_method
+                                                                                                                    ?.keyword ||
+                                                                                                                '';
+                                                                                                            const isOnline =
+                                                                                                                keyword.includes(
+                                                                                                                    'pagamento_online',
+                                                                                                                ) ||
+                                                                                                                keyword.includes(
+                                                                                                                    'ifood',
+                                                                                                                ) ||
+                                                                                                                keyword.includes(
+                                                                                                                    '99food',
+                                                                                                                ) ||
+                                                                                                                keyword.includes(
+                                                                                                                    'neemo',
+                                                                                                                ) ||
+                                                                                                                keyword.includes(
+                                                                                                                    'rappi',
+                                                                                                                );
+                                                                                                            let platform =
+                                                                                                                '';
+                                                                                                            let color =
+                                                                                                                '';
+
+                                                                                                            if (
+                                                                                                                keyword.includes(
+                                                                                                                    'ifood',
+                                                                                                                )
+                                                                                                            ) {
+                                                                                                                platform =
+                                                                                                                    'iFood';
+                                                                                                                color =
+                                                                                                                    'bg-red-100 text-red-700';
+                                                                                                            } else if (
+                                                                                                                keyword.includes(
+                                                                                                                    '99food',
+                                                                                                                )
+                                                                                                            ) {
+                                                                                                                platform =
+                                                                                                                    '99Food';
+                                                                                                                color =
+                                                                                                                    'bg-orange-100 text-orange-700';
+                                                                                                            } else if (
+                                                                                                                keyword.includes(
+                                                                                                                    'neemo',
+                                                                                                                )
+                                                                                                            ) {
+                                                                                                                platform =
+                                                                                                                    'Neemo';
+                                                                                                                color =
+                                                                                                                    'bg-purple-100 text-purple-700';
+                                                                                                            } else if (
+                                                                                                                keyword.includes(
+                                                                                                                    'rappi',
+                                                                                                                )
+                                                                                                            ) {
+                                                                                                                platform =
+                                                                                                                    'Rappi';
+                                                                                                                color =
+                                                                                                                    'bg-pink-100 text-pink-700';
+                                                                                                            } else if (
+                                                                                                                keyword.includes(
+                                                                                                                    'pagamento_online',
+                                                                                                                )
+                                                                                                            ) {
+                                                                                                                platform =
+                                                                                                                    'Online';
+                                                                                                                color =
+                                                                                                                    'bg-blue-100 text-blue-700';
+                                                                                                            }
+
+                                                                                                            return (
+                                                                                                                <>
+                                                                                                                    {platform && (
+                                                                                                                        <Badge
+                                                                                                                            className={`h-5 px-1.5 text-[10px] font-normal ${color}`}
+                                                                                                                        >
+                                                                                                                            {
+                                                                                                                                platform
+                                                                                                                            }
+                                                                                                                        </Badge>
+                                                                                                                    )}
+                                                                                                                    <Badge
+                                                                                                                        variant="outline"
+                                                                                                                        className="h-5 px-1.5 text-[10px] font-normal"
+                                                                                                                    >
+                                                                                                                        {isOnline
+                                                                                                                            ? 'Online'
+                                                                                                                            : 'Offline'}
+                                                                                                                    </Badge>
+                                                                                                                </>
+                                                                                                            );
+                                                                                                        })()}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                                <span className="text-sm font-semibold">
+                                                                                                    {new Intl.NumberFormat(
+                                                                                                        'pt-BR',
+                                                                                                        {
+                                                                                                            style: 'currency',
+                                                                                                            currency:
+                                                                                                                'BRL',
+                                                                                                        },
+                                                                                                    ).format(
+                                                                                                        parseFloat(
+                                                                                                            payment.payment_value ||
+                                                                                                                '0',
+                                                                                                        ),
+                                                                                                    )}
                                                                                                 </span>
                                                                                             </div>
-                                                                                            <span className="text-sm font-semibold">
-                                                                                                {new Intl.NumberFormat(
-                                                                                                    'pt-BR',
-                                                                                                    {
-                                                                                                        style: 'currency',
-                                                                                                        currency:
-                                                                                                            'BRL',
-                                                                                                    },
-                                                                                                ).format(
-                                                                                                    parseFloat(
-                                                                                                        payment.payment_value ||
-                                                                                                            '0',
-                                                                                                    ),
-                                                                                                )}
-                                                                                            </span>
-                                                                                        </div>
 
-                                                                                        {payment.change &&
-                                                                                            parseFloat(
-                                                                                                payment.change,
-                                                                                            ) >
-                                                                                                0 && (
-                                                                                                <div className="flex w-full flex-row justify-between gap-2 text-xs text-muted-foreground">
-                                                                                                    <span>
-                                                                                                        Troco
-                                                                                                    </span>
-                                                                                                    <span>
-                                                                                                        {new Intl.NumberFormat(
-                                                                                                            'pt-BR',
-                                                                                                            {
-                                                                                                                style: 'currency',
-                                                                                                                currency:
-                                                                                                                    'BRL',
-                                                                                                            },
-                                                                                                        ).format(
-                                                                                                            parseFloat(
-                                                                                                                payment.change,
-                                                                                                            ),
-                                                                                                        )}
-                                                                                                    </span>
-                                                                                                </div>
-                                                                                            )}
-                                                                                    </li>
-                                                                                ),
-                                                                            )}
-                                                                        </ul>
+                                                                                            {payment.change &&
+                                                                                                parseFloat(
+                                                                                                    payment.change,
+                                                                                                ) >
+                                                                                                    0 && (
+                                                                                                    <div className="flex w-full flex-row justify-between gap-2 text-xs text-muted-foreground">
+                                                                                                        <span>
+                                                                                                            Troco
+                                                                                                        </span>
+                                                                                                        <span>
+                                                                                                            {new Intl.NumberFormat(
+                                                                                                                'pt-BR',
+                                                                                                                {
+                                                                                                                    style: 'currency',
+                                                                                                                    currency:
+                                                                                                                        'BRL',
+                                                                                                                },
+                                                                                                            ).format(
+                                                                                                                parseFloat(
+                                                                                                                    payment.change,
+                                                                                                                ),
+                                                                                                            )}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                        </li>
+                                                                                    ),
+                                                                                )}
+                                                                            </ul>
+                                                                        </>
                                                                     )}
                                                             </CardContent>
                                                         </Card>
