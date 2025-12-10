@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Store;
+use App\Services\OrderCostService;
 use App\Services\TakeatClient;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -264,6 +265,17 @@ class SyncTakeatOrders extends Command
 
         // Processar items (orders dentro do basket)
         $this->processOrderItems($order, $basket['orders'] ?? []);
+
+        // Calcular custos e comissões automaticamente
+        try {
+            $costService = app(OrderCostService::class);
+            $costService->applyAndSaveCosts($order->fresh());
+        } catch (\Exception $e) {
+            logger()->error('Erro ao calcular custos do pedido Takeat', [
+                'order_id' => $order->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         logger()->info('✅ Pedido Takeat salvo', [
             'order_id' => $order->id,
