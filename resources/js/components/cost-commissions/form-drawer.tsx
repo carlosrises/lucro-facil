@@ -62,6 +62,7 @@ export function CostCommissionFormDialog({
 
     const { data, setData, post, put, processing, errors, reset } = useForm({
         name: item?.name || '',
+        category: item?.category || 'cost',
         provider: item?.provider || '',
         type: item?.type || 'percentage',
         value: item?.value || '',
@@ -77,6 +78,7 @@ export function CostCommissionFormDialog({
         if (item) {
             setData({
                 name: item.name,
+                category: item.category || 'cost',
                 provider: item.provider || '',
                 type: item.type,
                 value: item.value,
@@ -166,6 +168,42 @@ export function CostCommissionFormDialog({
                         {errors.name && (
                             <p className="text-sm text-destructive">
                                 {errors.name}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Categoria */}
+                    <div className="space-y-2">
+                        <Label htmlFor="category">
+                            Categoria{' '}
+                            <span className="text-destructive">*</span>
+                        </Label>
+                        <Select
+                            value={data.category}
+                            onValueChange={(value) =>
+                                setData(
+                                    'category',
+                                    value as 'cost' | 'commission',
+                                )
+                            }
+                        >
+                            <SelectTrigger id="category">
+                                <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="cost">Custo</SelectItem>
+                                <SelectItem value="commission">
+                                    Comissão
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                            Custos são despesas operacionais, comissões são
+                            repasses
+                        </p>
+                        {errors.category && (
+                            <p className="text-sm text-destructive">
+                                {errors.category}
                             </p>
                         )}
                     </div>

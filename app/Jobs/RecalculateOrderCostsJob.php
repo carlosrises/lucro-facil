@@ -43,7 +43,15 @@ class RecalculateOrderCostsJob implements ShouldQueue
 
             // Se não for para aplicar a todos, filtrar apenas pedidos relevantes
             if (!$this->applyToAll && $costCommission->provider) {
-                $query->where('provider', $costCommission->provider);
+                // Para pedidos Takeat, filtrar pelo campo 'origin' ao invés de 'provider'
+                // Pedidos do 99Food, Keeta, Neemo, etc via Takeat têm provider='takeat' e origin='99food', 'keeta', etc
+                $query->where(function($q) use ($costCommission) {
+                    $q->where('provider', $costCommission->provider)
+                      ->orWhere(function($q2) use ($costCommission) {
+                          $q2->where('provider', 'takeat')
+                             ->where('origin', $costCommission->provider);
+                      });
+                });
             }
         }
 

@@ -333,11 +333,16 @@ export const createColumns = ({
                 <div className="flex items-center gap-2">
                     <Button
                         variant="outline"
-                        size="sm"
+                        size="icon"
                         onClick={() => onAssociate(product)}
+                        className="relative"
                     >
-                        <Link2 className="mr-2 h-4 w-4" />
-                        Associar
+                        <Link2 className="h-4 w-4" />
+                        {product.mappings && product.mappings.length > 0 && (
+                            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                                {product.mappings.length}
+                            </span>
+                        )}
                     </Button>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>

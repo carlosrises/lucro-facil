@@ -421,28 +421,6 @@ export const columns: ColumnDef<Order>[] = [
         },
     },
     {
-        accessorKey: 'extra_cost',
-        header: 'Custo extra',
-        cell: ({ row }) =>
-            row.original.extra_cost !== null &&
-            row.original.extra_cost !== undefined ? (
-                <span
-                    className={`text-sm ${
-                        row.original.status === 'CANCELLED'
-                            ? 'text-muted-foreground line-through'
-                            : ''
-                    }`}
-                >
-                    {new Intl.NumberFormat('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                    }).format(row.original.extra_cost)}
-                </span>
-            ) : (
-                <span className="text-muted-foreground">--</span>
-            ),
-    },
-    {
         accessorKey: 'total_costs',
         header: 'Custos',
         cell: ({ row }) => {

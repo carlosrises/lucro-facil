@@ -14,9 +14,12 @@ class OrderCostService
     public function calculateCosts(Order $order): array
     {
         // Buscar taxas ativas para o provider do pedido
+        // Para pedidos Takeat, considerar também o origin (99food, keeta, etc)
+        $origin = $order->provider === 'takeat' ? $order->origin : null;
+
         $costCommissions = CostCommission::where('tenant_id', $order->tenant_id)
             ->active()
-            ->forProvider($order->provider)
+            ->forProvider($order->provider, $origin)
             ->get();
 
         // Usar raw->total->orderAmount se net_total estiver zerado
@@ -45,8 +48,8 @@ class OrderCostService
                 'calculated_value' => $calculatedValue,
             ];
 
-            // Separar entre custos e comissões
-            if (str_contains(strtolower($tax->name), 'comiss') || str_contains(strtolower($tax->name), 'repasse')) {
+            // Separar entre custos e comissões baseado na category
+            if ($tax->category === 'commission') {
                 $commissions[] = $taxData;
                 $totalCommissions += $calculatedValue;
             } else {
@@ -119,6 +122,16 @@ class OrderCostService
      */
     private function checkIsDelivery(Order $order): bool
     {
+        // Para pedidos Takeat, verificar session.table.table_type e delivery_by
+        if ($order->provider === 'takeat') {
+            $tableType = $order->raw['session']['table']['table_type'] ?? null;
+            $deliveryBy = $order->raw['session']['delivery_by'] ?? null;
+
+            // Só considera delivery se o tipo for delivery E a entrega for feita pelo merchant
+            return $tableType === 'delivery' && $deliveryBy === 'MERCHANT';
+        }
+
+        // Para outros providers (iFood, Rappi, etc), verificar orderType
         $orderType = $order->raw['orderType'] ?? $order->origin ?? null;
         return $orderType === 'DELIVERY';
     }
@@ -128,6 +141,18 @@ class OrderCostService
      */
     private function checkOrderType(Order $order, string $conditionValue): bool
     {
+        // Para pedidos Takeat, verificar session.table.table_type
+        if ($order->provider === 'takeat') {
+            $tableType = $order->raw['session']['table']['table_type'] ?? null;
+            // Normalizar para uppercase: delivery -> DELIVERY, pdv -> INDOOR, etc
+            $normalizedType = strtoupper($tableType ?? '');
+            if ($normalizedType === 'PDV') {
+                $normalizedType = 'INDOOR';
+            }
+            return $normalizedType === $conditionValue;
+        }
+
+        // Para outros providers (iFood, Rappi, etc), verificar orderType
         $orderType = $order->raw['orderType'] ?? $order->origin ?? null;
         return $orderType === $conditionValue;
     }
@@ -166,7 +191,7 @@ class OrderCostService
         $calculation = $this->calculateCosts($order);
 
         $order->update([
-            'calculated_costs' => json_encode($calculation),
+            'calculated_costs' => $calculation,
             'total_costs' => $calculation['total_costs'],
             'total_commissions' => $calculation['total_commissions'],
             'net_revenue' => $calculation['net_revenue'],

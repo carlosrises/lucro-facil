@@ -41,6 +41,7 @@ import { OrderExpandedDetails } from '@/components/orders/order-expanded-details
 import { OrderFinancialCard } from '@/components/orders/order-financial-card';
 import { QuickAssociateDialog } from '@/components/orders/quick-associate-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Link2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Select,
@@ -154,17 +155,17 @@ export function DataTable({
                 return (
                     <Button
                         variant="outline"
-                        size="sm"
-                        className="h-7 gap-1 text-xs"
+                        size="icon"
+                        className="relative h-8 w-8"
                         onClick={() => {
                             setSelectedOrder(order);
                             setAssociateDialogOpen(true);
                         }}
                     >
-                        <Badge variant="secondary" className="h-5 px-1.5">
+                        <Link2 className="h-4 w-4" />
+                        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
                             {unmappedCount}
-                        </Badge>
-                        <span>Associar</span>
+                        </span>
                     </Button>
                 );
             },

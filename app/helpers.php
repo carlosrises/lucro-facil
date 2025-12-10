@@ -56,6 +56,11 @@ if (!function_exists('get_all_providers')) {
             ['value' => 'ifood', 'label' => 'iFood'],
             ['value' => 'rappi', 'label' => 'Rappi'],
             ['value' => 'uber_eats', 'label' => 'Uber Eats'],
+            ['value' => '99food', 'label' => '99Food'],
+            ['value' => 'keeta', 'label' => 'Keeta'],
+            ['value' => 'neemo', 'label' => 'Neemo'],
+            ['value' => 'takeat', 'label' => 'Takeat (Delivery Próprio)'],
+            ['value' => 'pdv', 'label' => 'PDV/Presencial'],
         ];
     }
 }

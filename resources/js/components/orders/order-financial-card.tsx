@@ -202,22 +202,24 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
 
                         {/* Custos dos produtos */}
                         {(() => {
-                            const totalCost = (order.items || []).reduce(
+                            const items = order.items || [];
+                            const itemsWithCost = items.filter(
+                                (item: any) => item.internal_product?.unit_cost,
+                            );
+
+                            const totalCost = itemsWithCost.reduce(
                                 (sum: number, item: any) => {
-                                    if (item.internal_product?.unit_cost) {
-                                        const quantity =
-                                            item.quantity || item.qty || 0;
-                                        const unitCost = parseFloat(
-                                            item.internal_product.unit_cost,
-                                        );
-                                        return sum + quantity * unitCost;
-                                    }
-                                    return sum;
+                                    const quantity =
+                                        item.quantity || item.qty || 0;
+                                    const unitCost = parseFloat(
+                                        item.internal_product.unit_cost,
+                                    );
+                                    return sum + quantity * unitCost;
                                 },
                                 0,
                             );
 
-                            return (
+                            return totalCost > 0 ? (
                                 <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
                                     <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
                                         <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
@@ -234,8 +236,39 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                             }).format(totalCost)}
                                         </span>
                                     </div>
+                                    {/* Detalhamento dos custos por produto */}
+                                    <ul className="flex w-full flex-col items-center justify-between pl-0">
+                                        {itemsWithCost.map((item: any) => {
+                                            const quantity =
+                                                item.quantity || item.qty || 0;
+                                            const unitCost = parseFloat(
+                                                item.internal_product.unit_cost,
+                                            );
+                                            const itemTotalCost =
+                                                quantity * unitCost;
+                                            return (
+                                                <li
+                                                    key={item.id}
+                                                    className="flex w-full flex-row items-start justify-between px-3 py-1"
+                                                >
+                                                    <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                        {quantity}x {item.name}
+                                                    </span>
+                                                    <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                        {new Intl.NumberFormat(
+                                                            'pt-BR',
+                                                            {
+                                                                style: 'currency',
+                                                                currency: 'BRL',
+                                                            },
+                                                        ).format(itemTotalCost)}
+                                                    </span>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
                                 </li>
-                            );
+                            ) : null;
                         })()}
 
                         {/* Impostos */}
@@ -286,40 +319,87 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
 
                         {/* Custos extras (da página Custos e Comissões) */}
                         {(() => {
-                            const extraCosts =
+                            const calculatedCosts =
+                                order.calculated_costs || null;
+                            const costs = calculatedCosts?.costs || [];
+                            const costsWithValue = costs.filter(
+                                (cost: any) => cost.calculated_value > 0,
+                            );
+
+                            const totalCosts =
                                 typeof order.total_costs === 'string'
                                     ? parseFloat(order.total_costs)
                                     : (order.total_costs ?? 0);
 
-                            return extraCosts > 0 ? (
+                            return totalCosts > 0 ||
+                                costsWithValue.length > 0 ? (
                                 <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
                                     <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
                                         <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
                                             <ArrowDownLeft className="h-4 w-4" />
                                         </div>
                                         <span className="flex-grow text-sm leading-4 font-semibold">
-                                            Taxas personalizadas
+                                            Custos
                                         </span>
                                         <span className="text-sm leading-4 whitespace-nowrap">
                                             -{' '}
                                             {new Intl.NumberFormat('pt-BR', {
                                                 style: 'currency',
                                                 currency: 'BRL',
-                                            }).format(extraCosts)}
+                                            }).format(totalCosts)}
                                         </span>
                                     </div>
+                                    {/* Detalhamento dos custos */}
+                                    {costsWithValue.length > 0 && (
+                                        <ul className="flex w-full flex-col items-center justify-between gap-1 pt-2 pl-0">
+                                            {costsWithValue.map((cost: any) => (
+                                                <li
+                                                    key={cost.id}
+                                                    className="flex w-full flex-row items-start justify-between px-3 py-0"
+                                                >
+                                                    <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                        {cost.name}
+                                                        {cost.type ===
+                                                        'percentage'
+                                                            ? ` (${parseFloat(cost.value).toFixed(2)}%)`
+                                                            : ''}
+                                                    </span>
+                                                    <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                        {new Intl.NumberFormat(
+                                                            'pt-BR',
+                                                            {
+                                                                style: 'currency',
+                                                                currency: 'BRL',
+                                                            },
+                                                        ).format(
+                                                            cost.calculated_value,
+                                                        )}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
                                 </li>
                             ) : null;
                         })()}
 
                         {/* Comissões (da página Custos e Comissões) */}
                         {(() => {
+                            const calculatedCosts =
+                                order.calculated_costs || null;
                             const commissions =
+                                calculatedCosts?.commissions || [];
+                            const commissionsWithValue = commissions.filter(
+                                (comm: any) => comm.calculated_value > 0,
+                            );
+
+                            const totalCommissions =
                                 typeof order.total_commissions === 'string'
                                     ? parseFloat(order.total_commissions)
                                     : (order.total_commissions ?? 0);
 
-                            return commissions > 0 ? (
+                            return totalCommissions > 0 ||
+                                commissionsWithValue.length > 0 ? (
                                 <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
                                     <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
                                         <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
@@ -333,9 +413,42 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                             {new Intl.NumberFormat('pt-BR', {
                                                 style: 'currency',
                                                 currency: 'BRL',
-                                            }).format(commissions)}
+                                            }).format(totalCommissions)}
                                         </span>
                                     </div>
+                                    {/* Detalhamento das comissões */}
+                                    {commissionsWithValue.length > 0 && (
+                                        <ul className="flex w-full flex-col items-center justify-between gap-1 pt-2 pl-0">
+                                            {commissionsWithValue.map(
+                                                (commission: any) => (
+                                                    <li
+                                                        key={commission.id}
+                                                        className="flex w-full flex-row items-start justify-between px-3 py-0"
+                                                    >
+                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                            {commission.name}
+                                                            {commission.type ===
+                                                            'percentage'
+                                                                ? ` (${parseFloat(commission.value).toFixed(2)}%)`
+                                                                : ''}
+                                                        </span>
+                                                        <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                            {new Intl.NumberFormat(
+                                                                'pt-BR',
+                                                                {
+                                                                    style: 'currency',
+                                                                    currency:
+                                                                        'BRL',
+                                                                },
+                                                            ).format(
+                                                                commission.calculated_value,
+                                                            )}
+                                                        </span>
+                                                    </li>
+                                                ),
+                                            )}
+                                        </ul>
+                                    )}
                                 </li>
                             ) : null;
                         })()}

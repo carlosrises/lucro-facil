@@ -13,6 +13,7 @@ class CostCommission extends Model
         'tenant_id',
         'provider',
         'name',
+        'category',
         'type',
         'value',
         'applies_to',
@@ -45,13 +46,17 @@ class CostCommission extends Model
     }
 
     /**
-     * Scope para filtrar por provider
+     * Scope para filtrar por provider ou origin (para pedidos Takeat)
      */
-    public function scopeForProvider($query, ?string $provider)
+    public function scopeForProvider($query, ?string $provider, ?string $origin = null)
     {
-        return $query->where(function ($q) use ($provider) {
+        return $query->where(function ($q) use ($provider, $origin) {
             $q->whereNull('provider')
-              ->orWhere('provider', $provider);
+              ->orWhere('provider', $provider)
+              ->when($origin, function($q2) use ($origin) {
+                  // Se origin está definido, incluir comissões específicas para esse marketplace
+                  $q2->orWhere('provider', $origin);
+              });
         });
     }
 

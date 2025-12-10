@@ -46,6 +46,16 @@ class CostCommissionsController extends Controller
             ->pluck('provider')
             ->toArray();
 
+        // Adiciona também os origins dos pedidos Takeat (99food, keeta, neemo, etc)
+        $takeatOrigins = \App\Models\Order::where('tenant_id', $tenantId)
+            ->where('provider', 'takeat')
+            ->whereNotNull('origin')
+            ->distinct()
+            ->pluck('origin')
+            ->toArray();
+
+        $integratedProviders = array_values(array_unique(array_merge($integratedProviders, $takeatOrigins)));
+
         return Inertia::render('cost-commissions', [
             'data' => $costCommissions->items(),
             'pagination' => [
@@ -74,7 +84,8 @@ class CostCommissionsController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'provider' => 'nullable|string|in:ifood,rappi,uber_eats',
+            'category' => 'required|in:cost,commission',
+            'provider' => 'nullable|string|in:ifood,rappi,uber_eats,99food,keeta,neemo,takeat,pdv',
             'type' => 'required|in:percentage,fixed',
             'value' => 'required|numeric|min:0',
             'applies_to' => 'required|in:all_orders,delivery_only,pickup_only,payment_method,custom',
@@ -102,7 +113,7 @@ class CostCommissionsController extends Controller
         if ($applyToExisting) {
             \App\Jobs\RecalculateOrderCostsJob::dispatch(
                 $costCommission->id,
-                true,
+                false, // false = aplica filtro de provider/origin
                 'cost_commission'
             );
         }
@@ -120,7 +131,8 @@ class CostCommissionsController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'provider' => 'nullable|string|in:ifood,rappi,uber_eats',
+            'category' => 'required|in:cost,commission',
+            'provider' => 'nullable|string|in:ifood,rappi,uber_eats,99food,keeta,neemo,takeat,pdv',
             'type' => 'required|in:percentage,fixed',
             'value' => 'required|numeric|min:0',
             'applies_to' => 'required|in:all_orders,delivery_only,pickup_only,payment_method,custom',
@@ -150,7 +162,7 @@ class CostCommissionsController extends Controller
         if ($applyRetroactively) {
             RecalculateOrderCostsJob::dispatch(
                 $costCommission->id,
-                true,
+                false, // false = aplica filtro de provider/origin
                 'cost_commission'
             );
         }

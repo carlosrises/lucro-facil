@@ -22,6 +22,7 @@ class Order extends Model
     protected $casts = [
         'placed_at' => 'datetime',
         'raw'       => 'array',
+        'calculated_costs' => 'array',
         'total_costs' => 'decimal:2',
         'total_commissions' => 'decimal:2',
         'net_revenue' => 'decimal:2',

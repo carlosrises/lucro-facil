@@ -20,7 +20,7 @@ class OrdersController extends Controller
                 'id', 'order_uuid', 'code', 'status', 'provider', 'origin',
                 'store_id', 'placed_at', 'gross_total', 'discount_total',
                 'delivery_fee', 'tip', 'net_total', 'raw', 'tenant_id',
-                'total_costs', 'total_commissions', 'net_revenue', 'costs_calculated_at',
+                'calculated_costs', 'total_costs', 'total_commissions', 'net_revenue', 'costs_calculated_at',
             ])
             ->with(['items.internalProduct.taxCategory', 'sale'])
             ->where('tenant_id', tenant_id())
