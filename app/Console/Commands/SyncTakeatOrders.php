@@ -189,7 +189,11 @@ class SyncTakeatOrders extends Command
     protected function processOrderBasket(array $basket, array $session, \App\Models\Store $store): void
     {
         $basketId = $basket['basket_id'] ?? $basket['id'] ?? null;
-        $channel = $basket['channel'] ?? 'unknown';
+
+        // Usar sales_channel (mais confiável) ao invés de channel
+        // sales_channel tem a informação correta (IFOOD, 99FOOD, etc)
+        // channel pode vir como "pdv" mesmo para pedidos de marketplace
+        $origin = strtolower($session['sales_channel'] ?? $basket['channel'] ?? 'unknown');
 
         // Criar identificador único combinando session_id + basket_id
         $orderUuid = "takeat_{$session['id']}_{$basketId}";
@@ -203,11 +207,11 @@ class SyncTakeatOrders extends Command
         // Pagamentos subsidiados geralmente têm keywords como "subsidiado", "desconto", "cupom"
         $payments = $session['payments'] ?? [];
         $realPaymentTotal = 0;
-        
+
         foreach ($payments as $payment) {
             $paymentName = strtolower($payment['payment_method']['name'] ?? '');
             $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-            
+
             // Ignorar pagamentos subsidiados (cupons/descontos do marketplace)
             if (
                 str_contains($paymentName, 'subsidiado') ||
@@ -219,10 +223,10 @@ class SyncTakeatOrders extends Command
             ) {
                 continue;
             }
-            
+
             $realPaymentTotal += (float) ($payment['payment_value'] ?? 0);
         }
-        
+
         // Se não houver pagamentos ou todos forem subsidiados, usar cálculo tradicional
         $netTotal = $realPaymentTotal > 0 ? $realPaymentTotal : ($grossTotal - $discount);
 
@@ -243,7 +247,7 @@ class SyncTakeatOrders extends Command
                 'provider' => 'takeat',
                 'code' => $basketId,
                 'status' => $status,
-                'origin' => $channel, // pdv, ifood, 99food, keeta, delivery, totem
+                'origin' => $origin, // ifood, 99food, keeta, pdv, delivery, totem
                 'gross_total' => $grossTotal,
                 'discount_total' => $discount,
                 'delivery_fee' => $deliveryFee,
@@ -264,7 +268,9 @@ class SyncTakeatOrders extends Command
             'order_id' => $order->id,
             'order_uuid' => $orderUuid,
             'basket_id' => $basketId,
-            'channel' => $channel,
+            'origin' => $origin,
+            'sales_channel' => $session['sales_channel'] ?? null,
+            'basket_channel' => $basket['channel'] ?? null,
             'gross_total' => $grossTotal,
             'net_total' => $netTotal,
             'real_payment_total' => $realPaymentTotal,

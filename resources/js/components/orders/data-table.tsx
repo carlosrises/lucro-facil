@@ -656,6 +656,9 @@ export function DataTable({
                                                                                     options:
                                                                                         item.options ||
                                                                                         [],
+                                                                                    add_ons:
+                                                                                        item.add_ons ||
+                                                                                        [],
                                                                                     internal_product:
                                                                                         item.internal_product,
                                                                                 }),
@@ -847,6 +850,69 @@ export function DataTable({
                                                                                                                 )}
                                                                                                             </ul>
                                                                                                         )}
+                                                                                                    </li>
+                                                                                                ),
+                                                                                            )}
+                                                                                        </ul>
+                                                                                    )}
+
+                                                                                    {/* Complementos/Add-ons (Takeat) */}
+                                                                                    {item
+                                                                                        .add_ons
+                                                                                        ?.length >
+                                                                                        0 && (
+                                                                                        <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
+                                                                                            {item.add_ons.map(
+                                                                                                (
+                                                                                                    addon: any,
+                                                                                                    idx: number,
+                                                                                                ) => (
+                                                                                                    <li
+                                                                                                        key={
+                                                                                                            idx
+                                                                                                        }
+                                                                                                        className="flex flex-wrap items-center gap-2 py-2 text-muted-foreground"
+                                                                                                    >
+                                                                                                        <span className="text-start md:min-w-[32px]">
+                                                                                                            {
+                                                                                                                addon.quantity
+                                                                                                            }
+
+                                                                                                            x
+                                                                                                        </span>
+                                                                                                        <span className="grow">
+                                                                                                            {
+                                                                                                                addon.name
+                                                                                                            }
+                                                                                                        </span>
+                                                                                                        <span className="hidden justify-end text-end md:flex md:min-w-[120px]">
+                                                                                                            {new Intl.NumberFormat(
+                                                                                                                'pt-BR',
+                                                                                                                {
+                                                                                                                    style: 'currency',
+                                                                                                                    currency:
+                                                                                                                        'BRL',
+                                                                                                                },
+                                                                                                            ).format(
+                                                                                                                addon.price ??
+                                                                                                                    0,
+                                                                                                            )}
+                                                                                                        </span>
+                                                                                                        <span className="text-end md:min-w-[120px]">
+                                                                                                            {new Intl.NumberFormat(
+                                                                                                                'pt-BR',
+                                                                                                                {
+                                                                                                                    style: 'currency',
+                                                                                                                    currency:
+                                                                                                                        'BRL',
+                                                                                                                },
+                                                                                                            ).format(
+                                                                                                                (addon.price ??
+                                                                                                                    0) *
+                                                                                                                    (addon.quantity ??
+                                                                                                                        1),
+                                                                                                            )}
+                                                                                                        </span>
                                                                                                     </li>
                                                                                                 ),
                                                                                             )}
