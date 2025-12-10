@@ -44,19 +44,20 @@ class SyncTakeatOrders extends Command
         // Se data específica foi fornecida, usar dia inteiro (00:00 até 23:59:59)
         if ($specificDate) {
             try {
-                $date = Carbon::parse($specificDate, 'UTC');
-                $startDate = $date->copy()->startOfDay();
-                $endDate = $date->copy()->endOfDay();
+                $date = Carbon::parse($specificDate, 'America/Sao_Paulo');
+                $startDate = $date->copy()->startOfDay()->setTimezone('UTC');
+                $endDate = $date->copy()->endOfDay()->setTimezone('UTC');
 
                 $this->info("📅 Buscando pedidos do dia: {$date->format('d/m/Y')}");
-                $this->line("   Período UTC-0: {$startDate->toIso8601String()} até {$endDate->toIso8601String()}");
+                $this->line("   Período BRT: {$date->copy()->startOfDay()->format('Y-m-d H:i:s')} até {$date->copy()->endOfDay()->format('Y-m-d H:i:s')}");
+                $this->line("   Período UTC: {$startDate->toIso8601String()} até {$endDate->toIso8601String()}");
             } catch (\Exception $e) {
                 $this->error("❌ Data inválida. Use o formato: Y-m-d (ex: 2025-12-08)");
                 return 1;
             }
         } else {
             // Usar horas para trás (comportamento antigo)
-            $endDate = Carbon::now('UTC');
+            $endDate = Carbon::now('America/Sao_Paulo')->setTimezone('UTC');
             $startDate = $endDate->copy()->subHours($hours);
             $this->info("📅 Buscando pedidos das últimas {$hours} horas");
         }
