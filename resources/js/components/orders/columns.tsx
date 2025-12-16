@@ -16,7 +16,56 @@ import { ColumnDef } from '@tanstack/react-table';
 import { endOfDay, startOfDay } from 'date-fns';
 import { Badge } from '../ui/badge';
 
+/**
+ * Calcula o custo de um item considerando múltiplas associações
+ */
+function calculateItemCost(item: OrderItem): number {
+    const itemQuantity = item.qty || item.quantity || 0;
+
+    // Novo sistema: usar mappings se existir
+    if (item.mappings && item.mappings.length > 0) {
+        const mappingsCost = item.mappings.reduce((sum, mapping) => {
+            if (mapping.internal_product?.unit_cost) {
+                const unitCost = parseFloat(mapping.internal_product.unit_cost);
+                const mappingQuantity = mapping.quantity || 1;
+                return sum + unitCost * mappingQuantity;
+            }
+            return sum;
+        }, 0);
+        return mappingsCost * itemQuantity;
+    }
+
+    // Fallback: sistema legado (internal_product direto)
+    if (item.internal_product?.unit_cost) {
+        const unitCost = parseFloat(item.internal_product.unit_cost);
+        return unitCost * itemQuantity;
+    }
+
+    return 0;
+}
+
 // Tipagem vinda do backend
+export type OrderItemMapping = {
+    id: number;
+    order_item_id: number;
+    internal_product_id: number;
+    quantity: number;
+    mapping_type: 'main' | 'option' | 'addon';
+    external_reference?: string | null;
+    external_name?: string | null;
+    internal_product?: {
+        id: number;
+        name: string;
+        unit_cost: string;
+        tax_category_id?: number | null;
+        tax_category?: {
+            id: number;
+            name: string;
+            total_tax_rate: number;
+        };
+    };
+};
+
 export type OrderItem = {
     id: number;
     sku?: string;
@@ -36,6 +85,7 @@ export type OrderItem = {
             total_tax_rate: number;
         };
     };
+    mappings?: OrderItemMapping[]; // Novo: múltiplas associações
 };
 
 export type Order = {
@@ -161,14 +211,7 @@ export const columns: ColumnDef<Order>[] = [
             } else if (orderTotal > 0) {
                 // Calcular custo total
                 const totalCost = items.reduce((sum, item) => {
-                    if (item.internal_product?.unit_cost) {
-                        const quantity = item.qty || item.quantity || 0;
-                        const unitCost = parseFloat(
-                            item.internal_product.unit_cost,
-                        );
-                        return sum + quantity * unitCost;
-                    }
-                    return sum;
+                    return sum + calculateItemCost(item);
                 }, 0);
 
                 // Calcular impostos totais
@@ -272,16 +315,16 @@ export const columns: ColumnDef<Order>[] = [
                 marketplaces.includes(origin)
             ) {
                 return (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                         <ProviderBadge provider={origin} />
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <Badge
                                         variant="outline"
-                                        className="h-5 px-1.5 text-[10px] font-normal"
+                                        className="h-4 px-1 text-[9px] font-normal whitespace-nowrap"
                                     >
-                                        via Takeat
+                                        via TK
                                     </Badge>
                                 </TooltipTrigger>
                                 <TooltipContent>
@@ -345,20 +388,13 @@ export const columns: ColumnDef<Order>[] = [
 
     {
         accessorKey: 'cost',
-        header: 'Custo do Pedido',
+        header: 'CMV',
         cell: ({ row }) => {
             const items = row.original.items || [];
 
             // Calcular soma dos custos dos produtos associados
             const totalCost = items.reduce((sum, item) => {
-                if (item.internal_product?.unit_cost) {
-                    const quantity = item.qty || item.quantity || 0;
-                    const unitCost = parseFloat(
-                        item.internal_product.unit_cost,
-                    );
-                    return sum + quantity * unitCost;
-                }
-                return sum;
+                return sum + calculateItemCost(item);
             }, 0);
 
             const isCancelled = row.original.status === 'CANCELLED';
@@ -497,14 +533,7 @@ export const columns: ColumnDef<Order>[] = [
 
                 // Calcular custo total dos produtos
                 const totalCost = items.reduce((sum, item) => {
-                    if (item.internal_product?.unit_cost) {
-                        const quantity = item.qty || item.quantity || 0;
-                        const unitCost = parseFloat(
-                            item.internal_product.unit_cost,
-                        );
-                        return sum + quantity * unitCost;
-                    }
-                    return sum;
+                    return sum + calculateItemCost(item);
                 }, 0);
 
                 // Calcular impostos totais
@@ -536,8 +565,34 @@ export const columns: ColumnDef<Order>[] = [
                         ? parseFloat(row.original.total_commissions)
                         : (row.original.total_commissions ?? 0);
 
+                // Calcular subsídio dos pagamentos
+                const payments = raw?.session?.payments || [];
+                const totalSubsidy = payments.reduce(
+                    (sum: number, payment: any) => {
+                        const paymentName = (
+                            payment.payment_method?.name || ''
+                        ).toLowerCase();
+                        const paymentKeyword = (
+                            payment.payment_method?.keyword || ''
+                        ).toLowerCase();
+                        const isSubsidy =
+                            paymentName.includes('subsidiado') ||
+                            paymentName.includes('desconto') ||
+                            paymentName.includes('cupom') ||
+                            paymentKeyword.includes('subsidiado') ||
+                            paymentKeyword.includes('desconto') ||
+                            paymentKeyword.includes('cupom');
+
+                        return isSubsidy
+                            ? sum + parseFloat(payment.payment_value || '0')
+                            : sum;
+                    },
+                    0,
+                );
+
                 const netTotal =
-                    totalFinal -
+                    totalFinal +
+                    totalSubsidy -
                     totalCost -
                     totalTax -
                     extraCosts -
@@ -567,14 +622,7 @@ export const columns: ColumnDef<Order>[] = [
 
             // Calcular custo total dos produtos
             const totalCost = items.reduce((sum, item) => {
-                if (item.internal_product?.unit_cost) {
-                    const quantity = item.qty || item.quantity || 0;
-                    const unitCost = parseFloat(
-                        item.internal_product.unit_cost,
-                    );
-                    return sum + quantity * unitCost;
-                }
-                return sum;
+                return sum + calculateItemCost(item);
             }, 0);
 
             // Calcular impostos totais
@@ -672,14 +720,7 @@ export const columns: ColumnDef<Order>[] = [
 
             // Calcular custo total dos produtos
             const totalCost = items.reduce((sum, item) => {
-                if (item.internal_product?.unit_cost) {
-                    const quantity = item.qty || item.quantity || 0;
-                    const unitCost = parseFloat(
-                        item.internal_product.unit_cost,
-                    );
-                    return sum + quantity * unitCost;
-                }
-                return sum;
+                return sum + calculateItemCost(item);
             }, 0);
 
             // Calcular impostos totais
@@ -709,9 +750,37 @@ export const columns: ColumnDef<Order>[] = [
                     ? parseFloat(row.original.total_commissions)
                     : (row.original.total_commissions ?? 0);
 
+            // Calcular subsídio dos pagamentos (apenas para Takeat)
+            let totalSubsidy = 0;
+            if (provider === 'takeat') {
+                const payments = raw?.session?.payments || [];
+                totalSubsidy = payments.reduce((sum: number, payment: any) => {
+                    const paymentName = (
+                        payment.payment_method?.name || ''
+                    ).toLowerCase();
+                    const paymentKeyword = (
+                        payment.payment_method?.keyword || ''
+                    ).toLowerCase();
+                    const isSubsidy =
+                        paymentName.includes('subsid') ||
+                        paymentName.includes('cupom') ||
+                        paymentKeyword.includes('subsid') ||
+                        paymentKeyword.includes('cupom');
+
+                    return isSubsidy
+                        ? sum + parseFloat(payment.payment_value || '0')
+                        : sum;
+                }, 0);
+            }
+
             const netTotal =
-                orderTotal - totalCost - totalTax - extraCosts - commissions;
-            const margin = (netTotal / orderTotal) * 100;
+                orderTotal +
+                totalSubsidy -
+                totalCost -
+                totalTax -
+                extraCosts -
+                commissions;
+            const margin = (netTotal / (orderTotal + totalSubsidy)) * 100;
 
             if (margin === 0) {
                 return (

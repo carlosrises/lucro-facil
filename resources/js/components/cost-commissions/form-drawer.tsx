@@ -67,7 +67,9 @@ export function CostCommissionFormDialog({
         type: item?.type || 'percentage',
         value: item?.value || '',
         applies_to: item?.applies_to || 'all_orders',
+        payment_type: item?.payment_type || 'all',
         condition_value: item?.condition_value || '',
+        condition_values: item?.condition_values || [],
         reduces_revenue_base: item?.reduces_revenue_base || false,
         active: item?.active ?? true,
         apply_to_existing_orders: false,
@@ -83,7 +85,9 @@ export function CostCommissionFormDialog({
                 type: item.type,
                 value: item.value,
                 applies_to: item.applies_to,
+                payment_type: item.payment_type || 'all',
                 condition_value: item.condition_value || '',
+                condition_values: item.condition_values || [],
                 reduces_revenue_base: item.reduces_revenue_base,
                 active: item.active,
             });
@@ -343,58 +347,157 @@ export function CostCommissionFormDialog({
 
                     {/* Condição (condicional) */}
                     {data.applies_to === 'payment_method' && (
-                        <div className="space-y-2">
-                            <Label htmlFor="condition_value">
-                                Método de Pagamento{' '}
-                                <span className="text-destructive">*</span>
-                            </Label>
-                            {data.provider && paymentMethods[data.provider] ? (
+                        <>
+                            {/* Tipo de Pagamento */}
+                            <div className="space-y-2">
+                                <Label htmlFor="payment_type">
+                                    Tipo de Pagamento{' '}
+                                    <span className="text-destructive">*</span>
+                                </Label>
                                 <Select
-                                    value={data.condition_value || 'none'}
+                                    value={data.payment_type || 'all'}
                                     onValueChange={(value) =>
                                         setData(
-                                            'condition_value',
-                                            value === 'none' ? '' : value,
+                                            'payment_type',
+                                            value as
+                                                | 'all'
+                                                | 'online'
+                                                | 'offline',
                                         )
                                     }
                                 >
-                                    <SelectTrigger id="condition_value">
-                                        <SelectValue placeholder="Selecione o método" />
+                                    <SelectTrigger id="payment_type">
+                                        <SelectValue placeholder="Selecione" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="none">
-                                            Selecione...
+                                        <SelectItem value="all">
+                                            Todos
                                         </SelectItem>
-                                        {paymentMethods[data.provider].map(
-                                            (method) => (
-                                                <SelectItem
-                                                    key={method.value}
-                                                    value={method.value}
-                                                >
-                                                    {method.label}
-                                                </SelectItem>
-                                            ),
-                                        )}
+                                        <SelectItem value="online">
+                                            Online (Pago via Marketplace)
+                                        </SelectItem>
+                                        <SelectItem value="offline">
+                                            Offline (Pago ao Estabelecimento)
+                                        </SelectItem>
                                     </SelectContent>
                                 </Select>
-                            ) : (
-                                <Input
-                                    id="condition_value"
-                                    value={data.condition_value}
-                                    onChange={(e) =>
-                                        setData(
-                                            'condition_value',
-                                            e.target.value,
-                                        )
-                                    }
-                                    placeholder={
-                                        !data.provider
-                                            ? 'Selecione um marketplace primeiro'
-                                            : 'Digite o método de pagamento'
-                                    }
-                                    disabled={!data.provider}
-                                />
-                            )}
+                                <p className="text-xs text-muted-foreground">
+                                    Online = pago via marketplace | Offline =
+                                    pago direto ao estabelecimento
+                                </p>
+                                {errors.payment_type && (
+                                    <p className="text-sm text-destructive">
+                                        {errors.payment_type}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Métodos de Pagamento (seleção múltipla) */}
+                            <div className="space-y-2">
+                                <Label htmlFor="condition_values">
+                                    Métodos de Pagamento{' '}
+                                    <span className="text-destructive">*</span>
+                                </Label>
+                                {data.provider &&
+                                paymentMethods[data.provider] ? (
+                                    <div className="space-y-2 rounded-md border p-3">
+                                        {paymentMethods[data.provider].map(
+                                            (method) => (
+                                                <div
+                                                    key={method.value}
+                                                    className="flex items-center space-x-2"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        id={`method-${method.value}`}
+                                                        checked={(
+                                                            data.condition_values ||
+                                                            []
+                                                        ).includes(
+                                                            method.value,
+                                                        )}
+                                                        onChange={(e) => {
+                                                            const currentValues =
+                                                                data.condition_values ||
+                                                                [];
+                                                            if (
+                                                                e.target.checked
+                                                            ) {
+                                                                setData(
+                                                                    'condition_values',
+                                                                    [
+                                                                        ...currentValues,
+                                                                        method.value,
+                                                                    ],
+                                                                );
+                                                            } else {
+                                                                setData(
+                                                                    'condition_values',
+                                                                    currentValues.filter(
+                                                                        (
+                                                                            v: string,
+                                                                        ) =>
+                                                                            v !==
+                                                                            method.value,
+                                                                    ),
+                                                                );
+                                                            }
+                                                        }}
+                                                        className="h-4 w-4"
+                                                    />
+                                                    <Label
+                                                        htmlFor={`method-${method.value}`}
+                                                        className="cursor-pointer text-sm font-normal"
+                                                    >
+                                                        {method.label}
+                                                    </Label>
+                                                </div>
+                                            ),
+                                        )}
+                                        {(data.condition_values || []).length >
+                                            0 && (
+                                            <p className="mt-2 text-xs text-muted-foreground">
+                                                {
+                                                    (
+                                                        data.condition_values ||
+                                                        []
+                                                    ).length
+                                                }{' '}
+                                                método(s) selecionado(s)
+                                            </p>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="rounded-md border border-dashed p-4 text-center">
+                                        <p className="text-sm text-muted-foreground">
+                                            {!data.provider
+                                                ? 'Selecione um marketplace primeiro'
+                                                : 'Nenhum método de pagamento disponível'}
+                                        </p>
+                                    </div>
+                                )}
+                                {errors.condition_values && (
+                                    <p className="text-sm text-destructive">
+                                        {errors.condition_values}
+                                    </p>
+                                )}
+                            </div>
+                        </>
+                    )}
+
+                    {data.applies_to === 'custom' && (
+                        <div className="space-y-2">
+                            <Label htmlFor="condition_value">
+                                Condição Personalizada
+                            </Label>
+                            <Input
+                                id="condition_value"
+                                value={data.condition_value}
+                                onChange={(e) =>
+                                    setData('condition_value', e.target.value)
+                                }
+                                placeholder="Digite a condição"
+                            />
                             {errors.condition_value && (
                                 <p className="text-sm text-destructive">
                                     {errors.condition_value}

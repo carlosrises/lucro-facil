@@ -34,7 +34,7 @@ class CostCommissionsController extends Controller
 
         // Busca por nome
         if ($request->filled('search')) {
-            $query->where('name', 'like', '%' . $request->search . '%');
+            $query->where('name', 'like', '%'.$request->search.'%');
         }
 
         $costCommissions = $query->paginate(15)->withQueryString();
@@ -56,6 +56,14 @@ class CostCommissionsController extends Controller
 
         $integratedProviders = array_values(array_unique(array_merge($integratedProviders, $takeatOrigins)));
 
+        // Se Takeat está integrado, adicionar também as variantes sintéticas (takeat-ifood, takeat-99food)
+        if (in_array('takeat', $integratedProviders)) {
+            foreach ($takeatOrigins as $origin) {
+                $integratedProviders[] = "takeat-{$origin}";
+            }
+            $integratedProviders = array_values(array_unique($integratedProviders));
+        }
+
         return Inertia::render('cost-commissions', [
             'data' => $costCommissions->items(),
             'pagination' => [
@@ -76,6 +84,8 @@ class CostCommissionsController extends Controller
                 'ifood' => get_payment_methods_by_provider('ifood'),
                 'rappi' => get_payment_methods_by_provider('rappi'),
                 'uber_eats' => get_payment_methods_by_provider('uber_eats'),
+                'takeat' => get_payment_methods_by_provider('takeat'),
+                '99food' => get_payment_methods_by_provider('99food'),
             ],
         ]);
     }
@@ -85,11 +95,14 @@ class CostCommissionsController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'category' => 'required|in:cost,commission',
-            'provider' => 'nullable|string|in:ifood,rappi,uber_eats,99food,keeta,neemo,takeat,pdv',
+            'provider' => 'nullable|string|in:ifood,rappi,uber_eats,99food,keeta,neemo,takeat,pdv,takeat-ifood,takeat-99food',
             'type' => 'required|in:percentage,fixed',
             'value' => 'required|numeric|min:0',
             'applies_to' => 'required|in:all_orders,delivery_only,pickup_only,payment_method,custom',
+            'payment_type' => 'nullable|in:all,online,offline',
             'condition_value' => 'nullable|string',
+            'condition_values' => 'nullable|array',
+            'condition_values.*' => 'string',
             'affects_revenue_base' => 'nullable|boolean',
             'enters_tax_base' => 'nullable|boolean',
             'reduces_revenue_base' => 'nullable|boolean',
@@ -118,7 +131,7 @@ class CostCommissionsController extends Controller
             );
         }
 
-        return back()->with('success', 'Custo/Comissão criado com sucesso!' .
+        return back()->with('success', 'Custo/Comissão criado com sucesso!'.
             ($applyToExisting ? ' Recalculando custos dos pedidos existentes...' : ''));
     }
 
@@ -132,11 +145,14 @@ class CostCommissionsController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'category' => 'required|in:cost,commission',
-            'provider' => 'nullable|string|in:ifood,rappi,uber_eats,99food,keeta,neemo,takeat,pdv',
+            'provider' => 'nullable|string|in:ifood,rappi,uber_eats,99food,keeta,neemo,takeat,pdv,takeat-ifood,takeat-99food',
             'type' => 'required|in:percentage,fixed',
             'value' => 'required|numeric|min:0',
             'applies_to' => 'required|in:all_orders,delivery_only,pickup_only,payment_method,custom',
+            'payment_type' => 'nullable|in:all,online,offline',
             'condition_value' => 'nullable|string',
+            'condition_values' => 'nullable|array',
+            'condition_values.*' => 'string',
             'affects_revenue_base' => 'nullable|boolean',
             'enters_tax_base' => 'nullable|boolean',
             'reduces_revenue_base' => 'nullable|boolean',
@@ -167,7 +183,7 @@ class CostCommissionsController extends Controller
             );
         }
 
-        return back()->with('success', 'Custo/Comissão atualizado com sucesso!' .
+        return back()->with('success', 'Custo/Comissão atualizado com sucesso!'.
             ($applyRetroactively ? ' Recalculando custos dos pedidos existentes...' : ''));
     }
 
@@ -179,7 +195,7 @@ class CostCommissionsController extends Controller
         }
 
         $costCommission->update([
-            'active' => !$costCommission->active,
+            'active' => ! $costCommission->active,
         ]);
 
         return back()->with('success', 'Status atualizado com sucesso!');

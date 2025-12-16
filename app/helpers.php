@@ -40,6 +40,20 @@ if (!function_exists('get_payment_methods_by_provider')) {
                 ['value' => 'cash', 'label' => 'Dinheiro'],
                 ['value' => 'uber_credits', 'label' => 'Créditos Uber'],
             ],
+            'takeat' => [
+                ['value' => 'CREDIT_CARD', 'label' => 'Cartão de Crédito'],
+                ['value' => 'DEBIT_CARD', 'label' => 'Cartão de Débito'],
+                ['value' => 'VOUCHER', 'label' => 'Vale Refeição/Alimentação'],
+                ['value' => 'PIX', 'label' => 'PIX'],
+                ['value' => 'MONEY', 'label' => 'Dinheiro'],
+            ],
+            '99food' => [
+                ['value' => 'CREDIT_CARD', 'label' => 'Cartão de Crédito'],
+                ['value' => 'DEBIT_CARD', 'label' => 'Cartão de Débito'],
+                ['value' => 'VOUCHER', 'label' => 'Vale Refeição/Alimentação'],
+                ['value' => 'PIX', 'label' => 'PIX'],
+                ['value' => 'MONEY', 'label' => 'Dinheiro'],
+            ],
         ];
 
         return $methods[$provider] ?? [];
@@ -53,14 +67,37 @@ if (!function_exists('get_all_providers')) {
     function get_all_providers(): array
     {
         return [
-            ['value' => 'ifood', 'label' => 'iFood'],
+            ['value' => 'ifood', 'label' => 'iFood (Direto)'],
+            ['value' => 'takeat-ifood', 'label' => 'iFood (via Takeat)'],
+            ['value' => '99food', 'label' => '99Food (Direto)'],
+            ['value' => 'takeat-99food', 'label' => '99Food (via Takeat)'],
             ['value' => 'rappi', 'label' => 'Rappi'],
             ['value' => 'uber_eats', 'label' => 'Uber Eats'],
-            ['value' => '99food', 'label' => '99Food'],
-            ['value' => 'keeta', 'label' => 'Keeta'],
-            ['value' => 'neemo', 'label' => 'Neemo'],
+            ['value' => 'keeta', 'label' => 'Keeta (via Takeat)'],
+            ['value' => 'neemo', 'label' => 'Neemo (via Takeat)'],
             ['value' => 'takeat', 'label' => 'Takeat (Delivery Próprio)'],
             ['value' => 'pdv', 'label' => 'PDV/Presencial'],
         ];
+    }
+}
+
+if (!function_exists('is_online_payment_method')) {
+    /**
+     * Verifica se um método de pagamento é considerado online.
+     */
+    function is_online_payment_method(string $method): bool
+    {
+        $onlineMethods = [
+            // iFood direto
+            'CREDIT', 'DEBIT', 'MEAL_VOUCHER', 'FOOD_VOUCHER', 'DIGITAL_WALLET', 'PIX',
+            // Takeat / 99Food
+            'CREDIT_CARD', 'DEBIT_CARD', 'VOUCHER', 'PIX',
+            // Rappi
+            'credit_card', 'debit_card', 'rappi_pay',
+            // Uber Eats
+            'uber_credits',
+        ];
+
+        return in_array($method, $onlineMethods);
     }
 }

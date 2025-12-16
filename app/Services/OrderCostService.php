@@ -107,6 +107,19 @@ class OrderCostService
      */
     private function shouldApplyTax(CostCommission $tax, Order $order): bool
     {
+        // Se é payment_method e tem payment_type definido (online/offline), usar nova lógica
+        if ($tax->applies_to === 'payment_method' && isset($tax->payment_type)) {
+            // Se condition_values está vazio, aplica a TODOS os métodos do tipo especificado
+            $conditionValues = $tax->condition_values ?? [];
+            return $this->checkPaymentMethods($order, $conditionValues, $tax->payment_type);
+        }
+
+        // Se usa condition_values (múltiplos valores) sem payment_type, usar nova lógica
+        if (!empty($tax->condition_values) && $tax->applies_to === 'payment_method') {
+            return $this->checkPaymentMethods($order, $tax->condition_values, 'all');
+        }
+
+        // Lógica antiga para compatibilidade
         return match ($tax->applies_to) {
             'payment_method' => $this->checkPaymentMethod($order, $tax->condition_value),
             'order_type' => $this->checkOrderType($order, $tax->condition_value),
@@ -162,7 +175,19 @@ class OrderCostService
      */
     private function checkPaymentMethod(Order $order, string $conditionValue): bool
     {
-        // Buscar no campo raw do pedido (iFood usa payments->methods)
+        // Para pedidos Takeat, verificar session.payments com payment_method.method
+        if ($order->provider === 'takeat') {
+            $payments = $order->raw['session']['payments'] ?? [];
+            foreach ($payments as $payment) {
+                $method = $payment['payment_method']['method'] ?? null;
+                if ($method === $conditionValue) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Para iFood direto: payments->methods
         if (isset($order->raw['payments']['methods'])) {
             foreach ($order->raw['payments']['methods'] as $payment) {
                 if (isset($payment['method']) && $payment['method'] === $conditionValue) {
@@ -181,6 +206,87 @@ class OrderCostService
         }
 
         return false;
+    }
+
+    /**
+     * Verificar múltiplos métodos de pagamento
+     */
+    private function checkPaymentMethods(Order $order, array $conditionValues, string $paymentType = 'all'): bool
+    {
+        $orderPaymentMethods = $this->getOrderPaymentMethods($order);
+
+        if (empty($orderPaymentMethods)) {
+            return false;
+        }
+
+        // Se conditionValues está vazio, aplica a TODOS os métodos do tipo especificado
+        $applyToAllMethods = empty($conditionValues);
+
+        // Verificar payment_type (online/offline/all)
+        foreach ($orderPaymentMethods as $method) {
+            $isOnline = is_online_payment_method($method);
+
+            // Verificar se o método atende ao filtro de tipo
+            $matchesType = $paymentType === 'all'
+                || ($paymentType === 'online' && $isOnline)
+                || ($paymentType === 'offline' && !$isOnline);
+
+            if (!$matchesType) {
+                continue;
+            }
+
+            // Se deve aplicar a todos os métodos do tipo, retorna true
+            if ($applyToAllMethods) {
+                return true;
+            }
+
+            // Se tem lista específica, verifica se o método está nela
+            if (in_array($method, $conditionValues)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Obter métodos de pagamento do pedido
+     */
+    private function getOrderPaymentMethods(Order $order): array
+    {
+        $methods = [];
+
+        // Para pedidos Takeat
+        if ($order->provider === 'takeat') {
+            $payments = $order->raw['session']['payments'] ?? [];
+            foreach ($payments as $payment) {
+                if ($method = $payment['payment_method']['method'] ?? null) {
+                    $methods[] = $method;
+                }
+            }
+            return $methods;
+        }
+
+        // Para iFood direto
+        if (isset($order->raw['payments']['methods'])) {
+            foreach ($order->raw['payments']['methods'] as $payment) {
+                if (isset($payment['method'])) {
+                    $methods[] = $payment['method'];
+                }
+            }
+            return $methods;
+        }
+
+        // Fallback
+        if (isset($order->raw['payments']) && is_array($order->raw['payments'])) {
+            foreach ($order->raw['payments'] as $payment) {
+                if (isset($payment['method'])) {
+                    $methods[] = $payment['method'];
+                }
+            }
+        }
+
+        return $methods;
     }
 
     /**

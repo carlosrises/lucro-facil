@@ -17,7 +17,9 @@ class CostCommission extends Model
         'type',
         'value',
         'applies_to',
+        'payment_type',
         'condition_value',
+        'condition_values',
         'affects_revenue_base',
         'enters_tax_base',
         'reduces_revenue_base',
@@ -26,6 +28,7 @@ class CostCommission extends Model
 
     protected $casts = [
         'value' => 'decimal:2',
+        'condition_values' => 'array',
         'affects_revenue_base' => 'boolean',
         'enters_tax_base' => 'boolean',
         'reduces_revenue_base' => 'boolean',
@@ -52,11 +55,14 @@ class CostCommission extends Model
     {
         return $query->where(function ($q) use ($provider, $origin) {
             $q->whereNull('provider')
-              ->orWhere('provider', $provider)
-              ->when($origin, function($q2) use ($origin) {
-                  // Se origin está definido, incluir comissões específicas para esse marketplace
-                  $q2->orWhere('provider', $origin);
-              });
+              ->orWhere('provider', $provider);
+
+            // Se for pedido Takeat com origin, verificar também provider "takeat-{origin}"
+            // Ex: provider='takeat' + origin='ifood' também pega regras com provider='takeat-ifood'
+            if ($provider === 'takeat' && $origin) {
+                $q->orWhere('provider', $origin)
+                  ->orWhere('provider', "takeat-{$origin}");
+            }
         });
     }
 

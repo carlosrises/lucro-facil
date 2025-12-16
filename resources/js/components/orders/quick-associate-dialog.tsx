@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { router } from '@inertiajs/react';
-import { Check, Link2, PackageX, Store } from 'lucide-react';
+import { Check, Link2, PackageX, Settings, Store } from 'lucide-react';
 import React from 'react';
 import { toast } from 'sonner';
 
@@ -43,6 +43,7 @@ interface QuickAssociateDialogProps {
     items: OrderItem[];
     internalProducts: InternalProduct[];
     provider: string;
+    onOpenDetailedMappings?: (item: OrderItem) => void;
 }
 
 export function QuickAssociateDialog({
@@ -52,6 +53,7 @@ export function QuickAssociateDialog({
     items,
     internalProducts,
     provider,
+    onOpenDetailedMappings,
 }: QuickAssociateDialogProps) {
     const [selectedProducts, setSelectedProducts] = React.useState<
         Record<number, number>
@@ -233,6 +235,23 @@ export function QuickAssociateDialog({
                                             Associar
                                         </Button>
                                     </div>
+                                )}
+
+                                {/* Botão para associação detalhada (múltiplos produtos, frações, etc) */}
+                                {onOpenDetailedMappings && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="w-full"
+                                        onClick={() => {
+                                            onOpenChange(false);
+                                            onOpenDetailedMappings(item);
+                                        }}
+                                    >
+                                        <Settings className="mr-2 h-4 w-4" />
+                                        Associação Detalhada (múltiplos
+                                        produtos, frações)
+                                    </Button>
                                 )}
                             </div>
                         ))}

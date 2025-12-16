@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class OrderItem extends Model
 {
@@ -15,11 +17,15 @@ class OrderItem extends Model
         'add_ons' => 'array',
     ];
 
-    public function order()
+    public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
     }
 
+    /**
+     * Relacionamento legado (backward compatibility)
+     * Retorna o primeiro produto associado via ProductMapping
+     */
     public function internalProduct()
     {
         return $this->hasOneThrough(
@@ -30,5 +36,36 @@ class OrderItem extends Model
             'sku', // Local key on order_items table
             'internal_product_id' // Local key on product_mappings table
         );
+    }
+
+    /**
+     * Novo sistema de múltiplas associações
+     */
+    public function mappings(): HasMany
+    {
+        return $this->hasMany(OrderItemMapping::class);
+    }
+
+    /**
+     * Calcular custo total do item considerando todas as associações
+     */
+    public function calculateTotalCost(): float
+    {
+        $totalCost = 0;
+        $itemQuantity = $this->qty ?? $this->quantity ?? 1;
+
+        // Se tem novas associações, usar elas
+        if ($this->mappings()->exists()) {
+            foreach ($this->mappings as $mapping) {
+                $totalCost += $mapping->calculateCost();
+            }
+        }
+        // Fallback para sistema legado
+        elseif ($this->internalProduct && $this->internalProduct->unit_cost) {
+            $unitCost = (float) $this->internalProduct->unit_cost;
+            $totalCost = $unitCost;
+        }
+
+        return $totalCost * $itemQuantity;
     }
 }

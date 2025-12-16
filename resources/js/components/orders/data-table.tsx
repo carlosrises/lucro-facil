@@ -34,14 +34,48 @@ import {
     IconChevronsRight,
     IconLayoutColumns,
 } from '@tabler/icons-react';
+import { Pencil } from 'lucide-react';
+
+/**
+ * Calcula o custo de um item considerando múltiplas associações
+ */
+function calculateItemCost(item: any): number {
+    const itemQuantity = item.qty || item.quantity || 0;
+
+    // Novo sistema: usar mappings se existir
+    if (item.mappings && item.mappings.length > 0) {
+        const mappingsCost = item.mappings.reduce(
+            (sum: number, mapping: any) => {
+                if (mapping.internal_product?.unit_cost) {
+                    const unitCost = parseFloat(
+                        mapping.internal_product.unit_cost,
+                    );
+                    const mappingQuantity = mapping.quantity || 1;
+                    return sum + unitCost * mappingQuantity;
+                }
+                return sum;
+            },
+            0,
+        );
+        return mappingsCost * itemQuantity;
+    }
+
+    // Fallback: sistema legado (internal_product direto)
+    if (item.internal_product?.unit_cost) {
+        const unitCost = parseFloat(item.internal_product.unit_cost);
+        return unitCost * itemQuantity;
+    }
+
+    return 0;
+}
 
 import { DateRangePicker } from '@/components/date-range-picker';
 import { columns, Order } from '@/components/orders/columns';
+import { ItemMappingsDialog } from '@/components/orders/item-mappings-dialog';
 import { OrderExpandedDetails } from '@/components/orders/order-expanded-details';
 import { OrderFinancialCard } from '@/components/orders/order-financial-card';
 import { QuickAssociateDialog } from '@/components/orders/quick-associate-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Link2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Select,
@@ -51,6 +85,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Link, router } from '@inertiajs/react';
+import { Link2 } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import {
     DropdownMenu,
@@ -114,6 +149,9 @@ export function DataTable({
     ]);
 
     const [associateDialogOpen, setAssociateDialogOpen] = React.useState(false);
+    const [itemMappingsDialogOpen, setItemMappingsDialogOpen] =
+        React.useState(false);
+    const [selectedItem, setSelectedItem] = React.useState<any | null>(null);
     const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(
         null,
     );
@@ -163,7 +201,7 @@ export function DataTable({
                         }}
                     >
                         <Link2 className="h-4 w-4" />
-                        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
                             {unmappedCount}
                         </span>
                     </Button>
@@ -178,10 +216,17 @@ export function DataTable({
         return newColumns;
     }, []);
 
-    const [dateRange, setDateRange] = React.useState<DateRange | undefined>({
-        from: filters?.start_date ? new Date(filters.start_date) : undefined,
-        to: filters?.end_date ? new Date(filters.end_date) : undefined,
-    });
+    const [dateRange, setDateRange] = React.useState<DateRange | undefined>(
+        () => {
+            const from = filters?.start_date
+                ? new Date(filters.start_date + 'T00:00:00')
+                : undefined;
+            const to = filters?.end_date
+                ? new Date(filters.end_date + 'T23:59:59')
+                : undefined;
+            return { from, to };
+        },
+    );
 
     const [columnFilters, setColumnFilters] =
         React.useState<ColumnFiltersState>([]);
@@ -662,6 +707,10 @@ export function DataTable({
                                                                                         [],
                                                                                     internal_product:
                                                                                         item.internal_product,
+                                                                                    mappings:
+                                                                                        item.mappings ||
+                                                                                        [],
+                                                                                    sku: item.sku,
                                                                                 }),
                                                                             );
 
@@ -684,10 +733,35 @@ export function DataTable({
                                                                                         x
                                                                                     </span>
                                                                                     <span className="grow font-medium">
-                                                                                        {
-                                                                                            item.name
-                                                                                        }
-                                                                                        {item.internal_product && (
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <span>
+                                                                                                {
+                                                                                                    item.name
+                                                                                                }
+                                                                                            </span>
+                                                                                            <Button
+                                                                                                size="icon"
+                                                                                                variant="ghost"
+                                                                                                className="h-6 w-6"
+                                                                                                onClick={() => {
+                                                                                                    setSelectedItem(
+                                                                                                        item,
+                                                                                                    );
+                                                                                                    setItemMappingsDialogOpen(
+                                                                                                        true,
+                                                                                                    );
+                                                                                                }}
+                                                                                                title="Editar associações"
+                                                                                            >
+                                                                                                <Pencil className="h-3 w-3" />
+                                                                                            </Button>
+                                                                                        </div>
+                                                                                        {(item.internal_product ||
+                                                                                            (item.mappings &&
+                                                                                                item
+                                                                                                    .mappings
+                                                                                                    .length >
+                                                                                                    0)) && (
                                                                                             <div className="mt-1 text-xs font-semibold text-emerald-600">
                                                                                                 Custo:{' '}
                                                                                                 {new Intl.NumberFormat(
@@ -698,10 +772,8 @@ export function DataTable({
                                                                                                             'BRL',
                                                                                                     },
                                                                                                 ).format(
-                                                                                                    parseFloat(
-                                                                                                        item
-                                                                                                            .internal_product
-                                                                                                            .unit_cost,
+                                                                                                    calculateItemCost(
+                                                                                                        item,
                                                                                                     ),
                                                                                                 )}
                                                                                             </div>
@@ -1429,9 +1501,9 @@ export function DataTable({
                                                                         .payments
                                                                         .length >
                                                                         0 && (
-                                                                        <>
+                                                                        <div className="flex w-full flex-col gap-2 border-b px-3 py-4">
                                                                             {/* Total pago */}
-                                                                            <div className="flex w-full flex-row justify-between gap-2 border-b px-3 py-2">
+                                                                            <div className="flex w-full flex-row justify-between gap-2">
                                                                                 <span className="text-sm font-semibold">
                                                                                     Total
                                                                                     pago
@@ -1460,127 +1532,57 @@ export function DataTable({
                                                                                     )}
                                                                                 </span>
                                                                             </div>
-                                                                            {/* Detalhes dos métodos de pagamento */}
-                                                                            <ul className="m-0 flex w-full flex-col gap-0 ps-0">
+                                                                            {/* Detalhes dos métodos de pagamento como descrição */}
+                                                                            <ul className="m-0 flex w-full flex-col gap-1 ps-0">
                                                                                 {row.original.raw.session.payments.map(
                                                                                     (
                                                                                         payment: any,
                                                                                         index: number,
-                                                                                    ) => (
-                                                                                        <li
-                                                                                            key={
-                                                                                                index
-                                                                                            }
-                                                                                            className="flex flex-col gap-2 border-b-1 px-3 py-4 last:border-b-0"
-                                                                                        >
-                                                                                            <div className="flex w-full flex-row items-center justify-between gap-2">
-                                                                                                <div className="flex flex-col gap-1">
-                                                                                                    <div className="flex items-center gap-2">
-                                                                                                        <span className="text-sm leading-4 font-medium">
-                                                                                                            {payment
-                                                                                                                .payment_method
-                                                                                                                ?.name ||
-                                                                                                                'Pagamento'}
-                                                                                                        </span>
-                                                                                                        {(() => {
-                                                                                                            const keyword =
-                                                                                                                payment
-                                                                                                                    .payment_method
-                                                                                                                    ?.keyword ||
-                                                                                                                '';
-                                                                                                            const isOnline =
-                                                                                                                keyword.includes(
-                                                                                                                    'pagamento_online',
-                                                                                                                ) ||
-                                                                                                                keyword.includes(
-                                                                                                                    'ifood',
-                                                                                                                ) ||
-                                                                                                                keyword.includes(
-                                                                                                                    '99food',
-                                                                                                                ) ||
-                                                                                                                keyword.includes(
-                                                                                                                    'neemo',
-                                                                                                                ) ||
-                                                                                                                keyword.includes(
-                                                                                                                    'rappi',
-                                                                                                                );
-                                                                                                            let platform =
-                                                                                                                '';
-                                                                                                            let color =
-                                                                                                                '';
+                                                                                    ) => {
+                                                                                        const keyword =
+                                                                                            payment
+                                                                                                .payment_method
+                                                                                                ?.keyword ||
+                                                                                            '';
+                                                                                        const paymentName =
+                                                                                            payment
+                                                                                                .payment_method
+                                                                                                ?.name ||
+                                                                                            'Pagamento';
 
-                                                                                                            if (
-                                                                                                                keyword.includes(
-                                                                                                                    'ifood',
-                                                                                                                )
-                                                                                                            ) {
-                                                                                                                platform =
-                                                                                                                    'iFood';
-                                                                                                                color =
-                                                                                                                    'bg-red-100 text-red-700';
-                                                                                                            } else if (
-                                                                                                                keyword.includes(
-                                                                                                                    '99food',
-                                                                                                                )
-                                                                                                            ) {
-                                                                                                                platform =
-                                                                                                                    '99Food';
-                                                                                                                color =
-                                                                                                                    'bg-orange-100 text-orange-700';
-                                                                                                            } else if (
-                                                                                                                keyword.includes(
-                                                                                                                    'neemo',
-                                                                                                                )
-                                                                                                            ) {
-                                                                                                                platform =
-                                                                                                                    'Neemo';
-                                                                                                                color =
-                                                                                                                    'bg-purple-100 text-purple-700';
-                                                                                                            } else if (
-                                                                                                                keyword.includes(
-                                                                                                                    'rappi',
-                                                                                                                )
-                                                                                                            ) {
-                                                                                                                platform =
-                                                                                                                    'Rappi';
-                                                                                                                color =
-                                                                                                                    'bg-pink-100 text-pink-700';
-                                                                                                            } else if (
-                                                                                                                keyword.includes(
-                                                                                                                    'pagamento_online',
-                                                                                                                )
-                                                                                                            ) {
-                                                                                                                platform =
-                                                                                                                    'Online';
-                                                                                                                color =
-                                                                                                                    'bg-blue-100 text-blue-700';
-                                                                                                            }
+                                                                                        const isOnline =
+                                                                                            keyword.includes(
+                                                                                                'pagamento_online',
+                                                                                            ) ||
+                                                                                            keyword.includes(
+                                                                                                'ifood',
+                                                                                            ) ||
+                                                                                            keyword.includes(
+                                                                                                '99food',
+                                                                                            ) ||
+                                                                                            keyword.includes(
+                                                                                                'neemo',
+                                                                                            ) ||
+                                                                                            keyword.includes(
+                                                                                                'rappi',
+                                                                                            );
 
-                                                                                                            return (
-                                                                                                                <>
-                                                                                                                    {platform && (
-                                                                                                                        <Badge
-                                                                                                                            className={`h-5 px-1.5 text-[10px] font-normal ${color}`}
-                                                                                                                        >
-                                                                                                                            {
-                                                                                                                                platform
-                                                                                                                            }
-                                                                                                                        </Badge>
-                                                                                                                    )}
-                                                                                                                    <Badge
-                                                                                                                        variant="outline"
-                                                                                                                        className="h-5 px-1.5 text-[10px] font-normal"
-                                                                                                                    >
-                                                                                                                        {isOnline
-                                                                                                                            ? 'Online'
-                                                                                                                            : 'Offline'}
-                                                                                                                    </Badge>
-                                                                                                                </>
-                                                                                                            );
-                                                                                                        })()}
-                                                                                                    </div>
-                                                                                                </div>
-                                                                                                <span className="text-sm font-semibold">
+                                                                                        return (
+                                                                                            <li
+                                                                                                key={
+                                                                                                    index
+                                                                                                }
+                                                                                                className="flex w-full flex-row items-start justify-between gap-2"
+                                                                                            >
+                                                                                                <span className="text-xs leading-4 text-muted-foreground">
+                                                                                                    {
+                                                                                                        paymentName
+                                                                                                    }
+                                                                                                    {isOnline
+                                                                                                        ? ' (Online)'
+                                                                                                        : ' (Offline)'}
+                                                                                                </span>
+                                                                                                <span className="text-xs leading-4 whitespace-nowrap text-muted-foreground">
                                                                                                     {new Intl.NumberFormat(
                                                                                                         'pt-BR',
                                                                                                         {
@@ -1595,38 +1597,12 @@ export function DataTable({
                                                                                                         ),
                                                                                                     )}
                                                                                                 </span>
-                                                                                            </div>
-
-                                                                                            {payment.change &&
-                                                                                                parseFloat(
-                                                                                                    payment.change,
-                                                                                                ) >
-                                                                                                    0 && (
-                                                                                                    <div className="flex w-full flex-row justify-between gap-2 text-xs text-muted-foreground">
-                                                                                                        <span>
-                                                                                                            Troco
-                                                                                                        </span>
-                                                                                                        <span>
-                                                                                                            {new Intl.NumberFormat(
-                                                                                                                'pt-BR',
-                                                                                                                {
-                                                                                                                    style: 'currency',
-                                                                                                                    currency:
-                                                                                                                        'BRL',
-                                                                                                                },
-                                                                                                            ).format(
-                                                                                                                parseFloat(
-                                                                                                                    payment.change,
-                                                                                                                ),
-                                                                                                            )}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                )}
-                                                                                        </li>
-                                                                                    ),
+                                                                                            </li>
+                                                                                        );
+                                                                                    },
                                                                                 )}
                                                                             </ul>
-                                                                        </>
+                                                                        </div>
                                                                     )}
                                                             </CardContent>
                                                         </Card>
@@ -1809,8 +1785,21 @@ export function DataTable({
                     items={selectedOrder.items || []}
                     internalProducts={internalProducts}
                     provider={selectedOrder.provider}
+                    onOpenDetailedMappings={(item) => {
+                        setSelectedItem(item);
+                        setItemMappingsDialogOpen(true);
+                    }}
                 />
             )}
+
+            {/* Modal de Associações Detalhadas do Item */}
+            <ItemMappingsDialog
+                open={itemMappingsDialogOpen}
+                onOpenChange={setItemMappingsDialogOpen}
+                item={selectedItem}
+                internalProducts={internalProducts}
+                provider={selectedOrder?.provider || 'ifood'}
+            />
         </div>
     );
 }

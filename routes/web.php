@@ -9,6 +9,7 @@ use App\Http\Controllers\IngredientsController;
 use App\Http\Controllers\ProductsController;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\ProductMappingController;
+use App\Http\Controllers\OrderItemMappingsController;
 use App\Http\Controllers\TaxCategoriesController;
 use App\Http\Controllers\FinanceCategoriesController;
 use App\Http\Controllers\FinanceEntriesController;
@@ -103,6 +104,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('product-mappings', [ProductMappingController::class, 'store'])->name('product-mappings.store');
     Route::delete('product-mappings/{productMapping}', [ProductMappingController::class, 'destroy'])->name('product-mappings.destroy');
     Route::delete('product-mappings/sku/{sku}', [ProductMappingController::class, 'destroyBySku'])->name('product-mappings.destroyBySku');
+
+    // Order Item Mappings (múltiplas associações por item)
+    Route::post('order-items/{orderItem}/mappings', [OrderItemMappingsController::class, 'store'])->name('order-item-mappings.store');
+    Route::delete('order-items/{orderItem}/mappings', [OrderItemMappingsController::class, 'destroy'])->name('order-item-mappings.destroy');
 
     // Tax Categories
     Route::get('tax-categories', [TaxCategoriesController::class, 'index'])->name('tax-categories.index');

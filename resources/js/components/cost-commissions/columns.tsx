@@ -19,6 +19,7 @@ declare global {
 export type CostCommission = {
     id: number;
     name: string;
+    category: 'cost' | 'commission';
     provider: string | null;
     type: 'percentage' | 'fixed';
     value: string;
@@ -28,7 +29,9 @@ export type CostCommission = {
         | 'pickup_only'
         | 'payment_method'
         | 'custom';
+    payment_type?: 'all' | 'online' | 'offline';
     condition_value: string | null;
+    condition_values?: string[] | null;
     affects_revenue_base: boolean;
     enters_tax_base: boolean;
     reduces_revenue_base: boolean;

@@ -22,7 +22,11 @@ class OrdersController extends Controller
                 'delivery_fee', 'tip', 'net_total', 'raw', 'tenant_id',
                 'calculated_costs', 'total_costs', 'total_commissions', 'net_revenue', 'costs_calculated_at',
             ])
-            ->with(['items.internalProduct.taxCategory', 'sale'])
+            ->with([
+                'items.internalProduct.taxCategory',
+                'items.mappings.internalProduct.taxCategory', // Novo: carregar múltiplas associações
+                'sale'
+            ])
             ->where('tenant_id', tenant_id())
             ->when($request->input('status'), function ($q, $status) {
                 // Aceita tanto status completo quanto abreviado usando o Enum
