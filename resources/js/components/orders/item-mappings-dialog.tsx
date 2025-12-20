@@ -533,15 +533,15 @@ export function ItemMappingsDialog({
 
                                                             <div className="space-y-2">
                                                                 <Label className="text-sm">
-                                                                    Quantidade/Fração
+                                                                    Porcentagem
                                                                 </Label>
                                                                 <Input
                                                                     type="number"
-                                                                    min="0.01"
-                                                                    max="999"
-                                                                    step="0.25"
+                                                                    min="1"
+                                                                    max="100"
+                                                                    step="25"
                                                                     value={
-                                                                        addonMapping.quantity
+                                                                        addonMapping.quantity * 100
                                                                     }
                                                                     onChange={(
                                                                         e,
@@ -553,22 +553,19 @@ export function ItemMappingsDialog({
                                                                                     {
                                                                                         ...addonMapping,
                                                                                         quantity:
-                                                                                            parseFloat(
+                                                                                            (parseFloat(
                                                                                                 e
                                                                                                     .target
                                                                                                     .value,
-                                                                                            ) ||
-                                                                                            1,
+                                                                                            ) || 100) / 100,
                                                                                     },
                                                                             },
                                                                         )
                                                                     }
-                                                                    placeholder="Ex: 0.25 para 1/4"
+                                                                    placeholder="Ex: 25 para 25%"
                                                                 />
                                                                 <p className="text-xs text-muted-foreground">
-                                                                    1.0 = 100% |
-                                                                    0.5 = 50% |
-                                                                    0.25 = 25%
+                                                                    100% = inteiro | 50% = metade | 25% = 1/4
                                                                 </p>
                                                             </div>
                                                         </>
