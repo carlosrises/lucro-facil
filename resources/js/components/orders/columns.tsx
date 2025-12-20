@@ -401,11 +401,21 @@ export const columns: ColumnDef<Order>[] = [
         header: 'Total do pedido',
         cell: ({ row }) => {
             const raw = row.original.raw;
-            // iFood: raw.total.orderAmount
-            // Takeat: gross_total do banco
-            const amount =
-                raw?.total?.orderAmount ??
-                parseFloat(row.original.gross_total || '0');
+            let amount = 0;
+            
+            // iFood: usar raw.total.orderAmount
+            if (raw?.total?.orderAmount) {
+                amount = parseFloat(String(raw.total.orderAmount));
+            } 
+            // Takeat: usar old_total_price (valor antes do desconto)
+            else if (row.original.provider === 'takeat' && raw?.session?.old_total_price) {
+                amount = parseFloat(String(raw.session.old_total_price));
+            }
+            // Fallback: usar gross_total do banco
+            else {
+                amount = parseFloat(row.original.gross_total || '0');
+            }
+            
             const isCancelled = row.original.status === 'CANCELLED';
 
             return amount > 0 ? (
