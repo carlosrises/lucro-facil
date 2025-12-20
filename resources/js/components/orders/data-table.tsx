@@ -188,10 +188,15 @@ export function DataTable({
             cell: ({ row }: { row: import('./columns').Order }) => {
                 const order = row.original as Order;
 
-                // Contar items sem internal_product diretamente da relação carregada
+                // Contar items sem associação (nem internal_product nem mappings)
                 const unmappedCount =
-                    order.items?.filter((item) => !item.internal_product)
-                        .length || 0;
+                    order.items?.filter((item) => {
+                        // Item não tem nem produto direto nem mappings
+                        return (
+                            !item.internal_product &&
+                            (!item.mappings || item.mappings.length === 0)
+                        );
+                    }).length || 0;
 
                 if (unmappedCount === 0) return null;
 

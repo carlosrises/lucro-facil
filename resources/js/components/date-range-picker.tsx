@@ -23,7 +23,10 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
 
     const handleChange = (selected: DateRange | undefined) => {
         setRange(selected);
-        onChange?.(selected);
+        // Só dispara onChange quando tiver ambas as datas selecionadas (from e to)
+        if (selected?.from && selected?.to) {
+            onChange?.(selected);
+        }
     };
 
     const presets = [
