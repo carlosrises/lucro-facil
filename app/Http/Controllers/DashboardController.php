@@ -38,8 +38,15 @@ class DashboardController extends Controller
         $totalCosts = 0; // Custos operacionais
 
         foreach ($orders as $order) {
-            // Total do pedido (gross_total)
-            $totalRevenue += (float) ($order->gross_total ?? 0);
+            // Calcular faturamento somando os itens (não usar gross_total que pode estar incorreto)
+            $orderRevenue = 0;
+            foreach ($order->items as $item) {
+                // Usar os campos price/unit_price salvos na tabela order_items
+                $itemPrice = (float) ($item->price ?? $item->unit_price ?? 0);
+                $itemQuantity = (float) ($item->quantity ?? $item->qty ?? 1);
+                $orderRevenue += $itemPrice * $itemQuantity;
+            }
+            $totalRevenue += $orderRevenue;
 
             // Taxa de entrega
             $totalDeliveryFee += (float) ($order->delivery_fee ?? 0);
@@ -143,7 +150,14 @@ class DashboardController extends Controller
         $previousPaymentFees = 0;
 
         foreach ($previousOrders as $order) {
-            $previousRevenue += (float) ($order->gross_total ?? 0);
+            // Calcular faturamento somando os itens
+            $orderRevenue = 0;
+            foreach ($order->items as $item) {
+                $itemPrice = (float) ($item->price ?? $item->unit_price ?? 0);
+                $itemQuantity = (float) ($item->quantity ?? $item->qty ?? 1);
+                $orderRevenue += $itemPrice * $itemQuantity;
+            }
+            $previousRevenue += $orderRevenue;
             $previousDeliveryFee += (float) ($order->delivery_fee ?? 0);
 
             // Calcular CMV e impostos dos produtos do período anterior
@@ -240,7 +254,13 @@ class DashboardController extends Controller
             $dayTotalPmFees = 0;
 
             foreach ($dayOrders as $order) {
-                $orderTotal = (float) ($order->gross_total ?? 0);
+                // Calcular faturamento do dia somando os itens
+                $orderTotal = 0;
+                foreach ($order->items as $item) {
+                    $itemPrice = (float) ($item->price ?? $item->unit_price ?? 0);
+                    $itemQuantity = (float) ($item->quantity ?? $item->qty ?? 1);
+                    $orderTotal += $itemPrice * $itemQuantity;
+                }
                 $dayRevenue += $orderTotal;
 
                 // Calcular custos do dia
