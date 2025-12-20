@@ -98,6 +98,14 @@ class OrdersController extends Controller
                     ->orWhereRaw("UPPER(JSON_UNQUOTE(JSON_EXTRACT(raw, '$.orderType'))) = ?", [$normalizedType]);
                 });
             })
+            ->when($request->input('search'), function ($q, $search) {
+                // Buscar por código do pedido, short_reference ou order_uuid
+                $q->where(function ($query) use ($search) {
+                    $query->where('code', 'like', "%{$search}%")
+                        ->orWhere('short_reference', 'like', "%{$search}%")
+                        ->orWhere('order_uuid', 'like', "%{$search}%");
+                });
+            })
             ->orderByDesc('placed_at')
             ->orderByDesc('id');
 

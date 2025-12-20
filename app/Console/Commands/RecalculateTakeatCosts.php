@@ -22,7 +22,7 @@ class RecalculateTakeatCosts extends Command
         $bar->start();
 
         $count = 0;
-        
+
         // Processar em chunks para não estourar memória
         Order::where('provider', 'takeat')
             ->chunk(100, function ($orders) use ($costService, &$count, $bar) {

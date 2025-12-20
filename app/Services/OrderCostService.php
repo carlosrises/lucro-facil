@@ -50,15 +50,24 @@ class OrderCostService
             }
         }
 
-        // Usar raw->total->orderAmount se net_total estiver zerado
-        $baseValue = (float) $order->net_total;
-        if ($baseValue == 0 && isset($order->raw['total']['orderAmount'])) {
+        // Calcular base de cálculo para taxas
+        // Para Takeat: usar old_total_price (antes do desconto) se disponível
+        // Para iFood: usar orderAmount do raw
+        // Caso contrário: usar net_total
+        $baseValue = 0;
+        
+        if ($order->provider === 'takeat' && isset($order->raw['session']['old_total_price'])) {
+            // Takeat: usar valor antes do desconto
+            $baseValue = (float) $order->raw['session']['old_total_price'];
+        } elseif (isset($order->raw['total']['orderAmount'])) {
+            // iFood: usar orderAmount
             $baseValue = (float) $order->raw['total']['orderAmount'];
-        }
-
-        // Adicionar delivery_fee ao baseValue (é uma receita)
-        if ($order->delivery_fee > 0) {
-            $baseValue += (float) $order->delivery_fee;
+        } else {
+            // Fallback: net_total + delivery_fee
+            $baseValue = (float) $order->net_total;
+            if ($order->delivery_fee > 0) {
+                $baseValue += (float) $order->delivery_fee;
+            }
         }
 
         $revenueBase = $baseValue;

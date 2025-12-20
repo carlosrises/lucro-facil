@@ -80,7 +80,14 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
 
     // Função helper para calcular todos os valores financeiros
     const calculateFinancials = () => {
-        const grossTotal = parseFloat(String(order?.gross_total || '0'));
+        // Para Takeat: usar old_total_price do raw (antes de descontos) se disponível
+        // Caso contrário, usar gross_total do banco
+        let grossTotal = parseFloat(String(order?.gross_total || '0'));
+        
+        if (order?.provider === 'takeat' && order?.raw?.session?.old_total_price) {
+            grossTotal = parseFloat(String(order.raw.session.old_total_price));
+        }
+        
         const discountTotal = parseFloat(String(order?.discount_total || '0'));
         const deliveryFee = parseFloat(String(order?.delivery_fee || '0'));
         const netTotal = parseFloat(String(order?.net_total || '0'));
