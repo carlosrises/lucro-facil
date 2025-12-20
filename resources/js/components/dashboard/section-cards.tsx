@@ -222,7 +222,12 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                     </CardTitle>
                     <div className="flex items-center justify-between gap-2">
                         <CardDescription className="text-sm">
-                            Margem: {((data.revenue > 0 ? (data.margin / data.revenue) * 100 : 0)).toFixed(1)}%
+                            Margem:{' '}
+                            {(data.revenue > 0
+                                ? (data.margin / data.revenue) * 100
+                                : 0
+                            ).toFixed(1)}
+                            %
                         </CardDescription>
                         <Badge
                             variant={getTrendVariant(data.marginChange)}

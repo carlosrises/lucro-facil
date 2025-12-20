@@ -87,7 +87,7 @@ class AbcCurveController extends Controller
         // Preparar dados para a tabela
         $tableData = $productsData->map(function ($item) use ($products, $totalRevenue, $curveA, $curveB) {
             $product = $products->get($item->internal_product_id);
-            
+
             // Determinar curva
             $curve = 'C';
             if (collect($curveA)->where('internal_product_id', $item->internal_product_id)->isNotEmpty()) {

@@ -1,11 +1,16 @@
-import { useState } from 'react';
 import { Head, router } from '@inertiajs/react';
 import { IconSearch } from '@tabler/icons-react';
+import { useState } from 'react';
 
-import AppLayout from '@/layouts/app-layout';
+import { DateRangePicker } from '@/components/date-range-picker';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
     Select,
@@ -22,7 +27,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { DateRangePicker } from '@/components/date-range-picker';
+import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type DateRange } from '@/types';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -65,7 +70,11 @@ type AbcCurveProps = {
     };
 };
 
-export default function AbcCurve({ products, metrics, filters }: AbcCurveProps) {
+export default function AbcCurve({
+    products,
+    metrics,
+    filters,
+}: AbcCurveProps) {
     const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
         if (filters.start_date && filters.end_date) {
             return {
@@ -144,7 +153,9 @@ export default function AbcCurve({ products, metrics, filters }: AbcCurveProps) 
                     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
                         {/* Filtros de Período */}
                         <div className="flex items-center justify-between gap-4 px-4 lg:px-6">
-                            <h1 className="text-2xl font-semibold">Curva ABC</h1>
+                            <h1 className="text-2xl font-semibold">
+                                Curva ABC
+                            </h1>
                             <DateRangePicker
                                 value={dateRange}
                                 onChange={handleDateRangeChange}
@@ -347,9 +358,9 @@ export default function AbcCurve({ products, metrics, filters }: AbcCurveProps) 
                         </div>
 
                         {/* Filtros da Tabela */}
-                        <div className="flex flex-col gap-4 px-4 lg:px-6 md:flex-row md:items-center md:justify-between">
-                            <div className="relative flex-1 max-w-sm">
-                                <IconSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <div className="flex flex-col gap-4 px-4 md:flex-row md:items-center md:justify-between lg:px-6">
+                            <div className="relative max-w-sm flex-1">
+                                <IconSearch className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                 <Input
                                     placeholder="Pesquisar produto..."
                                     value={search}

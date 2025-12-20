@@ -161,8 +161,7 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
         items: [
             {
                 title: 'Curva ABC',
-                href: '#',
-                locked: true,
+                href: '/abc-curve',
             },
             {
                 title: 'DRE',

@@ -182,18 +182,18 @@ class FinancialSummaryController extends Controller
                 // Receitas
                 'grossRevenue' => $grossRevenue,
                 'revenueByMarketplace' => $revenueByMarketplace,
-                
+
                 // Custos
                 'cmv' => $cmv,
                 'taxes' => $taxes,
                 'commissions' => $commissions,
                 'paymentFees' => $paymentFees,
                 'orderCosts' => $orderCosts,
-                
+
                 // Operacionais
                 'extraIncome' => $extraIncome,
                 'extraExpenses' => $extraExpenses,
-                
+
                 // Resultados
                 'grossProfit' => $grossProfit,
                 'grossProfitPercent' => $grossProfitPercent,

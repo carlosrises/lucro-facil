@@ -41,18 +41,18 @@ interface SummaryData {
         value: number;
         percentage: number;
     }>;
-    
+
     // Custos
     cmv: number;
     taxes: number;
     commissions: number;
     paymentFees: number;
     orderCosts: number;
-    
+
     // Operacionais
     extraIncome: number;
     extraExpenses: number;
-    
+
     // Resultados
     grossProfit: number;
     grossProfitPercent: number;
@@ -153,9 +153,7 @@ export default function FinancialSummary() {
                                                             style: 'currency',
                                                             currency: 'BRL',
                                                         },
-                                                    ).format(
-                                                        data.grossRevenue,
-                                                    )}
+                                                    ).format(data.grossRevenue)}
                                                 </Badge>
                                             </div>
                                             <CardDescription>
@@ -399,8 +397,8 @@ export default function FinancialSummary() {
                                                 <div className="flex items-center gap-2">
                                                     <DollarSign className="h-5 w-5 text-blue-600" />
                                                     <CardTitle className="text-blue-700">
-                                                        (=) Lucro Operacional dos
-                                                        Pedidos
+                                                        (=) Lucro Operacional
+                                                        dos Pedidos
                                                     </CardTitle>
                                                 </div>
                                                 <div className="flex items-center gap-2">
