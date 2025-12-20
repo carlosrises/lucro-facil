@@ -4,6 +4,8 @@ namespace App\Jobs;
 
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\OrderItemMapping;
+use App\Models\ProductMapping;
 use App\Models\Store;
 use App\Models\SyncCursor;
 use App\Services\IfoodClient;
@@ -165,7 +167,7 @@ class SyncOrdersJob implements ShouldQueue
                                 'discount_total' => data_get($detail, 'total.discounts', 0),
                                 'delivery_fee' => data_get($detail, 'total.deliveryFee', 0),
                                 'tip' => data_get($detail, 'total.tip', 0),
-                                'placed_at' => optional(Carbon::parse(data_get($detail, 'createdAt')))->toDateTimeString(),
+                                'placed_at' => optional(Carbon::parse(data_get($detail, 'createdAt'), 'America/Sao_Paulo'))->setTimezone('UTC')->toDateTimeString(),
                                 'raw' => $detail,
                             ]
                         );
@@ -203,7 +205,7 @@ class SyncOrdersJob implements ShouldQueue
                         // Substitui itens
                         $order->items()->delete();
                         foreach (data_get($detail, 'items', []) as $it) {
-                            OrderItem::create([
+                            $orderItem = OrderItem::create([
                                 'tenant_id' => $this->tenantId,
                                 'order_id' => $order->id,
                                 'sku' => data_get($it, 'id'), // Usar o ID do produto no iFood
@@ -214,6 +216,9 @@ class SyncOrdersJob implements ShouldQueue
                                 'add_ons' => data_get($it, 'additions', []),
                                 'observations' => data_get($it, 'observations'),
                             ]);
+
+                            // Auto-aplicar mapeamento se existir ProductMapping para este SKU
+                            $this->autoApplyMappings($orderItem);
                         }
                     } catch (Throwable $e) {
                         logger()->error('Erro ao processar pedido iFood', [
@@ -266,5 +271,78 @@ class SyncOrdersJob implements ShouldQueue
             ]);
             throw $e; // deixa o Laravel reprocessar se configurado
         }
+    }
+
+    /**
+     * Auto-aplicar mapeamentos ao OrderItem baseado em ProductMapping
+     */
+    private function autoApplyMappings(OrderItem $orderItem): void
+    {
+        // Buscar ProductMapping pelo SKU
+        $productMapping = ProductMapping::where('tenant_id', $this->tenantId)
+            ->where('external_item_id', $orderItem->sku)
+            ->first();
+
+        if (!$productMapping) {
+            return; // Sem mapeamento configurado
+        }
+
+        // Criar OrderItemMapping principal
+        OrderItemMapping::create([
+            'tenant_id' => $this->tenantId,
+            'order_item_id' => $orderItem->id,
+            'internal_product_id' => $productMapping->internal_product_id,
+            'quantity' => 1.0,
+            'mapping_type' => 'main',
+            'option_type' => 'regular',
+            'auto_fraction' => false,
+        ]);
+
+        // Auto-mapear complementos (add_ons) se houverem
+        $addOns = $orderItem->add_ons ?? [];
+        foreach ($addOns as $index => $addOn) {
+            $addonName = $addOn['name'] ?? '';
+            $addonQty = $addOn['quantity'] ?? 1;
+
+            // Tentar encontrar mapeamento para o complemento
+            // Busca por SKU exato ou por nome similar
+            $addonMapping = ProductMapping::where('tenant_id', $this->tenantId)
+                ->where(function ($q) use ($addonName) {
+                    $q->where('external_item_name', 'LIKE', "%{$addonName}%");
+                })
+                ->first();
+
+            if ($addonMapping) {
+                // Detectar se é sabor de pizza (heurística básica)
+                $isPizzaFlavor = stripos($addOn['name'] ?? '', 'pizza') !== false
+                    || stripos($productMapping->external_item_name ?? '', 'pizza') !== false;
+
+                OrderItemMapping::create([
+                    'tenant_id' => $this->tenantId,
+                    'order_item_id' => $orderItem->id,
+                    'internal_product_id' => $addonMapping->internal_product_id,
+                    'quantity' => $addonQty,
+                    'mapping_type' => 'addon',
+                    'option_type' => $isPizzaFlavor ? 'pizza_flavor' : 'addon',
+                    'auto_fraction' => $isPizzaFlavor,
+                    'external_reference' => (string) $index,
+                    'external_name' => $addonName,
+                ]);
+
+                logger()->info('🍕 Auto-mapeamento de complemento aplicado', [
+                    'order_item' => $orderItem->id,
+                    'addon_name' => $addonName,
+                    'product_id' => $addonMapping->internal_product_id,
+                    'is_pizza_flavor' => $isPizzaFlavor,
+                ]);
+            }
+        }
+
+        logger()->info('✅ Auto-mapeamento aplicado', [
+            'order_item' => $orderItem->id,
+            'sku' => $orderItem->sku,
+            'product_id' => $productMapping->internal_product_id,
+            'addons_mapped' => count($addOns),
+        ]);
     }
 }

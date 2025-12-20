@@ -109,6 +109,7 @@ type Filters = {
     search?: string;
     status?: string;
     provider?: string;
+    order_type?: string;
     store_id?: number | string;
     start_date?: string;
     end_date?: string;
@@ -122,7 +123,9 @@ export function DataTable({
     pagination,
     filters,
     stores,
+    providerOptions = [],
     unmappedProductsCount = 0,
+    noPaymentMethodCount = 0,
     internalProducts = [],
     marginSettings,
 }: {
@@ -130,7 +133,9 @@ export function DataTable({
     pagination: Pagination;
     filters: Filters;
     stores: { id: number; name: string }[];
+    providerOptions?: Array<{ value: string; label: string }>;
     unmappedProductsCount?: number;
+    noPaymentMethodCount?: number;
     internalProducts?: Array<{
         id: number;
         name: string;
@@ -219,10 +224,10 @@ export function DataTable({
     const [dateRange, setDateRange] = React.useState<DateRange | undefined>(
         () => {
             const from = filters?.start_date
-                ? new Date(filters.start_date + 'T00:00:00')
+                ? new Date(filters.start_date + 'T12:00:00')
                 : undefined;
             const to = filters?.end_date
-                ? new Date(filters.end_date + 'T23:59:59')
+                ? new Date(filters.end_date + 'T12:00:00')
                 : undefined;
             return { from, to };
         },
@@ -257,6 +262,27 @@ export function DataTable({
         });
     };
 
+    // Helper para construir URL de paginação com todos os filtros
+    const buildPageUrl = (page: number) => {
+        const params = new URLSearchParams();
+
+        // Adicionar todos os filtros atuais
+        Object.entries(filters || {}).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && value !== '') {
+                params.append(key, String(value));
+            }
+        });
+
+        // Adicionar página e per_page
+        params.set('page', String(page));
+        params.set(
+            'per_page',
+            String(filters?.per_page ?? pagination?.per_page ?? 20),
+        );
+
+        return `/orders?${params.toString()}`;
+    };
+
     const table = useReactTable({
         data,
         columns: columnsWithAssociate,
@@ -278,7 +304,7 @@ export function DataTable({
     });
 
     return (
-        <div className="flex w-full flex-col gap-4 space-x-4 px-4 lg:px-6">
+        <div className="flex w-full flex-col gap-4 px-4 lg:px-6">
             {/* Banner de produtos não mapeados */}
             {unmappedProductsCount > 0 && (
                 <Button
@@ -328,10 +354,60 @@ export function DataTable({
                 </Button>
             )}
 
+            {/* Banner de pedidos sem método de pagamento */}
+            {noPaymentMethodCount > 0 && (
+                <Button
+                    variant="outline"
+                    className="h-auto w-full justify-start gap-3 rounded-lg border-2 border-orange-500 bg-orange-50 p-4 text-left hover:bg-orange-100 dark:border-orange-900 dark:bg-orange-950 dark:hover:bg-orange-900"
+                    onClick={() => updateFilters({ no_payment_method: '1' })}
+                >
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-orange-500 text-white">
+                        <svg
+                            className="h-5 w-5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                        </svg>
+                    </div>
+                    <div className="flex-1">
+                        <div className="text-base font-bold text-orange-900 dark:text-orange-100">
+                            {noPaymentMethodCount} pedidos sem método de
+                            pagamento
+                        </div>
+                        <div className="mt-1 text-sm text-orange-700 dark:text-orange-300">
+                            Clique para filtrar pedidos sem informação de
+                            pagamento
+                        </div>
+                    </div>
+                    <div className="flex-shrink-0">
+                        <svg
+                            className="h-5 w-5 text-orange-700 dark:text-orange-300"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 5l7 7-7 7"
+                            />
+                        </svg>
+                    </div>
+                </Button>
+            )}
+
             {/* 🔎 Filtros */}
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                    {/* Badge de filtro ativo */}
+                    {/* Badge de filtro ativo - produtos não associados */}
                     {filters?.unmapped_only && (
                         <Badge variant="destructive" className="h-9 gap-2 px-3">
                             Apenas não associados
@@ -340,6 +416,68 @@ export function DataTable({
                                     updateFilters({ unmapped_only: undefined })
                                 }
                                 className="ml-1 rounded-full hover:bg-red-700"
+                            >
+                                <svg
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
+                                </svg>
+                            </button>
+                        </Badge>
+                    )}
+
+                    {/* Badge de filtro ativo - sem método de pagamento */}
+                    {filters?.no_payment_method && (
+                        <Badge variant="destructive" className="h-9 gap-2 px-3">
+                            Sem método de pagamento
+                            <button
+                                onClick={() =>
+                                    updateFilters({
+                                        no_payment_method: undefined,
+                                    })
+                                }
+                                className="ml-1 rounded-full hover:bg-red-700"
+                            >
+                                <svg
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
+                                </svg>
+                            </button>
+                        </Badge>
+                    )}
+
+                    {/* Badge de filtro ativo - tipo de pedido */}
+                    {filters?.order_type && (
+                        <Badge variant="secondary" className="h-9 gap-2 px-3">
+                            {filters.order_type === 'delivery' && '🚗 Delivery'}
+                            {filters.order_type === 'takeout' && '🛍️ Retirada'}
+                            {filters.order_type === 'balcony' && '🏪 Balcão'}
+                            {filters.order_type === 'self-service' &&
+                                '🍽️ Autoatendimento'}
+                            <button
+                                onClick={() =>
+                                    updateFilters({
+                                        order_type: undefined,
+                                    })
+                                }
+                                className="ml-1 rounded-full hover:bg-gray-400"
                             >
                                 <svg
                                     className="h-4 w-4"
@@ -424,15 +562,34 @@ export function DataTable({
                     <Combobox
                         options={[
                             { value: 'all', label: 'Todos os canais' },
-                            { value: 'ifood', label: 'iFood' },
-                            { value: 'takeat', label: 'Takeat' },
-                            { value: '99food', label: '99Food' },
+                            ...providerOptions,
                         ]}
                         placeholder="Filtrar canal"
                         value={filters?.provider ?? 'all'}
                         onChange={(value) =>
                             updateFilters({
                                 provider: value === 'all' ? undefined : value,
+                            })
+                        }
+                    />
+
+                    {/* Filtro por tipo de pedido */}
+                    <Combobox
+                        options={[
+                            { value: 'all', label: 'Todos os tipos' },
+                            { value: 'delivery', label: '🚗 Delivery' },
+                            { value: 'takeout', label: '🛍️ Retirada' },
+                            { value: 'balcony', label: '🏪 Balcão' },
+                            {
+                                value: 'self-service',
+                                label: '🍽️ Autoatendimento',
+                            },
+                        ]}
+                        placeholder="Filtrar tipo"
+                        value={filters?.order_type ?? 'all'}
+                        onChange={(value) =>
+                            updateFilters({
+                                order_type: value === 'all' ? undefined : value,
                             })
                         }
                     />
@@ -1501,7 +1658,7 @@ export function DataTable({
                                                                         .payments
                                                                         .length >
                                                                         0 && (
-                                                                        <div className="flex w-full flex-col gap-2 border-b px-3 py-4">
+                                                                        <div className="flex w-full flex-col gap-2 px-3 py-4">
                                                                             {/* Total pago */}
                                                                             <div className="flex w-full flex-row justify-between gap-2">
                                                                                 <span className="text-sm font-semibold">
@@ -1692,7 +1849,7 @@ export function DataTable({
                                 </span>
                             ) : (
                                 <Link
-                                    href={`/orders?page=1&per_page=${pagination.per_page}`}
+                                    href={buildPageUrl(1)}
                                     preserveScroll
                                     preserveState
                                 >
@@ -1764,7 +1921,7 @@ export function DataTable({
                                 </span>
                             ) : (
                                 <Link
-                                    href={`/orders?page=${pagination.last_page}&per_page=${pagination.per_page}`}
+                                    href={buildPageUrl(pagination.last_page)}
                                     preserveScroll
                                     preserveState
                                 >

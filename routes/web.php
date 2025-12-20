@@ -4,6 +4,7 @@ use App\Http\Controllers\OrdersController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\StoresController;
 use App\Http\Controllers\CostCommissionsController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\IngredientsController;
 use App\Http\Controllers\ProductsController;
@@ -14,6 +15,7 @@ use App\Http\Controllers\TaxCategoriesController;
 use App\Http\Controllers\FinanceCategoriesController;
 use App\Http\Controllers\FinanceEntriesController;
 use App\Http\Controllers\FinancialSummaryController;
+use App\Http\Controllers\AbcCurveController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -22,17 +24,18 @@ Route::get('/', function () {
 })->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
-    })->name('dashboard');
+    Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('orders', [OrdersController::class, 'index'])->name('orders.index');
+
+    Route::get('abc-curve', [AbcCurveController::class, 'index'])->name('abc-curve.index');
 
     // Order actions
     Route::post('orders/{id}/confirm', [OrdersController::class, 'confirm'])->name('orders.confirm');
     Route::post('orders/{id}/dispatch', [OrdersController::class, 'dispatch'])->name('orders.dispatch');
     Route::post('orders/{id}/ready', [OrdersController::class, 'ready'])->name('orders.ready');
     Route::post('orders/{id}/cancel', [OrdersController::class, 'cancel'])->name('orders.cancel');
+    Route::post('orders/{id}/recalculate-costs', [OrdersController::class, 'recalculateCosts'])->name('orders.recalculateCosts');
     Route::get('orders/{id}/cancellation-reasons', [OrdersController::class, 'cancellationReasons'])->name('orders.cancellationReasons');
 
     // Handshake Platform - Dispute actions (customer-initiated cancellation)
