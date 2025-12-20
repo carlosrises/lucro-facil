@@ -40,12 +40,14 @@ class FinancialSummaryController extends Controller
 
         // 3. Processar cada pedido
         foreach ($orders as $order) {
-            // Calcular faturamento somando os itens (não usar gross_total que pode estar incorreto)
+            // Total do pedido: iFood usa raw.total.orderAmount, Takeat usa gross_total
             $revenue = 0;
-            foreach ($order->items as $item) {
-                $itemPrice = (float) ($item->price ?? $item->unit_price ?? 0);
-                $itemQuantity = (float) ($item->quantity ?? $item->qty ?? 1);
-                $revenue += $itemPrice * $itemQuantity;
+            if (isset($order->raw['total']['orderAmount'])) {
+                // iFood: orderAmount inclui produtos + entrega + taxas
+                $revenue = (float) $order->raw['total']['orderAmount'];
+            } else {
+                // Takeat ou outros: usar gross_total
+                $revenue = (float) ($order->gross_total ?? 0);
             }
             $totalRevenue += $revenue;
 

@@ -38,13 +38,14 @@ class DashboardController extends Controller
         $totalCosts = 0; // Custos operacionais
 
         foreach ($orders as $order) {
-            // Calcular faturamento somando os itens (não usar gross_total que pode estar incorreto)
+            // Total do pedido: iFood usa raw.total.orderAmount, Takeat usa gross_total
             $orderRevenue = 0;
-            foreach ($order->items as $item) {
-                // Usar os campos price/unit_price salvos na tabela order_items
-                $itemPrice = (float) ($item->price ?? $item->unit_price ?? 0);
-                $itemQuantity = (float) ($item->quantity ?? $item->qty ?? 1);
-                $orderRevenue += $itemPrice * $itemQuantity;
+            if (isset($order->raw['total']['orderAmount'])) {
+                // iFood: orderAmount inclui produtos + entrega + taxas
+                $orderRevenue = (float) $order->raw['total']['orderAmount'];
+            } else {
+                // Takeat ou outros: usar gross_total
+                $orderRevenue = (float) ($order->gross_total ?? 0);
             }
             $totalRevenue += $orderRevenue;
 
@@ -150,12 +151,12 @@ class DashboardController extends Controller
         $previousPaymentFees = 0;
 
         foreach ($previousOrders as $order) {
-            // Calcular faturamento somando os itens
+            // Total do pedido: iFood usa raw.total.orderAmount, Takeat usa gross_total
             $orderRevenue = 0;
-            foreach ($order->items as $item) {
-                $itemPrice = (float) ($item->price ?? $item->unit_price ?? 0);
-                $itemQuantity = (float) ($item->quantity ?? $item->qty ?? 1);
-                $orderRevenue += $itemPrice * $itemQuantity;
+            if (isset($order->raw['total']['orderAmount'])) {
+                $orderRevenue = (float) $order->raw['total']['orderAmount'];
+            } else {
+                $orderRevenue = (float) ($order->gross_total ?? 0);
             }
             $previousRevenue += $orderRevenue;
             $previousDeliveryFee += (float) ($order->delivery_fee ?? 0);
@@ -254,12 +255,12 @@ class DashboardController extends Controller
             $dayTotalPmFees = 0;
 
             foreach ($dayOrders as $order) {
-                // Calcular faturamento do dia somando os itens
+                // Total do pedido: iFood usa raw.total.orderAmount, Takeat usa gross_total
                 $orderTotal = 0;
-                foreach ($order->items as $item) {
-                    $itemPrice = (float) ($item->price ?? $item->unit_price ?? 0);
-                    $itemQuantity = (float) ($item->quantity ?? $item->qty ?? 1);
-                    $orderTotal += $itemPrice * $itemQuantity;
+                if (isset($order->raw['total']['orderAmount'])) {
+                    $orderTotal = (float) $order->raw['total']['orderAmount'];
+                } else {
+                    $orderTotal = (float) ($order->gross_total ?? 0);
                 }
                 $dayRevenue += $orderTotal;
 
