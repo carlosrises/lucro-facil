@@ -15,24 +15,27 @@ class RecalculateTakeatCosts extends Command
     {
         $this->info('Buscando pedidos Takeat...');
 
-        $orders = Order::where('provider', 'takeat')->get();
-        $total = $orders->count();
-
+        $total = Order::where('provider', 'takeat')->count();
         $this->info("Encontrados {$total} pedidos Takeat");
 
         $bar = $this->output->createProgressBar($total);
         $bar->start();
 
         $count = 0;
-        foreach ($orders as $order) {
-            try {
-                $costService->applyAndSaveCosts($order);
-                $count++;
-            } catch (\Exception $e) {
-                $this->error("\nErro no pedido {$order->code}: " . $e->getMessage());
-            }
-            $bar->advance();
-        }
+        
+        // Processar em chunks para não estourar memória
+        Order::where('provider', 'takeat')
+            ->chunk(100, function ($orders) use ($costService, &$count, $bar) {
+                foreach ($orders as $order) {
+                    try {
+                        $costService->applyAndSaveCosts($order);
+                        $count++;
+                    } catch (\Exception $e) {
+                        $this->error("\nErro no pedido {$order->code}: " . $e->getMessage());
+                    }
+                    $bar->advance();
+                }
+            });
 
         $bar->finish();
         $this->newLine();
