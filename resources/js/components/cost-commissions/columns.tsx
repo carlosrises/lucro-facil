@@ -1,3 +1,4 @@
+import { ProviderBadge } from '@/components/provider-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -9,6 +10,12 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { ColumnDef } from '@tanstack/react-table';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
@@ -83,12 +90,39 @@ export const columns = (
             if (!provider) {
                 return <Badge variant="outline">Todos</Badge>;
             }
-            const labels: Record<string, string> = {
-                ifood: 'iFood',
-                rappi: 'Rappi',
-                uber_eats: 'Uber Eats',
-            };
-            return <Badge>{labels[provider] || provider}</Badge>;
+
+            // Marketplaces que vêm via Takeat
+            const marketplaces = ['ifood', '99food', 'neemo', 'keeta'];
+
+            // Se tiver formato takeat-origin, extrair origin e mostrar badge "via TK"
+            if (provider.startsWith('takeat-')) {
+                const origin = provider.replace('takeat-', '');
+                if (marketplaces.includes(origin)) {
+                    return (
+                        <div className="flex items-center gap-1">
+                            <ProviderBadge provider={origin} />
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Badge
+                                            variant="outline"
+                                            className="h-4 px-1 text-[9px] font-normal whitespace-nowrap"
+                                        >
+                                            via TK
+                                        </Badge>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>Pedido integrado via Takeat</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        </div>
+                    );
+                }
+                return <ProviderBadge provider={origin} />;
+            }
+
+            return <ProviderBadge provider={provider} />;
         },
     },
     {

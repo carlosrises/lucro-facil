@@ -201,8 +201,14 @@ class SyncTakeatOrders extends Command
         $orderUuid = "takeat_{$session['id']}_{$basketId}";
 
         // Calcular totais
-        $grossTotal = (float) ($basket['total_service_price'] ?? $basket['total_price'] ?? 0);
-        $deliveryFee = $session['is_delivery'] ? (float) ($session['delivery_tax_price'] ?? 0) : 0;
+        // Se houver entrega, usar total_delivery_price que já inclui a taxa
+        // Caso contrário, usar total_service_price ou total_price (só produtos)
+        $hasDelivery = $session['is_delivery'] ?? false;
+        $grossTotal = $hasDelivery && isset($session['total_delivery_price'])
+            ? (float) $session['total_delivery_price']
+            : (float) ($basket['total_service_price'] ?? $basket['total_price'] ?? 0);
+
+        $deliveryFee = $hasDelivery ? (float) ($session['delivery_tax_price'] ?? 0) : 0;
         $discount = (float) ($session['discount_total'] ?? 0);
 
         // Calcular net_total baseado nos pagamentos reais (excluindo subsidiados)
@@ -341,14 +347,16 @@ class SyncTakeatOrders extends Command
      */
     protected function mapTakeatStatus(?string $orderStatus, ?string $sessionStatus): string
     {
-        // order_status: pending, confirmed, ready, delivered, cancelled
-        // session status: open, completed, cancelled
+        // order_status: pending, confirmed, ready, delivered, finished, cancelled, canceled
+        // session status: open, completed, finished, cancelled, canceled
 
-        if ($sessionStatus === 'cancelled' || $orderStatus === 'cancelled') {
+        if (in_array($sessionStatus, ['cancelled', 'canceled']) ||
+            in_array($orderStatus, ['cancelled', 'canceled'])) {
             return 'CANCELLED';
         }
 
-        if ($sessionStatus === 'completed' || $orderStatus === 'delivered') {
+        if ($sessionStatus === 'completed' || $sessionStatus === 'finished' ||
+            $orderStatus === 'delivered' || $orderStatus === 'finished') {
             return 'CONCLUDED';
         }
 
@@ -357,6 +365,7 @@ class SyncTakeatOrders extends Command
             'confirmed' => 'CONFIRMED',
             'ready' => 'READY_TO_PICKUP',
             'delivered' => 'CONCLUDED',
+            'finished' => 'CONCLUDED',
             default => 'PLACED',
         };
     }

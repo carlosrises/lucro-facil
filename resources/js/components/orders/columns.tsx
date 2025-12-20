@@ -88,6 +88,28 @@ export type OrderItem = {
     mappings?: OrderItemMapping[]; // Novo: múltiplas associações
 };
 
+export type CostCommissionItem = {
+    id: number;
+    name: string;
+    category: 'cost' | 'commission' | 'tax' | 'payment_method';
+    type: 'fixed' | 'percentage';
+    value: number;
+    calculated_value: number;
+    percentage_rate?: number;
+};
+
+export type CalculatedCosts = {
+    costs: CostCommissionItem[];
+    commissions: CostCommissionItem[];
+    taxes: CostCommissionItem[];
+    payment_methods: CostCommissionItem[];
+    total_costs: number;
+    total_commissions: number;
+    total_taxes: number;
+    total_payment_methods: number;
+    net_revenue: number;
+};
+
 export type Order = {
     id: number;
     code: string;
@@ -109,6 +131,7 @@ export type Order = {
     total_commissions?: number | string | null;
     net_revenue?: number | string | null;
     costs_calculated_at?: string | null;
+    calculated_costs?: CalculatedCosts | null;
     items?: OrderItem[];
     raw: {
         id?: string;
@@ -750,6 +773,20 @@ export const columns: ColumnDef<Order>[] = [
                     ? parseFloat(row.original.total_commissions)
                     : (row.original.total_commissions ?? 0);
 
+            // Adicionar taxas de pagamento (payment_methods)
+            const calculatedCosts = row.original.calculated_costs;
+            const paymentMethodFees = calculatedCosts?.payment_methods || [];
+            const totalPaymentMethodFee = paymentMethodFees.reduce(
+                (sum: number, fee: any) => sum + (fee.calculated_value || 0),
+                0,
+            );
+
+            // Adicionar delivery_fee à base de cálculo (para Takeat)
+            const deliveryFee =
+                typeof row.original.delivery_fee === 'string'
+                    ? parseFloat(row.original.delivery_fee)
+                    : (row.original.delivery_fee ?? 0);
+
             // Calcular subsídio dos pagamentos (apenas para Takeat)
             let totalSubsidy = 0;
             if (provider === 'takeat') {
@@ -773,14 +810,17 @@ export const columns: ColumnDef<Order>[] = [
                 }, 0);
             }
 
+            // Base de cálculo: orderTotal + subsídio + delivery fee
+            const subtotal = orderTotal + totalSubsidy + deliveryFee;
+
             const netTotal =
-                orderTotal +
-                totalSubsidy -
+                subtotal -
                 totalCost -
                 totalTax -
                 extraCosts -
-                commissions;
-            const margin = (netTotal / (orderTotal + totalSubsidy)) * 100;
+                commissions -
+                totalPaymentMethodFee;
+            const margin = (netTotal / subtotal) * 100;
 
             if (margin === 0) {
                 return (

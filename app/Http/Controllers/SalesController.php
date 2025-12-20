@@ -33,10 +33,13 @@ class SalesController extends Controller
                 $query->where('short_id', 'like', "%{$search}%")
                     ->orWhere('sale_uuid', 'like', "%{$search}%");
             }))
-            ->when($request->input('start_date') && $request->input('end_date'), fn ($q) => $q->whereBetween('sale_created_at', [
-                request('start_date').' 00:00:00',
-                request('end_date').' 23:59:59',
-            ]))
+            ->when($request->input('start_date') && $request->input('end_date'), function ($q) {
+                // Converter datas do horário de Brasília para UTC
+                $startDateUtc = \Carbon\Carbon::parse(request('start_date') . ' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+                $endDateUtc = \Carbon\Carbon::parse(request('end_date') . ' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+
+                return $q->whereBetween('sale_created_at', [$startDateUtc, $endDateUtc]);
+            })
             ->orderByDesc('sale_created_at')
             ->orderByDesc('id');
 

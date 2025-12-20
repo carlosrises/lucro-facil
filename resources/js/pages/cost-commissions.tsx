@@ -2,13 +2,13 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, router, usePage } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
 import * as React from 'react';
+import { toast } from 'sonner';
 
 import { CostCommission } from '@/components/cost-commissions/columns';
 import { DataTable } from '@/components/cost-commissions/data-table';
 import { CostCommissionFormDialog } from '@/components/cost-commissions/form-drawer';
 import {
     AlertDialog,
-    AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
     AlertDialogDescription,
@@ -83,12 +83,21 @@ export default function CostCommissions() {
         );
     };
 
-    const confirmDelete = () => {
+    const confirmDelete = (recalculate: boolean) => {
         if (itemToDelete) {
             router.delete(`/cost-commissions/${itemToDelete.id}`, {
+                data: { recalculate },
                 onSuccess: () => {
                     setIsDeleteDialogOpen(false);
                     setItemToDelete(null);
+                    toast.success(
+                        recalculate
+                            ? 'Custo/Comissão excluído! Recalculando pedidos...'
+                            : 'Custo/Comissão excluído com sucesso!',
+                    );
+                },
+                onError: () => {
+                    toast.error('Erro ao excluir custo/comissão');
                 },
             });
         }
@@ -146,20 +155,44 @@ export default function CostCommissions() {
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Esta ação não pode ser desfeita. O custo/comissão "
-                            {itemToDelete?.name}" será permanentemente excluído.
+                        <AlertDialogTitle>
+                            Excluir "{itemToDelete?.name}"
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-3">
+                            <p>
+                                Esta ação não pode ser desfeita. O
+                                custo/comissão será permanentemente excluído.
+                            </p>
+                            <p className="font-medium text-foreground">
+                                O que deseja fazer com os pedidos existentes?
+                            </p>
+                            <ul className="space-y-2 text-sm">
+                                <li>
+                                    • <strong>Manter valores:</strong> Pedidos
+                                    existentes continuarão com os valores
+                                    calculados anteriormente
+                                </li>
+                                <li>
+                                    • <strong>Recalcular:</strong> Remove esta
+                                    taxa de todos os pedidos existentes
+                                </li>
+                            </ul>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter>
+                    <AlertDialogFooter className="gap-2 sm:gap-0">
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={confirmDelete}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        <Button
+                            variant="outline"
+                            onClick={() => confirmDelete(false)}
                         >
-                            Excluir
-                        </AlertDialogAction>
+                            Excluir e Manter Valores
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => confirmDelete(true)}
+                        >
+                            Excluir e Recalcular
+                        </Button>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

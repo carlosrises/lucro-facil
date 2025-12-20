@@ -7,18 +7,37 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class OrderItemMapping extends Model
 {
+    // Tipos de opção para sistema de pizza
+    public const OPTION_TYPE_PIZZA_FLAVOR = 'pizza_flavor';
+    public const OPTION_TYPE_REGULAR = 'regular';
+    public const OPTION_TYPE_ADDON = 'addon';
+    public const OPTION_TYPE_OBSERVATION = 'observation';
+    public const OPTION_TYPE_DRINK = 'drink';
+
+    public const OPTION_TYPES = [
+        self::OPTION_TYPE_PIZZA_FLAVOR => 'Sabor de Pizza',
+        self::OPTION_TYPE_REGULAR => 'Item Regular',
+        self::OPTION_TYPE_ADDON => 'Complemento',
+        self::OPTION_TYPE_OBSERVATION => 'Observação',
+        self::OPTION_TYPE_DRINK => 'Bebida',
+    ];
+
     protected $fillable = [
         'tenant_id',
         'order_item_id',
         'internal_product_id',
         'quantity',
         'mapping_type',
+        'option_type',
+        'auto_fraction',
+        'notes',
         'external_reference',
         'external_name',
     ];
 
     protected $casts = [
         'quantity' => 'decimal:4',
+        'auto_fraction' => 'boolean',
     ];
 
     /**
@@ -58,5 +77,29 @@ class OrderItemMapping extends Model
         $quantity = (float) $this->quantity;
 
         return $unitCost * $quantity;
+    }
+
+    /**
+     * Verificar se é um sabor de pizza
+     */
+    public function isPizzaFlavor(): bool
+    {
+        return $this->option_type === self::OPTION_TYPE_PIZZA_FLAVOR;
+    }
+
+    /**
+     * Verificar se usa fração automática
+     */
+    public function usesAutoFraction(): bool
+    {
+        return $this->auto_fraction === true;
+    }
+
+    /**
+     * Obter label do tipo de opção
+     */
+    public function getOptionTypeLabel(): ?string
+    {
+        return self::OPTION_TYPES[$this->option_type] ?? null;
     }
 }

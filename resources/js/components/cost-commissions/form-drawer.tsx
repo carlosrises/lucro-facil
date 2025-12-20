@@ -60,6 +60,20 @@ export function CostCommissionFormDialog({
         integratedProviders.includes(provider.value),
     );
 
+    // Função para normalizar o provider (ex: "takeat-ifood" -> "takeat")
+    const normalizeProvider = (provider: string): string => {
+        if (provider.startsWith('takeat-')) {
+            return 'takeat';
+        }
+        return provider;
+    };
+
+    // Função para obter os métodos de pagamento do provider normalizado
+    const getPaymentMethodsForProvider = (provider: string) => {
+        const normalized = normalizeProvider(provider);
+        return paymentMethods[normalized] || [];
+    };
+
     const { data, setData, post, put, processing, errors, reset } = useForm({
         name: item?.name || '',
         category: item?.category || 'cost',
@@ -187,7 +201,11 @@ export function CostCommissionFormDialog({
                             onValueChange={(value) =>
                                 setData(
                                     'category',
-                                    value as 'cost' | 'commission',
+                                    value as
+                                        | 'cost'
+                                        | 'commission'
+                                        | 'tax'
+                                        | 'payment_method',
                                 )
                             }
                         >
@@ -198,6 +216,10 @@ export function CostCommissionFormDialog({
                                 <SelectItem value="cost">Custo</SelectItem>
                                 <SelectItem value="commission">
                                     Comissão
+                                </SelectItem>
+                                <SelectItem value="tax">Imposto</SelectItem>
+                                <SelectItem value="payment_method">
+                                    Taxa de Meio de Pagamento
                                 </SelectItem>
                             </SelectContent>
                         </Select>
@@ -399,61 +421,58 @@ export function CostCommissionFormDialog({
                                     <span className="text-destructive">*</span>
                                 </Label>
                                 {data.provider &&
-                                paymentMethods[data.provider] ? (
+                                getPaymentMethodsForProvider(data.provider)
+                                    .length > 0 ? (
                                     <div className="space-y-2 rounded-md border p-3">
-                                        {paymentMethods[data.provider].map(
-                                            (method) => (
-                                                <div
-                                                    key={method.value}
-                                                    className="flex items-center space-x-2"
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        id={`method-${method.value}`}
-                                                        checked={(
+                                        {getPaymentMethodsForProvider(
+                                            data.provider,
+                                        ).map((method) => (
+                                            <div
+                                                key={method.value}
+                                                className="flex items-center space-x-2"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    id={`method-${method.value}`}
+                                                    checked={(
+                                                        data.condition_values ||
+                                                        []
+                                                    ).includes(method.value)}
+                                                    onChange={(e) => {
+                                                        const currentValues =
                                                             data.condition_values ||
-                                                            []
-                                                        ).includes(
-                                                            method.value,
-                                                        )}
-                                                        onChange={(e) => {
-                                                            const currentValues =
-                                                                data.condition_values ||
-                                                                [];
-                                                            if (
-                                                                e.target.checked
-                                                            ) {
-                                                                setData(
-                                                                    'condition_values',
-                                                                    [
-                                                                        ...currentValues,
+                                                            [];
+                                                        if (e.target.checked) {
+                                                            setData(
+                                                                'condition_values',
+                                                                [
+                                                                    ...currentValues,
+                                                                    method.value,
+                                                                ],
+                                                            );
+                                                        } else {
+                                                            setData(
+                                                                'condition_values',
+                                                                currentValues.filter(
+                                                                    (
+                                                                        v: string,
+                                                                    ) =>
+                                                                        v !==
                                                                         method.value,
-                                                                    ],
-                                                                );
-                                                            } else {
-                                                                setData(
-                                                                    'condition_values',
-                                                                    currentValues.filter(
-                                                                        (
-                                                                            v: string,
-                                                                        ) =>
-                                                                            v !==
-                                                                            method.value,
-                                                                    ),
-                                                                );
-                                                            }
-                                                        }}
-                                                        className="h-4 w-4"
-                                                    />
-                                                    <Label
-                                                        htmlFor={`method-${method.value}`}
-                                                        className="cursor-pointer text-sm font-normal"
-                                                    >
-                                                        {method.label}
-                                                    </Label>
-                                                </div>
-                                            ),
-                                        )}
+                                                                ),
+                                                            );
+                                                        }
+                                                    }}
+                                                    className="h-4 w-4"
+                                                />
+                                                <Label
+                                                    htmlFor={`method-${method.value}`}
+                                                    className="cursor-pointer text-sm font-normal"
+                                                >
+                                                    {method.label}
+                                                </Label>
+                                            </div>
+                                        ))}
                                         {(data.condition_values || []).length >
                                             0 && (
                                             <p className="mt-2 text-xs text-muted-foreground">

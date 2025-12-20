@@ -94,8 +94,8 @@ class CostCommissionsController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'category' => 'required|in:cost,commission',
-            'provider' => 'nullable|string|in:ifood,rappi,uber_eats,99food,keeta,neemo,takeat,pdv,takeat-ifood,takeat-99food',
+            'category' => 'required|in:cost,commission,tax,payment_method',
+            'provider' => 'nullable|string|max:100',
             'type' => 'required|in:percentage,fixed',
             'value' => 'required|numeric|min:0',
             'applies_to' => 'required|in:all_orders,delivery_only,pickup_only,payment_method,custom',
@@ -144,8 +144,8 @@ class CostCommissionsController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'category' => 'required|in:cost,commission',
-            'provider' => 'nullable|string|in:ifood,rappi,uber_eats,99food,keeta,neemo,takeat,pdv,takeat-ifood,takeat-99food',
+            'category' => 'required|in:cost,commission,tax,payment_method',
+            'provider' => 'nullable|string|max:100',
             'type' => 'required|in:percentage,fixed',
             'value' => 'required|numeric|min:0',
             'applies_to' => 'required|in:all_orders,delivery_only,pickup_only,payment_method,custom',
@@ -208,7 +208,28 @@ class CostCommissionsController extends Controller
             abort(403);
         }
 
+        // Capturar dados antes de excluir
+        $shouldRecalculate = $request->input('recalculate', false);
+        $tenantId = $costCommission->tenant_id;
+        $provider = $costCommission->provider;
+        $costCommissionId = $costCommission->id;
+
+        // Excluir o registro
         $costCommission->delete();
+
+        // Se deve recalcular, disparar job APÓS excluir mas com dados salvos
+        if ($shouldRecalculate) {
+            // Recalcular todos os pedidos, passando dados já que o registro foi excluído
+            RecalculateOrderCostsJob::dispatch(
+                $costCommissionId,
+                false, // false = aplica filtro de provider/origin
+                'cost_commission',
+                $tenantId, // Passa tenantId para o job
+                $provider  // Passa provider para o job
+            );
+
+            return back()->with('success', 'Custo/Comissão excluído! Recalculando pedidos existentes...');
+        }
 
         return back()->with('success', 'Custo/Comissão excluído com sucesso!');
     }

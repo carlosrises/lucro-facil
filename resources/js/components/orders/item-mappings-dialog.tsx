@@ -60,6 +60,15 @@ interface Mapping {
     internal_product_id: number | null;
     quantity: number;
     mapping_type: 'main' | 'option' | 'addon';
+    option_type?:
+        | 'pizza_flavor'
+        | 'regular'
+        | 'addon'
+        | 'observation'
+        | 'drink'
+        | null;
+    auto_fraction?: boolean;
+    notes?: string;
     external_reference?: string;
     external_name?: string;
 }
@@ -87,7 +96,21 @@ export function ItemMappingsDialog({
 
     // Estado para complementos (cada complemento pode ter seu próprio produto)
     const [addonMappings, setAddonMappings] = React.useState<
-        Record<number, { productId: number | null; quantity: number }>
+        Record<
+            number,
+            {
+                productId: number | null;
+                quantity: number;
+                optionType:
+                    | 'pizza_flavor'
+                    | 'regular'
+                    | 'addon'
+                    | 'observation'
+                    | 'drink'
+                    | null;
+                autoFraction: boolean;
+            }
+        >
     >({});
 
     const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -116,7 +139,18 @@ export function ItemMappingsDialog({
                 // Carregar mappings de complementos
                 const addonMaps: Record<
                     number,
-                    { productId: number | null; quantity: number }
+                    {
+                        productId: number | null;
+                        quantity: number;
+                        optionType:
+                            | 'pizza_flavor'
+                            | 'regular'
+                            | 'addon'
+                            | 'observation'
+                            | 'drink'
+                            | null;
+                        autoFraction: boolean;
+                    }
                 > = {};
                 item.mappings
                     .filter(
@@ -129,7 +163,9 @@ export function ItemMappingsDialog({
                         );
                         addonMaps[addonIndex] = {
                             productId: m.internal_product_id,
-                            quantity: m.quantity * 100, // Converter para porcentagem
+                            quantity: m.quantity, // Usar valor direto, não multiplicar por 100
+                            optionType: (m as any).option_type || 'addon',
+                            autoFraction: (m as any).auto_fraction || false,
                         };
                     });
                 console.log(
@@ -170,8 +206,10 @@ export function ItemMappingsDialog({
             if (addonMapping?.productId) {
                 mappings.push({
                     internal_product_id: addonMapping.productId,
-                    quantity: addonMapping.quantity / 100, // Converter porcentagem para decimal
+                    quantity: addonMapping.quantity, // Usar valor direto
                     mapping_type: 'addon',
+                    option_type: addonMapping.optionType || 'addon',
+                    auto_fraction: addonMapping.autoFraction || false,
                     external_reference: index.toString(),
                     external_name: addon.name,
                 });
@@ -189,6 +227,9 @@ export function ItemMappingsDialog({
                     internal_product_id: m.internal_product_id,
                     quantity: m.quantity,
                     mapping_type: m.mapping_type,
+                    option_type: m.option_type || null,
+                    auto_fraction: m.auto_fraction || false,
+                    notes: m.notes || null,
                     external_reference: m.external_reference,
                     external_name: m.external_name,
                 })),
@@ -354,7 +395,12 @@ export function ItemMappingsDialog({
                                     {item.add_ons.map((addon, index) => {
                                         const addonMapping = addonMappings[
                                             index
-                                        ] || { productId: null, quantity: 100 };
+                                        ] || {
+                                            productId: null,
+                                            quantity: 1,
+                                            optionType: 'addon' as const,
+                                            autoFraction: false,
+                                        };
                                         return (
                                             <div
                                                 key={index}
@@ -423,43 +469,167 @@ export function ItemMappingsDialog({
                                                 </div>
 
                                                 {addonMapping.productId && (
-                                                    <div className="space-y-2">
-                                                        <Label className="text-sm">
-                                                            Quantidade/Fração
-                                                        </Label>
-                                                        <Input
-                                                            type="number"
-                                                            min="0.01"
-                                                            max="999"
-                                                            step="0.25"
-                                                            value={
-                                                                addonMapping.quantity
-                                                            }
-                                                            onChange={(e) =>
-                                                                setAddonMappings(
+                                                    <>
+                                                        <div className="space-y-2">
+                                                            <Label className="text-sm">
+                                                                Tipo de Opção
+                                                            </Label>
+                                                            <Combobox
+                                                                options={[
                                                                     {
-                                                                        ...addonMappings,
-                                                                        [index]:
-                                                                            {
-                                                                                ...addonMapping,
-                                                                                quantity:
-                                                                                    parseFloat(
-                                                                                        e
-                                                                                            .target
-                                                                                            .value,
-                                                                                    ) ||
-                                                                                    1,
-                                                                            },
+                                                                        value: 'pizza_flavor',
+                                                                        label: '🍕 Sabor de Pizza',
                                                                     },
-                                                                )
-                                                            }
-                                                            placeholder="Ex: 0.25 para 1/4"
-                                                        />
-                                                        <p className="text-xs text-muted-foreground">
-                                                            1.0 = 100% | 0.5 =
-                                                            50% | 0.25 = 25%
-                                                        </p>
-                                                    </div>
+                                                                    {
+                                                                        value: 'regular',
+                                                                        label: '📦 Item Regular',
+                                                                    },
+                                                                    {
+                                                                        value: 'addon',
+                                                                        label: '➕ Complemento',
+                                                                    },
+                                                                    {
+                                                                        value: 'drink',
+                                                                        label: '🥤 Bebida',
+                                                                    },
+                                                                    {
+                                                                        value: 'observation',
+                                                                        label: '📝 Observação',
+                                                                    },
+                                                                ]}
+                                                                value={
+                                                                    addonMapping.optionType ||
+                                                                    'addon'
+                                                                }
+                                                                onChange={(
+                                                                    value,
+                                                                ) =>
+                                                                    setAddonMappings(
+                                                                        {
+                                                                            ...addonMappings,
+                                                                            [index]:
+                                                                                {
+                                                                                    ...addonMapping,
+                                                                                    optionType:
+                                                                                        value as any,
+                                                                                },
+                                                                        },
+                                                                    )
+                                                                }
+                                                                placeholder="Selecione o tipo"
+                                                                emptyMessage="Nenhum tipo encontrado"
+                                                                searchPlaceholder="Buscar..."
+                                                            />
+                                                            <p className="text-xs text-muted-foreground">
+                                                                Defina o tipo
+                                                                para cálculos
+                                                                automáticos
+                                                            </p>
+                                                        </div>
+
+                                                        {addonMapping.optionType ===
+                                                            'pizza_flavor' && (
+                                                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                                                                <div className="flex items-start gap-2">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        id={`auto-fraction-${index}`}
+                                                                        checked={
+                                                                            addonMapping.autoFraction
+                                                                        }
+                                                                        onChange={(
+                                                                            e,
+                                                                        ) =>
+                                                                            setAddonMappings(
+                                                                                {
+                                                                                    ...addonMappings,
+                                                                                    [index]:
+                                                                                        {
+                                                                                            ...addonMapping,
+                                                                                            autoFraction:
+                                                                                                e
+                                                                                                    .target
+                                                                                                    .checked,
+                                                                                        },
+                                                                                },
+                                                                            )
+                                                                        }
+                                                                        className="mt-0.5 h-4 w-4 rounded border-gray-300"
+                                                                    />
+                                                                    <div className="flex-1">
+                                                                        <Label
+                                                                            htmlFor={`auto-fraction-${index}`}
+                                                                            className="text-sm font-medium text-blue-900"
+                                                                        >
+                                                                            Fração
+                                                                            Automática
+                                                                        </Label>
+                                                                        <p className="text-xs text-blue-700">
+                                                                            Calcula
+                                                                            automaticamente
+                                                                            a
+                                                                            fração
+                                                                            baseado
+                                                                            no
+                                                                            número
+                                                                            de
+                                                                            sabores
+                                                                            (ex:
+                                                                            2
+                                                                            sabores
+                                                                            =
+                                                                            0.5
+                                                                            cada)
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        <div className="space-y-2">
+                                                            <Label className="text-sm">
+                                                                Quantidade/Fração
+                                                                {addonMapping.autoFraction &&
+                                                                    ' (será calculada automaticamente)'}
+                                                            </Label>
+                                                            <Input
+                                                                type="number"
+                                                                min="0.01"
+                                                                max="999"
+                                                                step="0.25"
+                                                                value={
+                                                                    addonMapping.quantity
+                                                                }
+                                                                onChange={(e) =>
+                                                                    setAddonMappings(
+                                                                        {
+                                                                            ...addonMappings,
+                                                                            [index]:
+                                                                                {
+                                                                                    ...addonMapping,
+                                                                                    quantity:
+                                                                                        parseFloat(
+                                                                                            e
+                                                                                                .target
+                                                                                                .value,
+                                                                                        ) ||
+                                                                                        1,
+                                                                                },
+                                                                        },
+                                                                    )
+                                                                }
+                                                                placeholder="Ex: 0.25 para 1/4"
+                                                                disabled={
+                                                                    addonMapping.autoFraction
+                                                                }
+                                                            />
+                                                            <p className="text-xs text-muted-foreground">
+                                                                1.0 = 100% | 0.5
+                                                                = 50% | 0.25 =
+                                                                25%
+                                                            </p>
+                                                        </div>
+                                                    </>
                                                 )}
                                             </div>
                                         );

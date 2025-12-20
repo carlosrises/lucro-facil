@@ -18,6 +18,8 @@ class RecalculateOrderCostsJob implements ShouldQueue
         public int $referenceId,
         public bool $applyToAll = false,
         public ?string $type = 'cost_commission', // 'cost_commission' ou 'product'
+        public ?int $tenantId = null, // Para quando o registro já foi excluído
+        public ?string $provider = null, // Para quando o registro já foi excluído
     ) {}
 
     /**
@@ -31,27 +33,38 @@ class RecalculateOrderCostsJob implements ShouldQueue
                 $q->where('internal_product_id', $this->referenceId);
             });
         } else {
-            // Para cost_commission, buscar pela taxa específica
+            // Para cost_commission, tentar buscar o registro
             $costCommission = \App\Models\CostCommission::find($this->referenceId);
 
-            if (!$costCommission) {
-                \Log::error("CostCommission não encontrada: {$this->referenceId}");
+            // Se não encontrar mas temos tenantId (caso de exclusão), usar os dados passados
+            if (!$costCommission && $this->tenantId) {
+                $query = Order::where('tenant_id', $this->tenantId);
+
+                if (!$this->applyToAll && $this->provider) {
+                    $query->where(function($q) {
+                        $q->where('provider', $this->provider)
+                          ->orWhere(function($q2) {
+                              $q2->where('provider', 'takeat')
+                                 ->where('origin', $this->provider);
+                          });
+                    });
+                }
+            } elseif (!$costCommission) {
+                \Log::error("CostCommission não encontrada e sem dados alternativos: {$this->referenceId}");
                 return;
-            }
+            } else {
+                // Registro encontrado, usar seus dados
+                $query = Order::where('tenant_id', $costCommission->tenant_id);
 
-            $query = Order::where('tenant_id', $costCommission->tenant_id);
-
-            // Se não for para aplicar a todos, filtrar apenas pedidos relevantes
-            if (!$this->applyToAll && $costCommission->provider) {
-                // Para pedidos Takeat, filtrar pelo campo 'origin' ao invés de 'provider'
-                // Pedidos do 99Food, Keeta, Neemo, etc via Takeat têm provider='takeat' e origin='99food', 'keeta', etc
-                $query->where(function($q) use ($costCommission) {
-                    $q->where('provider', $costCommission->provider)
-                      ->orWhere(function($q2) use ($costCommission) {
-                          $q2->where('provider', 'takeat')
-                             ->where('origin', $costCommission->provider);
-                      });
-                });
+                if (!$this->applyToAll && $costCommission->provider) {
+                    $query->where(function($q) use ($costCommission) {
+                        $q->where('provider', $costCommission->provider)
+                          ->orWhere(function($q2) use ($costCommission) {
+                              $q2->where('provider', 'takeat')
+                                 ->where('origin', $costCommission->provider);
+                          });
+                    });
+                }
             }
         }
 

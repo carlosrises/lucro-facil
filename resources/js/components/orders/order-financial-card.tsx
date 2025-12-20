@@ -1,16 +1,30 @@
+import {
+    CostCommissionItem,
+    Order,
+    OrderItem,
+    OrderItemMapping,
+} from '@/components/orders/columns';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight } from 'lucide-react';
+import {
+    ArrowDownLeft,
+    ArrowRightLeft,
+    ArrowUpRight,
+    Plus,
+} from 'lucide-react';
+import { useState } from 'react';
+import { CreatePaymentFeeDialog } from './create-payment-fee-dialog';
 
 /**
  * Calcula o custo de um item considerando múltiplas associações
  */
-function calculateItemCost(item: any): number {
+function calculateItemCost(item: OrderItem): number {
     const itemQuantity = item.qty || item.quantity || 0;
 
     // Novo sistema: usar mappings se existir
     if (item.mappings && item.mappings.length > 0) {
         const mappingsCost = item.mappings.reduce(
-            (sum: number, mapping: any) => {
+            (sum: number, mapping: OrderItemMapping) => {
                 if (mapping.internal_product?.unit_cost) {
                     const unitCost = parseFloat(
                         mapping.internal_product.unit_cost,
@@ -51,37 +65,37 @@ type OrderFinancialCardProps = {
         payment_method: string;
         concluded_at: string | null;
         expected_payment_date: string | null;
-        raw?: any;
+        raw?: unknown;
     };
-    order?: {
-        provider: string;
-        origin: string;
-        gross_total?: string | null;
-        discount_total?: string | null;
-        delivery_fee?: string | null;
-        net_total?: string | null;
-        total_costs?: string | number | null;
-        total_commissions?: string | number | null;
-        items?: any[];
-        raw?: any;
-    };
+    order?: Order;
 };
 
 export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
+    // Estado para controlar o dialog de criação de taxa
+    const [isCreateFeeDialogOpen, setIsCreateFeeDialogOpen] = useState(false);
+    const [selectedPayment, setSelectedPayment] = useState<{
+        method: string;
+        name: string;
+    } | null>(null);
+
     // Função helper para calcular todos os valores financeiros
     const calculateFinancials = () => {
-        const grossTotal = parseFloat(order?.gross_total || '0');
-        const discountTotal = parseFloat(order?.discount_total || '0');
-        const deliveryFee = parseFloat(order?.delivery_fee || '0');
-        const netTotal = parseFloat(order?.net_total || '0');
+        const grossTotal = parseFloat(String(order?.gross_total || '0'));
+        const discountTotal = parseFloat(String(order?.discount_total || '0'));
+        const deliveryFee = parseFloat(String(order?.delivery_fee || '0'));
+        const netTotal = parseFloat(String(order?.net_total || '0'));
 
-        // Subsídio (dos pagamentos da sessão)
+        // Subsídio e métodos de pagamento (dos pagamentos da sessão)
         const sessionPayments = order?.raw?.session?.payments || [];
-        const subsidyPayments = sessionPayments.filter((payment: any) => {
-            const paymentName =
-                payment.payment_method?.name?.toLowerCase() || '';
+
+        // Filtrar pagamentos subsidiados
+        const subsidyPayments = sessionPayments.filter((payment: unknown) => {
+            const p = payment as {
+                payment_method?: { name?: string; keyword?: string };
+            };
+            const paymentName = p.payment_method?.name?.toLowerCase() || '';
             const paymentKeyword =
-                payment.payment_method?.keyword?.toLowerCase() || '';
+                p.payment_method?.keyword?.toLowerCase() || '';
             return (
                 paymentName.includes('subsid') ||
                 paymentName.includes('cupom') ||
@@ -89,9 +103,29 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                 paymentKeyword.includes('cupom')
             );
         });
+
+        // Filtrar pagamentos reais (não subsidiados)
+        const realPayments = sessionPayments.filter((payment: unknown) => {
+            const p = payment as {
+                payment_method?: { name?: string; keyword?: string };
+                payment_value?: number;
+            };
+            const paymentName = p.payment_method?.name?.toLowerCase() || '';
+            const paymentKeyword =
+                p.payment_method?.keyword?.toLowerCase() || '';
+            const isSubsidized =
+                paymentName.includes('subsid') ||
+                paymentName.includes('cupom') ||
+                paymentKeyword.includes('subsid') ||
+                paymentKeyword.includes('cupom');
+            return !isSubsidized && (p.payment_value || 0) > 0;
+        });
+
         const totalSubsidy = subsidyPayments.reduce(
-            (sum: number, payment: any) =>
-                sum + parseFloat(payment.payment_value || '0'),
+            (sum: number, payment: unknown) => {
+                const p = payment as { payment_value?: string | number };
+                return sum + parseFloat(String(p.payment_value || '0'));
+            },
             0,
         );
 
@@ -101,53 +135,68 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
         // Pago pelo cliente (net_total já é o que o cliente pagou)
         const paidByClient = netTotal;
 
-        // Subtotal = Pago pelo cliente + Subsídio
-        const subtotal = paidByClient + totalSubsidy;
+        // Subtotal = Pago pelo cliente + Subsídio + Taxa de entrega
+        const subtotal = paidByClient + totalSubsidy + deliveryFee;
 
         // CMV (custo dos produtos)
         const items = order?.items || [];
         const cmv = items.reduce(
-            (sum: number, item: any) => sum + calculateItemCost(item),
+            (sum: number, item: OrderItem) => sum + calculateItemCost(item),
             0,
         );
 
-        // Impostos
-        const totalTax = items.reduce((sum: number, item: any) => {
+        // Impostos dos produtos
+        const productTax = items.reduce((sum: number, item: OrderItem) => {
             if (item.internal_product?.tax_category?.total_tax_rate) {
                 const quantity = item.qty || item.quantity || 0;
-                const unitPrice =
-                    item.unit_price || item.unitPrice || item.price || 0;
-                const taxRate = parseFloat(
-                    item.internal_product.tax_category.total_tax_rate,
-                );
+                const unitPrice = item.unit_price || item.price || 0;
+                const taxRate =
+                    item.internal_product.tax_category.total_tax_rate;
                 return sum + (quantity * unitPrice * taxRate) / 100;
             }
             return sum;
         }, 0);
 
-        // Custos (do order.total_costs)
+        // Impostos adicionais (da categoria 'tax' em cost_commissions)
+        const calculatedCosts = order?.calculated_costs || null;
+        const additionalTaxes = calculatedCosts?.taxes || [];
+        const totalAdditionalTax = additionalTaxes.reduce(
+            (sum: number, tax: CostCommissionItem) =>
+                sum + (tax.calculated_value || 0),
+            0,
+        );
+
+        // Total de impostos = impostos dos produtos + impostos adicionais
+        const totalTax = productTax + totalAdditionalTax;
+
+        // Custos operacionais (do order.total_costs)
         const totalCosts =
             typeof order?.total_costs === 'string'
                 ? parseFloat(order.total_costs)
                 : (order?.total_costs ?? 0);
 
-        // Comissão (do order.total_commissions)
+        // Comissões (do order.total_commissions)
         const totalCommissions =
             typeof order?.total_commissions === 'string'
                 ? parseFloat(order.total_commissions)
                 : (order?.total_commissions ?? 0);
 
-        // Meio de pagamento (assumindo que vem dos custos ou será calculado depois)
-        const paymentMethodFee = 0; // TODO: definir de onde vem este valor
+        // Taxas do meio de pagamento (da categoria 'payment_method' em cost_commissions)
+        const paymentMethodFees = calculatedCosts?.payment_methods || [];
+        const totalPaymentMethodFee = paymentMethodFees.reduce(
+            (sum: number, fee: CostCommissionItem) =>
+                sum + (fee.calculated_value || 0),
+            0,
+        );
 
-        // Líquido = Subtotal - CMV - Impostos - Custos - Comissão - Meio Pagamento
+        // Líquido = Subtotal - CMV - Impostos - Custos - Comissão - Taxas de Pagamento
         const netRevenue =
             subtotal -
             cmv -
             totalTax -
             totalCosts -
             totalCommissions -
-            paymentMethodFee;
+            totalPaymentMethodFee;
 
         return {
             grossTotal,
@@ -157,12 +206,16 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
             totalSubsidy,
             subtotal,
             cmv,
+            productTax,
+            additionalTaxes,
             totalTax,
             totalCosts,
             totalCommissions,
-            paymentMethodFee,
+            paymentMethodFees,
+            totalPaymentMethodFee,
             netRevenue,
             deliveryFee,
+            realPayments,
         };
     };
 
@@ -187,526 +240,610 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
         };
 
         return (
-            <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
-                <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
-                    <CardTitle className="flex h-[18px] items-center font-semibold">
-                        Detalhamento financeiro do pedido
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="rounded-md bg-card p-0">
-                    <ul className="m-0 flex w-full flex-col ps-0">
-                        {/* Tipo de pedido */}
-                        <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                            <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                <span className="text-sm leading-4 font-semibold">
-                                    Tipo de pedido
-                                </span>
-                                <span className="text-sm leading-4">
-                                    {isDelivery ? 'Delivery' : 'Retirada'} via{' '}
-                                    {channel}
-                                </span>
-                            </div>
-                        </li>
-
-                        {/* Total do pedido */}
-                        <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                            <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                <div className="flex items-center justify-center rounded-full bg-blue-100 p-1 text-blue-900">
-                                    <ArrowUpRight className="h-3 w-3" />
-                                </div>
-                                <span className="flex-grow text-sm leading-4 font-semibold">
-                                    Total do pedido
-                                </span>
-                                <span className="text-sm leading-4 font-semibold whitespace-nowrap">
-                                    {formatCurrency(financials.grossTotal)}
-                                </span>
-                                <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                    100,0%
-                                </span>
-                            </div>
-                        </li>
-
-                        {/* Descontos */}
-                        {financials.discountTotal > 0 && (
+            <>
+                <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+                    <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                        <CardTitle className="flex h-[18px] items-center font-semibold">
+                            Detalhamento financeiro do pedido
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="rounded-md bg-card p-0">
+                        <ul className="m-0 flex w-full flex-col ps-0">
+                            {/* Tipo de pedido */}
                             <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
                                 <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                    <div className="flex items-center justify-center rounded-full bg-red-100 p-0.5 text-red-900">
-                                        <ArrowDownLeft className="h-4 w-4" />
+                                    <span className="text-sm leading-4 font-semibold">
+                                        Tipo de pedido
+                                    </span>
+                                    <span className="text-sm leading-4">
+                                        {isDelivery ? 'Delivery' : 'Retirada'}{' '}
+                                        via {channel}
+                                    </span>
+                                </div>
+                            </li>
+
+                            {/* Total do pedido */}
+                            <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                                <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                    <div className="flex items-center justify-center rounded-full bg-blue-100 p-1 text-blue-900">
+                                        <ArrowUpRight className="h-3 w-3" />
                                     </div>
                                     <span className="flex-grow text-sm leading-4 font-semibold">
-                                        Descontos
+                                        Total do pedido
                                     </span>
-                                    <span className="text-sm leading-4 whitespace-nowrap">
-                                        {formatCurrency(
-                                            financials.discountTotal,
-                                        )}
+                                    <span className="text-sm leading-4 font-semibold whitespace-nowrap">
+                                        {formatCurrency(financials.grossTotal)}
                                     </span>
                                     <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                        {formatPercentage(
-                                            financials.discountTotal,
-                                            financials.grossTotal,
-                                        )}
+                                        100,0%
                                     </span>
                                 </div>
-                                <ul className="flex w-full flex-col items-center justify-between gap-1 pt-2 pl-0">
-                                    {financials.storeDiscount > 0 && (
-                                        <li className="flex w-full flex-row items-start justify-between px-3 py-0">
-                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                Desconto da loja
-                                            </span>
-                                            <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
-                                                {formatCurrency(
-                                                    financials.storeDiscount,
-                                                )}
-                                            </span>
-                                        </li>
-                                    )}
-                                    {financials.totalSubsidy > 0 && (
-                                        <li className="flex w-full flex-row items-start justify-between px-3 py-0">
-                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                Desconto do marketplace
-                                                (subsídio)
-                                            </span>
-                                            <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
-                                                {formatCurrency(
-                                                    financials.totalSubsidy,
-                                                )}
-                                            </span>
-                                        </li>
-                                    )}
-                                    {session.discount_obs && (
-                                        <li className="flex w-full flex-row items-start justify-between px-3 py-2">
-                                            <span className="text-xs leading-4 font-normal text-muted-foreground italic">
-                                                {session.discount_obs}
-                                            </span>
-                                        </li>
-                                    )}
-                                </ul>
                             </li>
-                        )}
 
-                        {/* Pago pelo cliente */}
-                        <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                            <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                <div className="flex items-center justify-center rounded-full bg-green-100 p-0.5 text-green-900">
-                                    <ArrowUpRight className="h-4 w-4" />
-                                </div>
-                                <span className="flex-grow text-sm leading-4 font-semibold">
-                                    Pago pelo cliente
-                                </span>
-                                <span className="text-sm leading-4 font-semibold whitespace-nowrap">
-                                    {formatCurrency(financials.paidByClient)}
-                                </span>
-                                <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                    {formatPercentage(
-                                        financials.paidByClient,
-                                        financials.grossTotal,
-                                    )}
-                                </span>
-                            </div>
-                        </li>
+                            {/* Descontos */}
+                            {financials.discountTotal > 0 && (
+                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                        <div className="flex items-center justify-center rounded-full bg-red-100 p-0.5 text-red-900">
+                                            <ArrowDownLeft className="h-4 w-4" />
+                                        </div>
+                                        <span className="flex-grow text-sm leading-4 font-semibold">
+                                            Descontos
+                                        </span>
+                                        <span className="text-sm leading-4 whitespace-nowrap">
+                                            {formatCurrency(
+                                                financials.discountTotal,
+                                            )}
+                                        </span>
+                                        <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                            {formatPercentage(
+                                                financials.discountTotal,
+                                                financials.grossTotal,
+                                            )}
+                                        </span>
+                                    </div>
+                                    <ul className="flex w-full flex-col items-center justify-between gap-1 pt-2 pl-0">
+                                        {financials.storeDiscount > 0 && (
+                                            <li className="flex w-full flex-row items-start justify-between px-3 py-0">
+                                                <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                    Desconto da loja
+                                                </span>
+                                                <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                    {formatCurrency(
+                                                        financials.storeDiscount,
+                                                    )}
+                                                </span>
+                                            </li>
+                                        )}
+                                        {financials.totalSubsidy > 0 && (
+                                            <li className="flex w-full flex-row items-start justify-between px-3 py-0">
+                                                <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                    Desconto do marketplace
+                                                    (subsídio)
+                                                </span>
+                                                <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                    {formatCurrency(
+                                                        financials.totalSubsidy,
+                                                    )}
+                                                </span>
+                                            </li>
+                                        )}
+                                        {session.discount_obs && (
+                                            <li className="flex w-full flex-row items-start justify-between px-3 py-2">
+                                                <span className="text-xs leading-4 font-normal text-muted-foreground italic">
+                                                    {session.discount_obs}
+                                                </span>
+                                            </li>
+                                        )}
+                                    </ul>
+                                </li>
+                            )}
 
-                        {/* Subsídio do marketplace */}
-                        {financials.totalSubsidy > 0 && (
-                            <li className="flex flex-col gap-2 px-0 py-4">
+                            {/* Taxa de entrega subsidiada */}
+                            {financials.deliveryFee > 0 && (
+                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                        <div className="flex items-center justify-center rounded-full bg-blue-100 p-0.5 text-blue-900">
+                                            <ArrowUpRight className="h-4 w-4" />
+                                        </div>
+                                        <span className="flex-grow text-sm leading-4 font-semibold">
+                                            Taxa de entrega subsidiada
+                                        </span>
+                                        <span className="text-sm leading-4 font-semibold whitespace-nowrap">
+                                            {formatCurrency(
+                                                financials.deliveryFee,
+                                            )}
+                                        </span>
+                                        <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                            {formatPercentage(
+                                                financials.deliveryFee,
+                                                financials.grossTotal,
+                                            )}
+                                        </span>
+                                    </div>
+                                </li>
+                            )}
+
+                            {/* Pago pelo cliente */}
+                            <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
                                 <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
                                     <div className="flex items-center justify-center rounded-full bg-green-100 p-0.5 text-green-900">
                                         <ArrowUpRight className="h-4 w-4" />
                                     </div>
                                     <span className="flex-grow text-sm leading-4 font-semibold">
-                                        Subsídio do marketplace
+                                        Pago pelo cliente
                                     </span>
-                                    <span className="text-sm leading-4 font-semibold whitespace-nowrap text-green-700">
+                                    <span className="text-sm leading-4 font-semibold whitespace-nowrap">
                                         {formatCurrency(
-                                            financials.totalSubsidy,
+                                            financials.paidByClient,
                                         )}
                                     </span>
                                     <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
                                         {formatPercentage(
-                                            financials.totalSubsidy,
+                                            financials.paidByClient,
                                             financials.grossTotal,
                                         )}
                                     </span>
                                 </div>
                             </li>
-                        )}
 
-                        {/* Linha separadora */}
-                        <li className="border-b-3 border-gray-100"></li>
+                            {/* Subsídio do marketplace */}
+                            {financials.totalSubsidy > 0 && (
+                                <li className="flex flex-col gap-2 px-0 py-4">
+                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                        <div className="flex items-center justify-center rounded-full bg-green-100 p-0.5 text-green-900">
+                                            <ArrowUpRight className="h-4 w-4" />
+                                        </div>
+                                        <span className="flex-grow text-sm leading-4 font-semibold">
+                                            Subsídio do marketplace
+                                        </span>
+                                        <span className="text-sm leading-4 font-semibold whitespace-nowrap text-green-700">
+                                            {formatCurrency(
+                                                financials.totalSubsidy,
+                                            )}
+                                        </span>
+                                        <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                            {formatPercentage(
+                                                financials.totalSubsidy,
+                                                financials.grossTotal,
+                                            )}
+                                        </span>
+                                    </div>
+                                </li>
+                            )}
 
-                        {/* Subtotal */}
-                        <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                            <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                <div className="flex items-center justify-center rounded-full bg-gray-200 p-1 text-gray-700">
-                                    <ArrowRightLeft className="h-3 w-3" />
-                                </div>
-                                <span className="flex-grow text-sm leading-4 font-semibold">
-                                    Subtotal
-                                </span>
-                                <span className="text-sm leading-4 font-semibold whitespace-nowrap">
-                                    {formatCurrency(financials.subtotal)}
-                                </span>
-                                <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                    {formatPercentage(
-                                        financials.subtotal,
-                                        financials.grossTotal,
-                                    )}
-                                </span>
-                            </div>
-                            <ul className="flex w-full flex-col items-center justify-between gap-2 pl-0">
-                                <li className="flex w-full flex-row items-start justify-between px-3 py-0">
-                                    <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                        Total pag. pelo cliente + Subsídio
+                            {/* Linha separadora */}
+                            <li className="border-b-3 border-gray-100"></li>
+
+                            {/* Subtotal */}
+                            <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                                <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                    <div className="flex items-center justify-center rounded-full bg-gray-200 p-1 text-gray-700">
+                                        <ArrowRightLeft className="h-3 w-3" />
+                                    </div>
+                                    <span className="flex-grow text-sm leading-4 font-semibold">
+                                        Subtotal
                                     </span>
-                                </li>
-                            </ul>
-                        </li>
+                                    <span className="text-sm leading-4 font-semibold whitespace-nowrap">
+                                        {formatCurrency(financials.subtotal)}
+                                    </span>
+                                    <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                        {formatPercentage(
+                                            financials.subtotal,
+                                            financials.grossTotal,
+                                        )}
+                                    </span>
+                                </div>
+                                <ul className="flex w-full flex-col items-center justify-between gap-2 pl-0">
+                                    <li className="flex w-full flex-row items-start justify-between px-3 py-0">
+                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                            Total pag. pelo cliente + Subsídio
+                                        </span>
+                                    </li>
+                                </ul>
+                            </li>
 
-                        {/* CMV */}
-                        {(() => {
-                            const items = order.items || [];
-                            const itemsWithCost = items.filter(
-                                (item: any) =>
-                                    item.internal_product?.unit_cost ||
-                                    (item.mappings && item.mappings.length > 0),
-                            );
+                            {/* CMV */}
+                            {(() => {
+                                const items = order.items || [];
+                                const itemsWithCost = items.filter(
+                                    (item: OrderItem) =>
+                                        item.internal_product?.unit_cost ||
+                                        (item.mappings &&
+                                            item.mappings.length > 0),
+                                );
 
-                            return financials.cmv > 0 ? (
-                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                        <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
-                                            <ArrowDownLeft className="h-4 w-4" />
+                                return financials.cmv > 0 ? (
+                                    <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                                        <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                            <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
+                                                <ArrowDownLeft className="h-4 w-4" />
+                                            </div>
+                                            <span className="flex-grow text-sm leading-4 font-semibold">
+                                                Custo dos produtos (CMV)
+                                            </span>
+                                            <span className="text-sm leading-4 whitespace-nowrap">
+                                                {formatCurrency(financials.cmv)}
+                                            </span>
+                                            <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                                {formatPercentage(
+                                                    financials.cmv,
+                                                    financials.subtotal,
+                                                )}
+                                            </span>
                                         </div>
-                                        <span className="flex-grow text-sm leading-4 font-semibold">
-                                            Custo dos produtos (CMV)
-                                        </span>
-                                        <span className="text-sm leading-4 whitespace-nowrap">
-                                            {formatCurrency(financials.cmv)}
-                                        </span>
-                                        <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                            {formatPercentage(
-                                                financials.cmv,
-                                                financials.subtotal,
-                                            )}
-                                        </span>
-                                    </div>
-                                    {/* Detalhamento dos custos por produto */}
-                                    {itemsWithCost.length > 0 && (
-                                        <ul className="flex w-full flex-col items-center justify-between pl-0">
-                                            {itemsWithCost.map((item: any) => {
-                                                const itemTotalCost =
-                                                    calculateItemCost(item);
-                                                const quantity =
-                                                    item.qty ||
-                                                    item.quantity ||
-                                                    0;
-                                                const hasMappings =
-                                                    item.mappings &&
-                                                    item.mappings.length > 0;
+                                        {/* Detalhamento dos custos por produto */}
+                                        {itemsWithCost.length > 0 && (
+                                            <ul className="flex w-full flex-col items-center justify-between pl-0">
+                                                {itemsWithCost.map(
+                                                    (item: OrderItem) => {
+                                                        const itemTotalCost =
+                                                            calculateItemCost(
+                                                                item,
+                                                            );
+                                                        const quantity =
+                                                            item.qty ||
+                                                            item.quantity ||
+                                                            0;
+                                                        const hasMappings =
+                                                            item.mappings &&
+                                                            item.mappings
+                                                                .length > 0;
 
-                                                return (
-                                                    <li
-                                                        key={item.id}
-                                                        className="flex w-full flex-col gap-1"
-                                                    >
-                                                        <div className="flex w-full flex-row items-start justify-between px-3 py-1.5">
-                                                            <span className="text-xs leading-4 font-medium text-muted-foreground">
-                                                                {quantity}x{' '}
-                                                                {item.name}
-                                                            </span>
-                                                            <span className="text-xs leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                                                {formatCurrency(
-                                                                    itemTotalCost,
-                                                                )}
-                                                            </span>
-                                                        </div>
+                                                        return (
+                                                            <li
+                                                                key={item.id}
+                                                                className="flex w-full flex-col gap-1"
+                                                            >
+                                                                <div className="flex w-full flex-row items-start justify-between px-3 py-1.5">
+                                                                    <span className="text-xs leading-4 font-medium text-muted-foreground">
+                                                                        {
+                                                                            quantity
+                                                                        }
+                                                                        x{' '}
+                                                                        {
+                                                                            item.name
+                                                                        }
+                                                                    </span>
+                                                                    <span className="text-xs leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                                                        {formatCurrency(
+                                                                            itemTotalCost,
+                                                                        )}
+                                                                    </span>
+                                                                </div>
 
-                                                        {/* Detalhamento dos mappings */}
-                                                        {hasMappings && (
-                                                            <ul className="flex w-full flex-col gap-0.5 pl-3">
-                                                                {item.mappings.map(
+                                                                {/* Detalhamento dos mappings */}
+                                                                {hasMappings &&
+                                                                    item.mappings && (
+                                                                        <ul className="flex w-full flex-col gap-0.5 pl-3">
+                                                                            {item.mappings.map(
+                                                                                (
+                                                                                    mapping: OrderItemMapping,
+                                                                                    idx: number,
+                                                                                ) => {
+                                                                                    const mappingCost =
+                                                                                        mapping
+                                                                                            .internal_product
+                                                                                            ?.unit_cost
+                                                                                            ? parseFloat(
+                                                                                                  mapping
+                                                                                                      .internal_product
+                                                                                                      .unit_cost,
+                                                                                              ) *
+                                                                                              (mapping.quantity ||
+                                                                                                  1) *
+                                                                                              quantity
+                                                                                            : 0;
+                                                                                    const percentage =
+                                                                                        (
+                                                                                            (mapping.quantity ||
+                                                                                                0) *
+                                                                                            100
+                                                                                        ).toFixed(
+                                                                                            0,
+                                                                                        );
+                                                                                    const mappingType =
+                                                                                        mapping.mapping_type ===
+                                                                                        'main'
+                                                                                            ? 'Principal'
+                                                                                            : mapping.mapping_type ===
+                                                                                                'addon'
+                                                                                              ? 'Complemento'
+                                                                                              : 'Opção';
+
+                                                                                    return (
+                                                                                        <li
+                                                                                            key={
+                                                                                                idx
+                                                                                            }
+                                                                                            className="flex w-full flex-row items-start justify-between px-3 py-0"
+                                                                                        >
+                                                                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                                                {mapping
+                                                                                                    .internal_product
+                                                                                                    ?.name ||
+                                                                                                    'Produto'}{' '}
+                                                                                                (
+                                                                                                {
+                                                                                                    percentage
+                                                                                                }
+
+                                                                                                %
+                                                                                                -{' '}
+                                                                                                {
+                                                                                                    mappingType
+                                                                                                }
+
+                                                                                                )
+                                                                                            </span>
+                                                                                            <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                                                                {formatCurrency(
+                                                                                                    mappingCost,
+                                                                                                )}
+                                                                                            </span>
+                                                                                        </li>
+                                                                                    );
+                                                                                },
+                                                                            )}
+                                                                        </ul>
+                                                                    )}
+                                                            </li>
+                                                        );
+                                                    },
+                                                )}
+                                            </ul>
+                                        )}
+                                    </li>
+                                ) : null;
+                            })()}
+
+                            {/* Impostos */}
+                            {(() => {
+                                const items = order.items || [];
+                                const itemsWithTax = items.filter(
+                                    (item: OrderItem) =>
+                                        item.internal_product?.tax_category
+                                            ?.total_tax_rate !== undefined &&
+                                        item.internal_product?.tax_category
+                                            ?.total_tax_rate !== null,
+                                );
+
+                                return financials.totalTax > 0 ? (
+                                    <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                                        <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                            <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
+                                                <ArrowDownLeft className="h-4 w-4" />
+                                            </div>
+                                            <span className="flex-grow text-sm leading-4 font-semibold">
+                                                Impostos
+                                            </span>
+                                            <span className="text-sm leading-4 whitespace-nowrap">
+                                                {formatCurrency(
+                                                    financials.totalTax,
+                                                )}
+                                            </span>
+                                            <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                                {formatPercentage(
+                                                    financials.totalTax,
+                                                    financials.subtotal,
+                                                )}
+                                            </span>
+                                        </div>
+                                        {/* Detalhamento dos impostos por produto */}
+                                        {itemsWithTax.length > 0 && (
+                                            <ul className="flex w-full flex-col items-center justify-between pt-2 pl-0">
+                                                {itemsWithTax.map(
+                                                    (item: OrderItem) => {
+                                                        const quantity =
+                                                            item.qty ||
+                                                            item.quantity ||
+                                                            0;
+                                                        const unitPrice =
+                                                            item.unit_price ||
+                                                            item.price ||
+                                                            0;
+                                                        const itemTotal =
+                                                            quantity *
+                                                            unitPrice;
+                                                        const taxCat =
+                                                            item
+                                                                .internal_product
+                                                                ?.tax_category;
+                                                        if (!taxCat)
+                                                            return null;
+                                                        const taxRate =
+                                                            taxCat.total_tax_rate /
+                                                            100;
+                                                        const itemTax =
+                                                            itemTotal * taxRate;
+
+                                                        return (
+                                                            <li
+                                                                key={item.id}
+                                                                className="flex w-full flex-row items-start justify-between px-3 py-0.5"
+                                                            >
+                                                                <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                    {quantity}x{' '}
+                                                                    {item.name}{' '}
                                                                     (
-                                                                        mapping: any,
-                                                                        idx: number,
-                                                                    ) => {
-                                                                        const mappingCost =
-                                                                            mapping
-                                                                                .internal_product
-                                                                                ?.unit_cost
-                                                                                ? parseFloat(
-                                                                                      mapping
-                                                                                          .internal_product
-                                                                                          .unit_cost,
-                                                                                  ) *
-                                                                                  (mapping.quantity ||
-                                                                                      1) *
-                                                                                  quantity
-                                                                                : 0;
-                                                                        const percentage =
-                                                                            (
-                                                                                (mapping.quantity ||
-                                                                                    0) *
-                                                                                100
-                                                                            ).toFixed(
-                                                                                0,
-                                                                            );
-                                                                        const mappingType =
-                                                                            mapping.mapping_type ===
-                                                                            'main'
-                                                                                ? 'Principal'
-                                                                                : mapping.mapping_type ===
-                                                                                    'addon'
-                                                                                  ? 'Complemento'
-                                                                                  : 'Opção';
+                                                                    {taxCat.total_tax_rate.toFixed(
+                                                                        2,
+                                                                    )}
+                                                                    %)
+                                                                </span>
+                                                                <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                                    {formatCurrency(
+                                                                        itemTax,
+                                                                    )}
+                                                                </span>
+                                                            </li>
+                                                        );
+                                                    },
+                                                )}
+                                                {/* Impostos adicionais da categoria 'tax' */}
+                                                {financials.additionalTaxes
+                                                    .length > 0 &&
+                                                    financials.additionalTaxes.map(
+                                                        (
+                                                            tax: CostCommissionItem,
+                                                        ) => (
+                                                            <li
+                                                                key={tax.id}
+                                                                className="flex w-full flex-row items-start justify-between px-3 py-0.5"
+                                                            >
+                                                                <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                    {tax.name}
+                                                                    {tax.type ===
+                                                                    'percentage'
+                                                                        ? ` (${String(tax.value)}%)`
+                                                                        : ''}
+                                                                </span>
+                                                                <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                                    {formatCurrency(
+                                                                        tax.calculated_value,
+                                                                    )}
+                                                                </span>
+                                                            </li>
+                                                        ),
+                                                    )}
+                                            </ul>
+                                        )}
+                                    </li>
+                                ) : null;
+                            })()}
 
-                                                                        return (
-                                                                            <li
-                                                                                key={
-                                                                                    idx
-                                                                                }
-                                                                                className="flex w-full flex-row items-start justify-between px-3 py-0"
-                                                                            >
-                                                                                <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                                                    {mapping
-                                                                                        .internal_product
-                                                                                        ?.name ||
-                                                                                        'Produto'}{' '}
-                                                                                    (
-                                                                                    {
-                                                                                        percentage
-                                                                                    }
+                            {/* Custos operacionais */}
+                            {(() => {
+                                const calculatedCosts =
+                                    order.calculated_costs || null;
+                                const costs = calculatedCosts?.costs || [];
+                                const costsWithValue = costs.filter(
+                                    (cost: CostCommissionItem) =>
+                                        cost.calculated_value > 0,
+                                );
 
-                                                                                    %
-                                                                                    -{' '}
-                                                                                    {
-                                                                                        mappingType
-                                                                                    }
-
-                                                                                    )
-                                                                                </span>
-                                                                                <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
-                                                                                    {formatCurrency(
-                                                                                        mappingCost,
-                                                                                    )}
-                                                                                </span>
-                                                                            </li>
-                                                                        );
-                                                                    },
+                                return financials.totalCosts > 0 ||
+                                    costsWithValue.length > 0 ? (
+                                    <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                                        <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                            <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
+                                                <ArrowDownLeft className="h-4 w-4" />
+                                            </div>
+                                            <span className="flex-grow text-sm leading-4 font-semibold">
+                                                Custos operacionais
+                                            </span>
+                                            <span className="text-sm leading-4 whitespace-nowrap">
+                                                {formatCurrency(
+                                                    financials.totalCosts,
+                                                )}
+                                            </span>
+                                            <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                                {formatPercentage(
+                                                    financials.totalCosts,
+                                                    financials.subtotal,
+                                                )}
+                                            </span>
+                                        </div>
+                                        {/* Detalhamento dos custos */}
+                                        {costsWithValue.length > 0 && (
+                                            <ul className="flex w-full flex-col items-center justify-between gap-1 pt-2 pl-0">
+                                                {costsWithValue.map(
+                                                    (
+                                                        cost: CostCommissionItem,
+                                                    ) => (
+                                                        <li
+                                                            key={cost.id}
+                                                            className="flex w-full flex-row items-start justify-between px-3 py-0"
+                                                        >
+                                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                {cost.name}
+                                                                {cost.type ===
+                                                                'percentage'
+                                                                    ? ` (${String(cost.value)}%)`
+                                                                    : ''}
+                                                            </span>
+                                                            <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                                {formatCurrency(
+                                                                    cost.calculated_value,
                                                                 )}
-                                                            </ul>
-                                                        )}
-                                                    </li>
-                                                );
-                                            })}
-                                        </ul>
-                                    )}
-                                </li>
-                            ) : null;
-                        })()}
+                                                            </span>
+                                                        </li>
+                                                    ),
+                                                )}
+                                            </ul>
+                                        )}
+                                    </li>
+                                ) : null;
+                            })()}
 
-                        {/* Impostos */}
-                        {(() => {
-                            const items = order.items || [];
-                            const itemsWithTax = items.filter(
-                                (item: any) =>
-                                    item.internal_product?.tax_category
-                                        ?.total_tax_rate !== undefined &&
-                                    item.internal_product?.tax_category
-                                        ?.total_tax_rate !== null,
-                            );
+                            {/* COMISSÃO */}
+                            {(() => {
+                                const calculatedCosts =
+                                    order.calculated_costs || null;
+                                const commissions =
+                                    calculatedCosts?.commissions || [];
+                                const commissionsWithValue = commissions.filter(
+                                    (comm: CostCommissionItem) =>
+                                        comm.calculated_value > 0,
+                                );
 
-                            return financials.totalTax > 0 ? (
-                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                        <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
-                                            <ArrowDownLeft className="h-4 w-4" />
+                                return financials.totalCommissions > 0 ||
+                                    commissionsWithValue.length > 0 ? (
+                                    <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                                        <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                            <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
+                                                <ArrowDownLeft className="h-4 w-4" />
+                                            </div>
+                                            <span className="flex-grow text-sm leading-4 font-semibold">
+                                                Comissões
+                                            </span>
+                                            <span className="text-sm leading-4 whitespace-nowrap">
+                                                {formatCurrency(
+                                                    financials.totalCommissions,
+                                                )}
+                                            </span>
+                                            <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                                {formatPercentage(
+                                                    financials.totalCommissions,
+                                                    financials.subtotal,
+                                                )}
+                                            </span>
                                         </div>
-                                        <span className="flex-grow text-sm leading-4 font-semibold">
-                                            Impostos
-                                        </span>
-                                        <span className="text-sm leading-4 whitespace-nowrap">
-                                            {formatCurrency(
-                                                financials.totalTax,
-                                            )}
-                                        </span>
-                                        <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                            {formatPercentage(
-                                                financials.totalTax,
-                                                financials.subtotal,
-                                            )}
-                                        </span>
-                                    </div>
-                                    {/* Detalhamento dos impostos por produto */}
-                                    {itemsWithTax.length > 0 && (
-                                        <ul className="flex w-full flex-col items-center justify-between pt-2 pl-0">
-                                            {itemsWithTax.map((item: any) => {
-                                                const quantity =
-                                                    item.qty ||
-                                                    item.quantity ||
-                                                    0;
-                                                const unitPrice =
-                                                    item.unit_price ||
-                                                    item.price ||
-                                                    0;
-                                                const itemTotal =
-                                                    quantity * unitPrice;
-                                                const taxRate =
-                                                    item.internal_product
-                                                        .tax_category
-                                                        .total_tax_rate / 100;
-                                                const itemTax =
-                                                    itemTotal * taxRate;
+                                        {/* Detalhamento das comissões */}
+                                        {commissionsWithValue.length > 0 && (
+                                            <ul className="flex w-full flex-col items-center justify-between gap-1 pt-2 pl-0">
+                                                {commissionsWithValue.map(
+                                                    (
+                                                        commission: CostCommissionItem,
+                                                    ) => (
+                                                        <li
+                                                            key={commission.id}
+                                                            className="flex w-full flex-row items-start justify-between px-3 py-0"
+                                                        >
+                                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                {
+                                                                    commission.name
+                                                                }
+                                                                {commission.type ===
+                                                                'percentage'
+                                                                    ? ` (${String(commission.value)}%)`
+                                                                    : ''}
+                                                            </span>
+                                                            <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                                {formatCurrency(
+                                                                    commission.calculated_value,
+                                                                )}
+                                                            </span>
+                                                        </li>
+                                                    ),
+                                                )}
+                                            </ul>
+                                        )}
+                                    </li>
+                                ) : null;
+                            })()}
 
-                                                return (
-                                                    <li
-                                                        key={item.id}
-                                                        className="flex w-full flex-row items-start justify-between px-3 py-0.5"
-                                                    >
-                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                            {quantity}x{' '}
-                                                            {item.name} (
-                                                            {item.internal_product.tax_category.total_tax_rate.toFixed(
-                                                                2,
-                                                            )}
-                                                            %)
-                                                        </span>
-                                                        <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
-                                                            {formatCurrency(
-                                                                itemTax,
-                                                            )}
-                                                        </span>
-                                                    </li>
-                                                );
-                                            })}
-                                        </ul>
-                                    )}
-                                </li>
-                            ) : null;
-                        })()}
-
-                        {/* CUSTOS */}
-                        {(() => {
-                            const calculatedCosts =
-                                order.calculated_costs || null;
-                            const costs = calculatedCosts?.costs || [];
-                            const costsWithValue = costs.filter(
-                                (cost: any) => cost.calculated_value > 0,
-                            );
-
-                            return financials.totalCosts > 0 ||
-                                costsWithValue.length > 0 ? (
-                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                        <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
-                                            <ArrowDownLeft className="h-4 w-4" />
-                                        </div>
-                                        <span className="flex-grow text-sm leading-4 font-semibold">
-                                            Custos operacionais
-                                        </span>
-                                        <span className="text-sm leading-4 whitespace-nowrap">
-                                            {formatCurrency(
-                                                financials.totalCosts,
-                                            )}
-                                        </span>
-                                        <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                            {formatPercentage(
-                                                financials.totalCosts,
-                                                financials.subtotal,
-                                            )}
-                                        </span>
-                                    </div>
-                                    {/* Detalhamento dos custos */}
-                                    {costsWithValue.length > 0 && (
-                                        <ul className="flex w-full flex-col items-center justify-between gap-1 pt-2 pl-0">
-                                            {costsWithValue.map((cost: any) => (
-                                                <li
-                                                    key={cost.id}
-                                                    className="flex w-full flex-row items-start justify-between px-3 py-0"
-                                                >
-                                                    <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                        {cost.name}
-                                                        {cost.type ===
-                                                        'percentage'
-                                                            ? ` (${parseFloat(cost.value).toFixed(2)}%)`
-                                                            : ''}
-                                                    </span>
-                                                    <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
-                                                        {formatCurrency(
-                                                            cost.calculated_value,
-                                                        )}
-                                                    </span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                </li>
-                            ) : null;
-                        })()}
-
-                        {/* COMISSÃO */}
-                        {(() => {
-                            const calculatedCosts =
-                                order.calculated_costs || null;
-                            const commissions =
-                                calculatedCosts?.commissions || [];
-                            const commissionsWithValue = commissions.filter(
-                                (comm: any) => comm.calculated_value > 0,
-                            );
-
-                            return financials.totalCommissions > 0 ||
-                                commissionsWithValue.length > 0 ? (
-                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                        <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
-                                            <ArrowDownLeft className="h-4 w-4" />
-                                        </div>
-                                        <span className="flex-grow text-sm leading-4 font-semibold">
-                                            Comissões
-                                        </span>
-                                        <span className="text-sm leading-4 whitespace-nowrap">
-                                            {formatCurrency(
-                                                financials.totalCommissions,
-                                            )}
-                                        </span>
-                                        <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                            {formatPercentage(
-                                                financials.totalCommissions,
-                                                financials.subtotal,
-                                            )}
-                                        </span>
-                                    </div>
-                                    {/* Detalhamento das comissões */}
-                                    {commissionsWithValue.length > 0 && (
-                                        <ul className="flex w-full flex-col items-center justify-between gap-1 pt-2 pl-0">
-                                            {commissionsWithValue.map(
-                                                (commission: any) => (
-                                                    <li
-                                                        key={commission.id}
-                                                        className="flex w-full flex-row items-start justify-between px-3 py-0"
-                                                    >
-                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                            {commission.name}
-                                                            {commission.type ===
-                                                            'percentage'
-                                                                ? ` (${parseFloat(commission.value).toFixed(2)}%)`
-                                                                : ''}
-                                                        </span>
-                                                        <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
-                                                            {formatCurrency(
-                                                                commission.calculated_value,
-                                                            )}
-                                                        </span>
-                                                    </li>
-                                                ),
-                                            )}
-                                        </ul>
-                                    )}
-                                </li>
-                            ) : null;
-                        })()}
-
-                        {/* MEIO DE PAGAMENTO */}
-                        {financials.paymentMethodFee > 0 && (
+                            {/* Taxa do meio de pagamento - Sempre mostrar */}
                             <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
                                 <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
                                     <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
@@ -717,42 +854,163 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                     </span>
                                     <span className="text-sm leading-4 whitespace-nowrap">
                                         {formatCurrency(
-                                            financials.paymentMethodFee,
+                                            financials.totalPaymentMethodFee,
                                         )}
                                     </span>
                                     <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
                                         {formatPercentage(
-                                            financials.paymentMethodFee,
+                                            financials.totalPaymentMethodFee,
+                                            financials.subtotal,
+                                        )}
+                                    </span>
+                                </div>
+
+                                {/* Se houver taxas aplicadas, mostrar apenas as taxas */}
+                                {financials.paymentMethodFees.filter(
+                                    (fee: CostCommissionItem) =>
+                                        fee.calculated_value > 0,
+                                ).length > 0 ? (
+                                    <ul className="flex w-full flex-col items-center justify-between gap-1 pt-2 pl-0">
+                                        {financials.paymentMethodFees
+                                            .filter(
+                                                (fee: CostCommissionItem) =>
+                                                    fee.calculated_value > 0,
+                                            )
+                                            .map((fee: CostCommissionItem) => (
+                                                <li
+                                                    key={fee.id}
+                                                    className="flex w-full flex-row items-start justify-between px-3 py-0.5"
+                                                >
+                                                    <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                        {fee.name}
+                                                        {fee.type ===
+                                                        'percentage'
+                                                            ? ` (${String(fee.value)}%)`
+                                                            : ''}
+                                                    </span>
+                                                    <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                        {formatCurrency(
+                                                            fee.calculated_value,
+                                                        )}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                    </ul>
+                                ) : (
+                                    /* Se não houver taxas, mostrar meios de pagamento para vincular */
+                                    financials.realPayments.length > 0 && (
+                                        <ul className="flex w-full flex-col items-center justify-between gap-2 pt-2 pl-0">
+                                            {financials.realPayments.map(
+                                                (
+                                                    payment: unknown,
+                                                    idx: number,
+                                                ) => {
+                                                    const p = payment as {
+                                                        payment_method?: {
+                                                            name?: string;
+                                                            method?: string;
+                                                            keyword?: string;
+                                                        };
+                                                        payment_value?: number;
+                                                    };
+                                                    const paymentName =
+                                                        p.payment_method
+                                                            ?.name ||
+                                                        'Pagamento';
+                                                    const paymentMethod =
+                                                        p.payment_method
+                                                            ?.method ||
+                                                        p.payment_method
+                                                            ?.keyword ||
+                                                        '';
+                                                    const paymentValue =
+                                                        p.payment_value || 0;
+
+                                                    return (
+                                                        <li
+                                                            key={idx}
+                                                            className="flex w-full flex-row items-center justify-between gap-2 rounded px-3 py-1 hover:bg-muted/50"
+                                                        >
+                                                            <div className="flex flex-1 flex-col gap-0.5">
+                                                                <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                    {
+                                                                        paymentName
+                                                                    }
+                                                                    {paymentMethod &&
+                                                                        ` (${paymentMethod})`}
+                                                                </span>
+                                                            </div>
+                                                            <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                                {formatCurrency(
+                                                                    paymentValue,
+                                                                )}
+                                                            </span>
+                                                            {paymentMethod && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-6 w-6 p-0"
+                                                                    onClick={() => {
+                                                                        setSelectedPayment(
+                                                                            {
+                                                                                method: paymentMethod,
+                                                                                name: paymentName,
+                                                                            },
+                                                                        );
+                                                                        setIsCreateFeeDialogOpen(
+                                                                            true,
+                                                                        );
+                                                                    }}
+                                                                >
+                                                                    <Plus className="h-3 w-3" />
+                                                                </Button>
+                                                            )}
+                                                        </li>
+                                                    );
+                                                },
+                                            )}
+                                        </ul>
+                                    )
+                                )}
+                            </li>
+
+                            {/* Receita líquida */}
+                            <li className="flex flex-col gap-2 px-0 py-4">
+                                <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                    <div className="flex items-center justify-center rounded-full bg-green-100 p-1 text-green-900">
+                                        <ArrowUpRight className="h-3 w-3" />
+                                    </div>
+                                    <span className="flex-grow text-sm leading-4 font-semibold">
+                                        Receita líquida
+                                    </span>
+                                    <span className="text-sm leading-4 font-semibold whitespace-nowrap text-green-700">
+                                        {formatCurrency(financials.netRevenue)}
+                                    </span>
+                                    <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                        {formatPercentage(
+                                            financials.netRevenue,
                                             financials.subtotal,
                                         )}
                                     </span>
                                 </div>
                             </li>
-                        )}
+                        </ul>
+                    </CardContent>
+                </Card>
 
-                        {/* Receita líquida */}
-                        <li className="flex flex-col gap-2 px-0 py-4">
-                            <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                <div className="flex items-center justify-center rounded-full bg-green-100 p-1 text-green-900">
-                                    <ArrowUpRight className="h-3 w-3" />
-                                </div>
-                                <span className="flex-grow text-sm leading-4 font-semibold">
-                                    Receita líquida
-                                </span>
-                                <span className="text-sm leading-4 font-semibold whitespace-nowrap text-green-700">
-                                    {formatCurrency(financials.netRevenue)}
-                                </span>
-                                <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                    {formatPercentage(
-                                        financials.netRevenue,
-                                        financials.subtotal,
-                                    )}
-                                </span>
-                            </div>
-                        </li>
-                    </ul>
-                </CardContent>
-            </Card>
+                {/* Dialog para criar taxa de pagamento */}
+                {selectedPayment && order && (
+                    <CreatePaymentFeeDialog
+                        open={isCreateFeeDialogOpen}
+                        onOpenChange={setIsCreateFeeDialogOpen}
+                        orderId={order.id}
+                        paymentMethod={selectedPayment.method}
+                        paymentMethodName={selectedPayment.name}
+                        provider={order.provider}
+                        origin={order.origin}
+                    />
+                )}
+            </>
         );
     }
 
@@ -777,8 +1035,11 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
     }
 
     // Extrair dados do raw se existir
-    const saleRaw = sale.raw || {};
-    const financialData = saleRaw.financialData || {};
+    const saleRaw = (sale.raw || {}) as { financialData?: unknown };
+    const financialData = (saleRaw.financialData || {}) as Record<
+        string,
+        unknown
+    >;
 
     // Valores principais
     const grossValue = sale.gross_value || 0;
@@ -790,8 +1051,9 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
 
     // Calcular taxas e comissões do iFood (estimativa baseada no padrão)
     const paymentCommission =
-        financialData.paymentCommission || bagValue * 0.0311; // ~3.11%
-    const ifoodCommission = financialData.ifoodCommission || bagValue * 0.12; // 12%
+        (financialData.paymentCommission as number) || bagValue * 0.0311; // ~3.11%
+    const ifoodCommission =
+        (financialData.ifoodCommission as number) || bagValue * 0.12; // 12%
     const totalFees = paymentCommission + ifoodCommission;
 
     // Calcular total recebido via loja

@@ -42,17 +42,60 @@ class OrdersController extends Controller
             })
             ->when($request->input('store_id'), fn ($q, $storeId) => $q->where('store_id', $storeId)
             )
-            ->when($request->input('provider'), fn ($q, $provider) => $q->where('provider', $provider)
-            )
-            ->when($request->input('start_date') && $request->input('end_date'), fn ($q) => $q->whereBetween('placed_at', [
-                request('start_date').' 00:00:00',
-                request('end_date').' 23:59:59',
-            ])
-            )
+            ->when($request->input('provider'), function ($q, $providerFilter) {
+                // Formato: "provider" ou "provider:origin"
+                if (str_contains($providerFilter, ':')) {
+                    [$provider, $origin] = explode(':', $providerFilter, 2);
+                    $q->where('provider', $provider)->where('origin', $origin);
+                } else {
+                    $q->where('provider', $providerFilter);
+                }
+            })
+            ->when(true, function ($q) use ($request) {
+                // Sempre aplicar filtro de data (mês atual por padrão)
+                $startDate = $request->input('start_date', now()->startOfMonth()->format('Y-m-d'));
+                $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
+
+                // Converter datas do horário de Brasília para UTC
+                $startDateUtc = \Carbon\Carbon::parse($startDate . ' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+                $endDateUtc = \Carbon\Carbon::parse($endDate . ' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+
+                return $q->whereBetween('placed_at', [$startDateUtc, $endDateUtc]);
+            })
             ->when($request->input('unmapped_only'), function ($q) {
                 // Filtrar apenas pedidos com itens não mapeados
                 $q->whereHas('items', function ($query) {
                     $query->whereDoesntHave('internalProduct');
+                });
+            })
+            ->when($request->input('no_payment_method'), function ($q) {
+                // Filtrar pedidos sem taxa de pagamento vinculada
+                // Inclui tanto pedidos sem método quanto pedidos com método mas sem taxa aplicada
+                $q->where(function ($query) {
+                    // 1. Pedidos sem método de pagamento (Takeat: session.payments vazio)
+                    $query->where(function ($q) {
+                        $q->where('provider', 'takeat')
+                            ->whereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) = 0 OR JSON_EXTRACT(raw, '$.session.payments') IS NULL");
+                    })
+                    // 2. OU pedidos com método mas sem taxa aplicada (calculated_costs->payment_methods vazio/null)
+                    ->orWhere(function ($q) {
+                        $q->whereRaw("JSON_LENGTH(JSON_EXTRACT(calculated_costs, '$.payment_methods')) = 0 OR JSON_EXTRACT(calculated_costs, '$.payment_methods') IS NULL");
+                    });
+                });
+            })
+            ->when($request->input('order_type'), function ($q, $orderType) {
+                // Filtrar por tipo de pedido
+                $q->where(function ($query) use ($orderType) {
+                    // Normalizar o tipo para uppercase
+                    $normalizedType = strtoupper($orderType);
+
+                    // Para Takeat: verificar session.table.table_type
+                    $query->where(function ($q) use ($normalizedType) {
+                        $q->where('provider', 'takeat')
+                            ->whereRaw("UPPER(JSON_UNQUOTE(JSON_EXTRACT(raw, '$.session.table.table_type'))) = ?", [$normalizedType]);
+                    })
+                    // Para outros providers (iFood, etc): verificar orderType
+                    ->orWhereRaw("UPPER(JSON_UNQUOTE(JSON_EXTRACT(raw, '$.orderType'))) = ?", [$normalizedType]);
                 });
             })
             ->orderByDesc('placed_at')
@@ -80,6 +123,22 @@ class OrdersController extends Controller
             ->distinct('sku')
             ->count('sku');
 
+        // Contar pedidos sem taxa de pagamento vinculada
+        // Inclui pedidos sem método OU com método mas sem taxa aplicada
+        $noPaymentMethodCount = Order::where('tenant_id', tenant_id())
+            ->where(function ($query) {
+                // 1. Sem método de pagamento
+                $query->where(function ($q) {
+                    $q->where('provider', 'takeat')
+                        ->whereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) = 0 OR JSON_EXTRACT(raw, '$.session.payments') IS NULL");
+                })
+                // 2. OU com método mas sem taxa aplicada
+                ->orWhere(function ($q) {
+                    $q->whereRaw("JSON_LENGTH(JSON_EXTRACT(calculated_costs, '$.payment_methods')) = 0 OR JSON_EXTRACT(calculated_costs, '$.payment_methods') IS NULL");
+                });
+            })
+            ->count();
+
         // Buscar produtos internos para associação
         $internalProducts = \App\Models\InternalProduct::query()
             ->where('tenant_id', tenant_id())
@@ -90,19 +149,70 @@ class OrdersController extends Controller
         // Buscar configurações de margem do tenant
         $tenant = \App\Models\Tenant::find(tenant_id());
 
+        // Buscar combinações de provider+origin disponíveis nos pedidos
+        $providerOptions = Order::where('tenant_id', tenant_id())
+            ->select('provider', 'origin')
+            ->distinct()
+            ->orderBy('provider')
+            ->orderBy('origin')
+            ->get()
+            ->map(function ($order) {
+                // Mapear labels amigáveis
+                $providerLabels = [
+                    'ifood' => 'iFood',
+                    'takeat' => 'Takeat',
+                    '99food' => '99Food',
+                    'rappi' => 'Rappi',
+                    'uber_eats' => 'Uber Eats',
+                ];
+
+                $originLabels = [
+                    'ifood' => 'iFood',
+                    '99food' => '99Food',
+                    'neemo' => 'Neemo',
+                    'keeta' => 'Keeta',
+                    'totem' => 'Totem',
+                    'pdv' => 'PDV',
+                    'takeat' => 'Próprio',
+                ];
+
+                $providerLabel = $providerLabels[$order->provider] ?? ucfirst($order->provider);
+
+                // Se for Takeat com origin diferente de 'takeat', criar combinação
+                if ($order->provider === 'takeat' && $order->origin && $order->origin !== 'takeat') {
+                    $originLabel = $originLabels[$order->origin] ?? ucfirst($order->origin);
+                    return [
+                        'value' => "takeat:{$order->origin}",
+                        'label' => "{$originLabel} (Takeat)",
+                    ];
+                }
+
+                // Para outros providers ou Takeat próprio
+                return [
+                    'value' => $order->provider,
+                    'label' => $providerLabel,
+                ];
+            })
+            ->unique('value')
+            ->values();
+
         return Inertia::render('orders', [
             'orders' => $orders,
             'filters' => [
                 'status' => $request->input('status'),
                 'store_id' => $request->input('store_id'),
                 'provider' => $request->input('provider'),
-                'start_date' => $request->input('start_date'),
-                'end_date' => $request->input('end_date'),
+                'order_type' => $request->input('order_type'),
+                'start_date' => $request->input('start_date', now()->startOfMonth()->format('Y-m-d')),
+                'end_date' => $request->input('end_date', now()->endOfMonth()->format('Y-m-d')),
                 'unmapped_only' => $request->input('unmapped_only'),
+                'no_payment_method' => $request->input('no_payment_method'),
                 'per_page' => $perPage,
             ],
             'stores' => $stores,
+            'providerOptions' => $providerOptions,
             'unmappedProductsCount' => $unmappedProductsCount,
+            'noPaymentMethodCount' => $noPaymentMethodCount,
             'internalProducts' => $internalProducts,
             'marginSettings' => [
                 'margin_excellent' => (float) ($tenant->margin_excellent ?? 100.00),
@@ -497,5 +607,26 @@ class OrdersController extends Controller
                 'message' => 'Erro: '.$e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Recalcular custos e comissões de um pedido específico
+     */
+    public function recalculateCosts($id)
+    {
+        $order = Order::where('tenant_id', tenant_id())->findOrFail($id);
+
+        $service = app(\App\Services\OrderCostService::class);
+        $result = $service->calculateCosts($order);
+
+        $order->update([
+            'calculated_costs' => $result,
+            'total_costs' => $result['total_costs'] ?? 0,
+            'total_commissions' => $result['total_commissions'] ?? 0,
+            'net_revenue' => $result['net_revenue'] ?? 0,
+            'costs_calculated_at' => now(),
+        ]);
+
+        return back();
     }
 }

@@ -89,14 +89,20 @@ if (!function_exists('is_online_payment_method')) {
     {
         $onlineMethods = [
             // iFood direto
-            'CREDIT', 'DEBIT', 'MEAL_VOUCHER', 'FOOD_VOUCHER', 'DIGITAL_WALLET', 'PIX',
-            // Takeat / 99Food
-            'CREDIT_CARD', 'DEBIT_CARD', 'VOUCHER', 'PIX',
+            'CREDIT', 'DEBIT', 'MEAL_VOUCHER', 'FOOD_VOUCHER', 'DIGITAL_WALLET',
+            // Takeat keywords (99Food, Keeta, Neemo, iFood, etc) - pagamento via marketplace
+            '99food_pagamento_online', 'keeta_pagamento_online', 'neemo_pagamento_online',
+            'ifood_pagamento_online', 'rappi_pagamento_online',
+            'online_ifood', 'online_99food', 'online_keeta', 'online_neemo', 'online_rappi',
             // Rappi
             'credit_card', 'debit_card', 'rappi_pay',
             // Uber Eats
             'uber_credits',
         ];
+
+        // Métodos detectados (maiúsculos) são considerados OFFLINE por padrão
+        // Apenas quando tem prefixo/keyword de marketplace é que é online
+        // Ex: CREDIT_CARD, DEBIT_CARD, PIX, VOUCHER sem prefixo = offline (pagamento no estabelecimento)
 
         return in_array($method, $onlineMethods);
     }

@@ -41,7 +41,9 @@ type OrdersPageProps = {
     };
     filters: Record<string, any>;
     stores: Store[];
+    providerOptions: Array<{ value: string; label: string }>;
     unmappedProductsCount: number;
+    noPaymentMethodCount: number;
     internalProducts: InternalProduct[];
     marginSettings: {
         margin_excellent: number;
@@ -56,7 +58,9 @@ export default function Orders() {
         orders,
         filters,
         stores,
+        providerOptions,
         unmappedProductsCount,
+        noPaymentMethodCount,
         internalProducts,
         marginSettings,
         auth,
@@ -87,7 +91,9 @@ export default function Orders() {
                             }}
                             filters={filters}
                             stores={stores}
+                            providerOptions={providerOptions}
                             unmappedProductsCount={unmappedProductsCount}
+                            noPaymentMethodCount={noPaymentMethodCount}
                             internalProducts={internalProducts}
                             marginSettings={marginSettings}
                         />

@@ -22,10 +22,43 @@ class OrderCostService
             ->forProvider($order->provider, $origin)
             ->get();
 
+        // Tentar detectar provider adicional pelo método de pagamento (ex: 99food_pagamento_online)
+        $paymentProviders = $this->detectPaymentProviders($order);
+
+        // Se detectou providers diferentes, buscar taxas desses providers também
+        foreach ($paymentProviders as $paymentProvider) {
+            // Buscar tanto "provider" quanto "takeat-provider" para pedidos Takeat
+            $providersToSearch = [$paymentProvider];
+            if ($order->provider === 'takeat') {
+                $providersToSearch[] = "takeat-{$paymentProvider}";
+            }
+
+            foreach ($providersToSearch as $searchProvider) {
+                if ($searchProvider !== $order->provider) {
+                    $additionalTaxes = CostCommission::where('tenant_id', $order->tenant_id)
+                        ->active()
+                        ->where('provider', $searchProvider)
+                        ->get();
+
+                    // Merge sem duplicatas (usando id como chave)
+                    foreach ($additionalTaxes as $tax) {
+                        if (!$costCommissions->contains('id', $tax->id)) {
+                            $costCommissions->push($tax);
+                        }
+                    }
+                }
+            }
+        }
+
         // Usar raw->total->orderAmount se net_total estiver zerado
         $baseValue = (float) $order->net_total;
         if ($baseValue == 0 && isset($order->raw['total']['orderAmount'])) {
             $baseValue = (float) $order->raw['total']['orderAmount'];
+        }
+
+        // Adicionar delivery_fee ao baseValue (é uma receita)
+        if ($order->delivery_fee > 0) {
+            $baseValue += (float) $order->delivery_fee;
         }
 
         $revenueBase = $baseValue;
@@ -33,12 +66,21 @@ class OrderCostService
 
         $costs = [];
         $commissions = [];
+        $taxes = [];
+        $paymentMethods = [];
         $totalCosts = 0;
         $totalCommissions = 0;
+        $totalTaxes = 0;
+        $totalPaymentMethods = 0;
 
         // Processar cada taxa
         foreach ($costCommissions as $tax) {
             $calculatedValue = $this->calculateTaxValue($tax, $order, $revenueBase, $taxBase);
+
+            // Pular taxas que não se aplicam (valor zero)
+            if ($calculatedValue <= 0) {
+                continue;
+            }
 
             $taxData = [
                 'id' => $tax->id,
@@ -46,12 +88,19 @@ class OrderCostService
                 'type' => $tax->type,
                 'value' => $tax->value,
                 'calculated_value' => $calculatedValue,
+                'category' => $tax->category,
             ];
 
-            // Separar entre custos e comissões baseado na category
+            // Separar entre custos, comissões, impostos e métodos de pagamento baseado na category
             if ($tax->category === 'commission') {
                 $commissions[] = $taxData;
                 $totalCommissions += $calculatedValue;
+            } elseif ($tax->category === 'tax') {
+                $taxes[] = $taxData;
+                $totalTaxes += $calculatedValue;
+            } elseif ($tax->category === 'payment_method') {
+                $paymentMethods[] = $taxData;
+                $totalPaymentMethods += $calculatedValue;
             } else {
                 $costs[] = $taxData;
                 $totalCosts += $calculatedValue;
@@ -66,16 +115,54 @@ class OrderCostService
             }
         }
 
-        $netRevenue = $baseValue - $totalCosts - $totalCommissions;
+        $netRevenue = $baseValue - $totalCosts - $totalCommissions - $totalTaxes - $totalPaymentMethods;
 
         return [
             'costs' => $costs,
             'commissions' => $commissions,
+            'taxes' => $taxes,
+            'payment_methods' => $paymentMethods,
             'total_costs' => round($totalCosts, 2),
             'total_commissions' => round($totalCommissions, 2),
+            'total_taxes' => round($totalTaxes, 2),
+            'total_payment_methods' => round($totalPaymentMethods, 2),
             'net_revenue' => round($netRevenue, 2),
             'base_value' => $baseValue,
         ];
+    }
+
+    /**
+     * Detectar providers a partir dos métodos de pagamento
+     */
+    private function detectPaymentProviders(Order $order): array
+    {
+        $providers = [];
+
+        // Para pedidos Takeat, verificar keywords dos métodos de pagamento
+        if ($order->provider === 'takeat') {
+            $payments = $order->raw['session']['payments'] ?? [];
+            foreach ($payments as $payment) {
+                $keyword = $payment['payment_method']['keyword'] ?? '';
+
+                // Normalizar keyword (substituir underscores e pontos por espaços para facilitar detecção)
+                $normalizedKeyword = str_replace(['_', '.'], ' ', strtolower($keyword));
+
+                // Detectar provider pelo keyword (ex: 99food_pagamento_online ou 99food_pagamento.online)
+                if (str_contains($normalizedKeyword, '99food')) {
+                    $providers[] = '99food';
+                } elseif (str_contains($normalizedKeyword, 'ifood')) {
+                    $providers[] = 'ifood';
+                } elseif (str_contains($normalizedKeyword, 'rappi')) {
+                    $providers[] = 'rappi';
+                } elseif (str_contains($normalizedKeyword, 'uber')) {
+                    $providers[] = 'uber_eats';
+                } elseif (str_contains($normalizedKeyword, 'keeta')) {
+                    $providers[] = 'keeta';
+                }
+            }
+        }
+
+        return array_unique($providers);
     }
 
     /**
@@ -140,8 +227,13 @@ class OrderCostService
             $tableType = $order->raw['session']['table']['table_type'] ?? null;
             $deliveryBy = $order->raw['session']['delivery_by'] ?? null;
 
-            // Só considera delivery se o tipo for delivery E a entrega for feita pelo merchant
-            return $tableType === 'delivery' && $deliveryBy === 'MERCHANT';
+            // Se é delivery e (é MERCHANT OU delivery_by está vazio), aplica taxa
+            // Quando delivery_by está vazio, assumimos que é a loja fazendo a entrega
+            if ($tableType === 'delivery' && ($deliveryBy === 'MERCHANT' || empty($deliveryBy))) {
+                return true;
+            }
+
+            return false;
         }
 
         // Para outros providers (iFood, Rappi, etc), verificar orderType
@@ -260,7 +352,32 @@ class OrderCostService
         if ($order->provider === 'takeat') {
             $payments = $order->raw['session']['payments'] ?? [];
             foreach ($payments as $payment) {
-                if ($method = $payment['payment_method']['method'] ?? null) {
+                // Preferir method, mas usar keyword se method estiver vazio
+                $method = $payment['payment_method']['method'] ?? $payment['payment_method']['keyword'] ?? null;
+
+                // Se o método é genérico "others" ou está vazio, tentar identificar pelo name
+                if ($method === 'others' || empty($method) || $method === 'N/A') {
+                    $name = strtolower($payment['payment_method']['name'] ?? '');
+
+                    // Identificar tipo pelo nome
+                    if (str_contains($name, 'pix')) {
+                        $method = 'PIX';
+                    } elseif (str_contains($name, 'crédito') || str_contains($name, 'credit')) {
+                        $method = 'CREDIT_CARD';
+                    } elseif (str_contains($name, 'débito') || str_contains($name, 'debit')) {
+                        $method = 'DEBIT_CARD';
+                    } elseif (str_contains($name, 'dinheiro') || str_contains($name, 'cash') || str_contains($name, 'money')) {
+                        $method = 'MONEY';
+                    } elseif (str_contains($name, 'vale') || str_contains($name, 'voucher') || str_contains($name, 'alelo') || str_contains($name, 'sodexo')) {
+                        $method = 'VOUCHER';
+                    }
+                    // Se não identificar, usar keyword como fallback
+                    if (empty($method) || $method === 'others') {
+                        $method = $payment['payment_method']['keyword'] ?? 'others';
+                    }
+                }
+
+                if ($method && $method !== 'N/A') {
                     $methods[] = $method;
                 }
             }
