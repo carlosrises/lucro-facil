@@ -40,8 +40,13 @@ class FinancialSummaryController extends Controller
 
         // 3. Processar cada pedido
         foreach ($orders as $order) {
-            // Faturamento total
-            $revenue = (float) ($order->gross_total ?? 0);
+            // Calcular faturamento somando os itens (não usar gross_total que pode estar incorreto)
+            $revenue = 0;
+            foreach ($order->items as $item) {
+                $itemPrice = (float) ($item->price ?? $item->unit_price ?? 0);
+                $itemQuantity = (float) ($item->quantity ?? $item->qty ?? 1);
+                $revenue += $itemPrice * $itemQuantity;
+            }
             $totalRevenue += $revenue;
 
             // Agrupar por loja
