@@ -407,12 +407,15 @@ export const columns: ColumnDef<Order>[] = [
             if (raw?.total?.orderAmount) {
                 amount = parseFloat(String(raw.total.orderAmount));
             }
-            // Takeat: usar old_total_price (valor antes do desconto)
-            else if (
-                row.original.provider === 'takeat' &&
-                raw?.session?.old_total_price
-            ) {
-                amount = parseFloat(String(raw.session.old_total_price));
+            // Takeat: usar old_total_price (valor antes do desconto) ou total_price
+            else if (row.original.provider === 'takeat') {
+                if (raw?.session?.old_total_price) {
+                    amount = parseFloat(String(raw.session.old_total_price));
+                } else if (raw?.session?.total_price) {
+                    amount = parseFloat(String(raw.session.total_price));
+                } else {
+                    amount = parseFloat(row.original.gross_total || '0');
+                }
             }
             // Fallback: usar gross_total do banco
             else {
