@@ -161,6 +161,7 @@ class SyncOrdersJob implements ShouldQueue
                             [
                                 'store_id' => $store->id,
                                 'code' => data_get($detail, 'displayId'),
+                                'short_reference' => data_get($detail, 'shortReference'), // iFood: shortReference
                                 'status' => $newStatus,
                                 'origin' => data_get($detail, 'origin'),
                                 'gross_total' => data_get($detail, 'total.price', 0),

@@ -18,6 +18,8 @@ class InternalProduct extends Model
         'sku',
         'name',
         'category',
+        'product_category',
+        'max_flavors',
         'type',
         'unit',
         'unit_cost',
@@ -50,6 +52,7 @@ class InternalProduct extends Model
     {
         return $this->belongsTo(TaxCategory::class);
     }
+
 
     public function ingredients(): BelongsToMany
     {

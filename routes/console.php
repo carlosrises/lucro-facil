@@ -28,6 +28,15 @@ Schedule::command('ifood:sync-sales')
 // Executa 1x por dia às 02:00 para pegar vendas que possam ter sido perdidas
 Schedule::command('ifood:sync-historical-sales --from=-7days')
     ->dailyAt('02:00')
+    ->timezone('America/Sao_Paulo')
+    ->withoutOverlapping()
+    ->runInBackground();
+
+// Sincronização de pedidos Takeat
+// Executa 1x por dia às 02:00 de Brasília para sincronizar pedidos do dia anterior
+Schedule::command('takeat:sync-orders --date=yesterday')
+    ->dailyAt('02:00')
+    ->timezone('America/Sao_Paulo')
     ->withoutOverlapping()
     ->runInBackground();
 
@@ -35,5 +44,6 @@ Schedule::command('ifood:sync-historical-sales --from=-7days')
 // Executa diariamente às 03:00
 Schedule::command('entries:generate-recurring')
     ->dailyAt('03:00')
+    ->timezone('America/Sao_Paulo')
     ->withoutOverlapping()
     ->runInBackground();

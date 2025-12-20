@@ -75,6 +75,8 @@ export function ProductFormDialog({
         name: '',
         sku: '',
         type: 'product',
+        product_category: '',
+        max_flavors: 1,
         unit: 'unit',
         unit_cost: '0',
         sale_price: '',
@@ -106,6 +108,11 @@ export function ProductFormDialog({
                     name: (product as { name: string }).name,
                     sku: (product as { sku?: string }).sku || '',
                     type: (product as { type: string }).type,
+                    product_category:
+                        (product as { product_category?: string })
+                            .product_category || '',
+                    max_flavors:
+                        (product as { max_flavors?: number }).max_flavors || 1,
                     unit: (product as { unit: string }).unit,
                     unit_cost: (product as { unit_cost: string }).unit_cost,
                     sale_price: (product as { sale_price: string }).sale_price,
@@ -148,6 +155,9 @@ export function ProductFormDialog({
                             name: productData.name,
                             sku: productData.sku || '',
                             type: productData.type,
+                            product_category:
+                                productData.product_category || '',
+                            max_flavors: productData.max_flavors || 1,
                             unit: productData.unit,
                             unit_cost: productData.unit_cost,
                             sale_price: productData.sale_price,
@@ -361,7 +371,7 @@ export function ProductFormDialog({
                                     </div>
                                 </div>
 
-                                {/* Tipo e Unidade */}
+                                {/* Tipo e Categoria */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="grid gap-2">
                                         <Label htmlFor="type">
@@ -393,48 +403,132 @@ export function ProductFormDialog({
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label htmlFor="unit">
-                                            Unidade{' '}
-                                            <span className="text-red-500">
-                                                *
-                                            </span>
+                                        <Label htmlFor="product_category">
+                                            Categoria de Produto
                                         </Label>
                                         <Select
-                                            value={data.unit}
+                                            value={
+                                                data.product_category || 'none'
+                                            }
                                             onValueChange={(value) =>
-                                                setData('unit', value)
+                                                setData(
+                                                    'product_category',
+                                                    value === 'none'
+                                                        ? ''
+                                                        : value,
+                                                )
                                             }
                                         >
                                             <SelectTrigger className="w-full">
-                                                <SelectValue />
+                                                <SelectValue placeholder="Selecione a categoria" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="unit">
-                                                    Unidade
+                                                <SelectItem value="none">
+                                                    Nenhuma
                                                 </SelectItem>
-                                                <SelectItem value="kg">
-                                                    Quilograma
+                                                <SelectItem value="pizza">
+                                                    Pizza
                                                 </SelectItem>
-                                                <SelectItem value="g">
-                                                    Grama
+                                                <SelectItem value="bebida">
+                                                    Bebida
                                                 </SelectItem>
-                                                <SelectItem value="l">
-                                                    Litro
+                                                <SelectItem value="sobremesa">
+                                                    Sobremesa
                                                 </SelectItem>
-                                                <SelectItem value="ml">
-                                                    Mililitro
+                                                <SelectItem value="entrada">
+                                                    Entrada
                                                 </SelectItem>
-                                                <SelectItem value="hour">
-                                                    Hora
+                                                <SelectItem value="outro">
+                                                    Outro
                                                 </SelectItem>
                                             </SelectContent>
                                         </Select>
-                                        {errors.unit && (
+                                        {errors.product_category && (
                                             <p className="text-sm text-red-500">
-                                                {errors.unit}
+                                                {errors.product_category}
                                             </p>
                                         )}
                                     </div>
+                                </div>
+
+                                {/* Quantidade de Sabores (apenas para pizzas) */}
+                                {data.product_category === 'pizza' && (
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="max_flavors">
+                                            Quantidade de Sabores
+                                        </Label>
+                                        <Input
+                                            id="max_flavors"
+                                            type="number"
+                                            min="1"
+                                            max="10"
+                                            value={data.max_flavors}
+                                            onChange={(e) =>
+                                                setData(
+                                                    'max_flavors',
+                                                    parseInt(e.target.value) ||
+                                                        1,
+                                                )
+                                            }
+                                        />
+                                        {errors.max_flavors && (
+                                            <p className="text-sm text-red-500">
+                                                {errors.max_flavors}
+                                            </p>
+                                        )}
+                                        <p className="text-xs text-muted-foreground">
+                                            Fração automática: 1/
+                                            {data.max_flavors} ={' '}
+                                            {(
+                                                (1 / data.max_flavors) *
+                                                100
+                                            ).toFixed(1)}
+                                            % por sabor
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Unidade */}
+                                <div className="grid gap-2">
+                                    <Label htmlFor="unit">
+                                        Unidade{' '}
+                                        <span className="text-red-500">*</span>
+                                    </Label>
+                                    <Select
+                                        value={data.unit}
+                                        onValueChange={(value) =>
+                                            setData('unit', value)
+                                        }
+                                    >
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="unit">
+                                                Unidade
+                                            </SelectItem>
+                                            <SelectItem value="kg">
+                                                Quilograma
+                                            </SelectItem>
+                                            <SelectItem value="g">
+                                                Grama
+                                            </SelectItem>
+                                            <SelectItem value="l">
+                                                Litro
+                                            </SelectItem>
+                                            <SelectItem value="ml">
+                                                Mililitro
+                                            </SelectItem>
+                                            <SelectItem value="hour">
+                                                Hora
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    {errors.unit && (
+                                        <p className="text-sm text-red-500">
+                                            {errors.unit}
+                                        </p>
+                                    )}
                                 </div>
 
                                 {/* Custo e Preço de Venda */}

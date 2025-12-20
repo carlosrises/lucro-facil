@@ -12,7 +12,7 @@ class Order extends Model
 
     protected $fillable = [
         'tenant_id', 'store_id', 'order_uuid', 'provider',
-        'status', 'code', 'origin',
+        'status', 'code', 'short_reference', 'origin',
         'gross_total', 'discount_total', 'delivery_fee',
         'tip', 'net_total', 'placed_at', 'raw',
         'calculated_costs', 'total_costs', 'total_commissions',

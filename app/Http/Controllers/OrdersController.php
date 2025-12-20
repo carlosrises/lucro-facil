@@ -17,7 +17,7 @@ class OrdersController extends Controller
     {
         $query = Order::query()
             ->select([
-                'id', 'order_uuid', 'code', 'status', 'provider', 'origin',
+                'id', 'order_uuid', 'code', 'short_reference', 'status', 'provider', 'origin',
                 'store_id', 'placed_at', 'gross_total', 'discount_total',
                 'delivery_fee', 'tip', 'net_total', 'raw', 'tenant_id',
                 'calculated_costs', 'total_costs', 'total_commissions', 'net_revenue', 'costs_calculated_at',

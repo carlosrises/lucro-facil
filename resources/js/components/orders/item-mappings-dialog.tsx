@@ -67,7 +67,6 @@ interface Mapping {
         | 'observation'
         | 'drink'
         | null;
-    auto_fraction?: boolean;
     notes?: string;
     external_reference?: string;
     external_name?: string;
@@ -108,7 +107,6 @@ export function ItemMappingsDialog({
                     | 'observation'
                     | 'drink'
                     | null;
-                autoFraction: boolean;
             }
         >
     >({});
@@ -149,7 +147,6 @@ export function ItemMappingsDialog({
                             | 'observation'
                             | 'drink'
                             | null;
-                        autoFraction: boolean;
                     }
                 > = {};
                 item.mappings
@@ -165,7 +162,6 @@ export function ItemMappingsDialog({
                             productId: m.internal_product_id,
                             quantity: m.quantity, // Usar valor direto, não multiplicar por 100
                             optionType: (m as any).option_type || 'addon',
-                            autoFraction: (m as any).auto_fraction || false,
                         };
                     });
                 console.log(
@@ -209,7 +205,7 @@ export function ItemMappingsDialog({
                     quantity: addonMapping.quantity, // Usar valor direto
                     mapping_type: 'addon',
                     option_type: addonMapping.optionType || 'addon',
-                    auto_fraction: addonMapping.autoFraction || false,
+                    auto_fraction: addonMapping.optionType === 'pizza_flavor',
                     external_reference: index.toString(),
                     external_name: addon.name,
                 });
@@ -531,55 +527,41 @@ export function ItemMappingsDialog({
                                                             'pizza_flavor' && (
                                                             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
                                                                 <div className="flex items-start gap-2">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        id={`auto-fraction-${index}`}
-                                                                        checked={
-                                                                            addonMapping.autoFraction
-                                                                        }
-                                                                        onChange={(
-                                                                            e,
-                                                                        ) =>
-                                                                            setAddonMappings(
-                                                                                {
-                                                                                    ...addonMappings,
-                                                                                    [index]:
-                                                                                        {
-                                                                                            ...addonMapping,
-                                                                                            autoFraction:
-                                                                                                e
-                                                                                                    .target
-                                                                                                    .checked,
-                                                                                        },
-                                                                                },
-                                                                            )
-                                                                        }
-                                                                        className="mt-0.5 h-4 w-4 rounded border-gray-300"
-                                                                    />
                                                                     <div className="flex-1">
-                                                                        <Label
-                                                                            htmlFor={`auto-fraction-${index}`}
-                                                                            className="text-sm font-medium text-blue-900"
-                                                                        >
+                                                                        <p className="text-sm font-medium text-blue-900">
+                                                                            🍕
                                                                             Fração
                                                                             Automática
-                                                                        </Label>
+                                                                        </p>
                                                                         <p className="text-xs text-blue-700">
-                                                                            Calcula
-                                                                            automaticamente
-                                                                            a
+                                                                            A
                                                                             fração
-                                                                            baseado
+                                                                            será
+                                                                            calculada
+                                                                            automaticamente
+                                                                            baseada
                                                                             no
                                                                             número
+                                                                            real
                                                                             de
                                                                             sabores
-                                                                            (ex:
+                                                                            no
+                                                                            pedido.
+                                                                            Exemplo:
+                                                                            1
+                                                                            sabor
+                                                                            =
+                                                                            100%,
                                                                             2
                                                                             sabores
                                                                             =
-                                                                            0.5
-                                                                            cada)
+                                                                            50%
+                                                                            cada,
+                                                                            4
+                                                                            sabores
+                                                                            =
+                                                                            25%
+                                                                            cada.
                                                                         </p>
                                                                     </div>
                                                                 </div>

@@ -254,6 +254,7 @@ class SyncTakeatOrders extends Command
                 'store_id' => $store->id,
                 'provider' => 'takeat',
                 'code' => $basketId,
+                'short_reference' => $session['attendance_password'] ?? null, // Número sequencial diário (#1, #2, #3...)
                 'status' => $status,
                 'origin' => $origin, // ifood, 99food, keeta, pdv, delivery, totem
                 'gross_total' => $grossTotal,

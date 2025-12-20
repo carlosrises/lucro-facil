@@ -41,8 +41,22 @@ class PizzaFractionService
             ];
         }
 
-        // Calcular fração (1 pizza dividida pelos sabores)
-        $fraction = 1 / $flavorCount;
+        // Tentar obter a quantidade de sabores do produto principal
+        $mainMapping = $mappings->where('mapping_type', 'main')->first();
+        $fraction = null;
+
+        if ($mainMapping && $mainMapping->internalProduct) {
+            $mainProduct = $mainMapping->internalProduct;
+
+            if ($mainProduct->product_category === 'pizza' && $mainProduct->max_flavors) {
+                $fraction = 1.0 / $mainProduct->max_flavors;
+            }
+        }
+
+        // Se não encontrou, usa o cálculo tradicional (dividir pelo número de sabores)
+        if ($fraction === null) {
+            $fraction = $this->calculateFraction($flavorCount);
+        }
 
         // Atualizar cada sabor com a fração calculada
         $updated = 0;
@@ -96,8 +110,22 @@ class PizzaFractionService
             return $newMappings;
         }
 
-        // Calcular fração
-        $fraction = $this->calculateFraction($pizzaFlavorCount);
+        // Tentar obter a quantidade de sabores do produto principal
+        $mainMapping = collect($newMappings)->firstWhere('mapping_type', 'main');
+        $fraction = null;
+
+        if ($mainMapping && isset($mainMapping['internal_product_id'])) {
+            $mainProduct = \App\Models\InternalProduct::find($mainMapping['internal_product_id']);
+
+            if ($mainProduct && $mainProduct->product_category === 'pizza' && $mainProduct->max_flavors) {
+                $fraction = 1.0 / $mainProduct->max_flavors;
+            }
+        }
+
+        // Se não encontrou, usa o cálculo tradicional (dividir pelo número de sabores)
+        if ($fraction === null) {
+            $fraction = $this->calculateFraction($pizzaFlavorCount);
+        }
 
         // Atualizar quantidade de cada pizza_flavor com auto_fraction
         return collect($newMappings)->map(function ($mapping) use ($fraction) {

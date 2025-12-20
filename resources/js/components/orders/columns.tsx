@@ -113,6 +113,7 @@ export type CalculatedCosts = {
 export type Order = {
     id: number;
     code: string;
+    short_reference?: string | null; // Número sequencial diário (#1, #2, #3...)
     status: string;
     provider: string;
     origin: string; // Canal/origem do pedido (ifood, 99food, takeat, etc)
@@ -368,10 +369,23 @@ export const columns: ColumnDef<Order>[] = [
         header: 'Pedido',
         cell: ({ row }) => (
             <div className="flex flex-col">
-                <span className="font-medium">{row.original.code}</span>
-                <span className="text-[10px] text-muted-foreground lg:text-xs">
-                    #{row.original.id}
-                </span>
+                {row.original.short_reference ? (
+                    <>
+                        <span className="font-medium">
+                            #{row.original.short_reference}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground lg:text-xs">
+                            {row.original.id}
+                        </span>
+                    </>
+                ) : (
+                    <>
+                        <span className="font-medium">{row.original.code}</span>
+                        <span className="text-[10px] text-muted-foreground lg:text-xs">
+                            {row.original.id}
+                        </span>
+                    </>
+                )}
             </div>
         ),
     },
