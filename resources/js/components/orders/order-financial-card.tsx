@@ -83,11 +83,14 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
         // Para Takeat: usar old_total_price do raw (antes de descontos) se disponível
         // Caso contrário, usar gross_total do banco
         let grossTotal = parseFloat(String(order?.gross_total || '0'));
-        
-        if (order?.provider === 'takeat' && order?.raw?.session?.old_total_price) {
+
+        if (
+            order?.provider === 'takeat' &&
+            order?.raw?.session?.old_total_price
+        ) {
             grossTotal = parseFloat(String(order.raw.session.old_total_price));
         }
-        
+
         const discountTotal = parseFloat(String(order?.discount_total || '0'));
         const deliveryFee = parseFloat(String(order?.delivery_fee || '0'));
         const netTotal = parseFloat(String(order?.net_total || '0'));
@@ -615,7 +618,12 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                             ?.total_tax_rate !== null,
                                 );
 
-                                return financials.totalTax > 0 ? (
+                                // Mostrar seção se tiver impostos OU se tiver detalhes para exibir
+                                const hasDetails =
+                                    itemsWithTax.length > 0 ||
+                                    financials.additionalTaxes.length > 0;
+
+                                return financials.totalTax > 0 || hasDetails ? (
                                     <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
                                         <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
                                             <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
@@ -637,7 +645,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                             </span>
                                         </div>
                                         {/* Detalhamento dos impostos por produto */}
-                                        {itemsWithTax.length > 0 && (
+                                        {hasDetails && (
                                             <ul className="flex w-full flex-col items-center justify-between pt-2 pl-0">
                                                 {itemsWithTax.map(
                                                     (item: OrderItem) => {

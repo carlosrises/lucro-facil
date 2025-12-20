@@ -541,7 +541,8 @@ export function ItemMappingsDialog({
                                                                     max="100"
                                                                     step="25"
                                                                     value={
-                                                                        addonMapping.quantity * 100
+                                                                        addonMapping.quantity *
+                                                                        100
                                                                     }
                                                                     onChange={(
                                                                         e,
@@ -557,7 +558,9 @@ export function ItemMappingsDialog({
                                                                                                 e
                                                                                                     .target
                                                                                                     .value,
-                                                                                            ) || 100) / 100,
+                                                                                            ) ||
+                                                                                                100) /
+                                                                                            100,
                                                                                     },
                                                                             },
                                                                         )
@@ -565,7 +568,10 @@ export function ItemMappingsDialog({
                                                                     placeholder="Ex: 25 para 25%"
                                                                 />
                                                                 <p className="text-xs text-muted-foreground">
-                                                                    100% = inteiro | 50% = metade | 25% = 1/4
+                                                                    100% =
+                                                                    inteiro |
+                                                                    50% = metade
+                                                                    | 25% = 1/4
                                                                 </p>
                                                             </div>
                                                         </>

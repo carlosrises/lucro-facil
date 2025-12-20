@@ -402,20 +402,23 @@ export const columns: ColumnDef<Order>[] = [
         cell: ({ row }) => {
             const raw = row.original.raw;
             let amount = 0;
-            
+
             // iFood: usar raw.total.orderAmount
             if (raw?.total?.orderAmount) {
                 amount = parseFloat(String(raw.total.orderAmount));
-            } 
+            }
             // Takeat: usar old_total_price (valor antes do desconto)
-            else if (row.original.provider === 'takeat' && raw?.session?.old_total_price) {
+            else if (
+                row.original.provider === 'takeat' &&
+                raw?.session?.old_total_price
+            ) {
                 amount = parseFloat(String(raw.session.old_total_price));
             }
             // Fallback: usar gross_total do banco
             else {
                 amount = parseFloat(row.original.gross_total || '0');
             }
-            
+
             const isCancelled = row.original.status === 'CANCELLED';
 
             return amount > 0 ? (
@@ -612,6 +615,23 @@ export const columns: ColumnDef<Order>[] = [
                         ? parseFloat(row.original.total_commissions)
                         : (row.original.total_commissions ?? 0);
 
+                // Impostos adicionais (categoria 'tax' em calculated_costs)
+                const calculatedCosts = row.original.calculated_costs || null;
+                const additionalTaxes = calculatedCosts?.taxes || [];
+                const totalAdditionalTax = additionalTaxes.reduce(
+                    (sum: number, tax: any) =>
+                        sum + (tax.calculated_value || 0),
+                    0,
+                );
+
+                // Taxas de pagamento (categoria 'payment_method' em calculated_costs)
+                const paymentFees = calculatedCosts?.payment_methods || [];
+                const totalPaymentFees = paymentFees.reduce(
+                    (sum: number, fee: any) =>
+                        sum + (fee.calculated_value || 0),
+                    0,
+                );
+
                 // Calcular subsídio dos pagamentos
                 const payments = raw?.session?.payments || [];
                 const totalSubsidy = payments.reduce(
@@ -642,8 +662,10 @@ export const columns: ColumnDef<Order>[] = [
                     totalSubsidy -
                     totalCost -
                     totalTax -
+                    totalAdditionalTax -
                     extraCosts -
-                    commissions;
+                    commissions -
+                    totalPaymentFees;
                 const isCancelled = row.original.status === 'CANCELLED';
 
                 return totalFinal > 0 ? (

@@ -55,7 +55,7 @@ class OrderCostService
         // Para iFood: usar orderAmount do raw
         // Caso contrário: usar net_total + delivery_fee
         $baseValue = 0;
-        
+
         if ($order->provider === 'takeat' && isset($order->raw['session']['total_delivery_price'])) {
             // Takeat: usar subtotal (após descontos, mas antes de taxas)
             $baseValue = (float) $order->raw['session']['total_delivery_price'];
