@@ -34,7 +34,8 @@ import {
     IconChevronsRight,
     IconLayoutColumns,
 } from '@tabler/icons-react';
-import { Pencil } from 'lucide-react';
+import { Link2, Pencil } from 'lucide-react';
+import { OrderActionsCell } from './order-actions-cell';
 
 /**
  * Calcula o custo de um item considerando múltiplas associações
@@ -85,7 +86,6 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Link, router } from '@inertiajs/react';
-import { Link2 } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import {
     DropdownMenu,
@@ -179,51 +179,65 @@ export function DataTable({
         selectedOrderIdRef.current = selectedOrder?.id || null;
     }, [selectedOrder]);
 
-    // Adicionar coluna de produtos não associados
+    // Adicionar botão de associar na coluna de ações
     const columnsWithAssociate = React.useMemo(() => {
-        const associateColumn = {
-            id: 'unmapped_products',
-            header: 'Produtos',
-            enableSorting: false,
-            cell: ({ row }: { row: import('./columns').Order }) => {
-                const order = row.original as Order;
+        return columns.map((col) => {
+            // Modificar a coluna de ações para incluir o botão de associar
+            if (col.id === 'actions') {
+                return {
+                    ...col,
+                    cell: ({ row }: { row: any }) => {
+                        const order = row.original as Order;
+                        const orderType = order.raw?.orderType || 'DELIVERY';
+                        const handshakeDispute =
+                            order.raw?.handshakeDispute ?? null;
 
-                // Contar items sem associação (nem internal_product nem mappings)
-                const unmappedCount =
-                    order.items?.filter((item) => {
-                        // Item não tem nem produto direto nem mappings
+                        // Contar items sem associação
+                        const unmappedCount =
+                            order.items?.filter((item) => {
+                                return (
+                                    !item.internal_product &&
+                                    (!item.mappings ||
+                                        item.mappings.length === 0)
+                                );
+                            }).length || 0;
+
                         return (
-                            !item.internal_product &&
-                            (!item.mappings || item.mappings.length === 0)
+                            <div className="flex items-center gap-1">
+                                {/* Botão de associar produtos */}
+                                {unmappedCount > 0 && (
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="relative h-7 w-7 shrink-0"
+                                        onClick={() => {
+                                            setSelectedOrder(order);
+                                            setAssociateDialogOpen(true);
+                                        }}
+                                        title={`${unmappedCount} produto(s) sem associação`}
+                                    >
+                                        <Link2 className="h-3.5 w-3.5" />
+                                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                                            {unmappedCount}
+                                        </span>
+                                    </Button>
+                                )}
+
+                                {/* Ações do pedido (confirmar, despachar, etc) */}
+                                <OrderActionsCell
+                                    orderId={order.id}
+                                    orderStatus={order.status}
+                                    orderType={orderType}
+                                    provider={order.provider}
+                                    handshakeDispute={handshakeDispute}
+                                />
+                            </div>
                         );
-                    }).length || 0;
-
-                if (unmappedCount === 0) return null;
-
-                return (
-                    <Button
-                        variant="outline"
-                        size="icon"
-                        className="relative h-8 w-8"
-                        onClick={() => {
-                            setSelectedOrder(order);
-                            setAssociateDialogOpen(true);
-                        }}
-                    >
-                        <Link2 className="h-4 w-4" />
-                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
-                            {unmappedCount}
-                        </span>
-                    </Button>
-                );
-            },
-        };
-
-        // Inserir a coluna antes da coluna de ações
-        const actionIndex = columns.findIndex((col) => col.id === 'actions');
-        const newColumns = [...columns];
-        newColumns.splice(actionIndex, 0, associateColumn);
-        return newColumns;
+                    },
+                };
+            }
+            return col;
+        });
     }, []);
 
     const [dateRange, setDateRange] = React.useState<DateRange | undefined>(
@@ -822,17 +836,150 @@ export function DataTable({
 
                                                                     {/* Itens do pedido */}
                                                                     {(() => {
-                                                                        // Para iFood: usa raw.items
-                                                                        // Para Takeat: usa items do banco
-                                                                        const items =
-                                                                            row
-                                                                                .original
-                                                                                .raw
-                                                                                ?.items ||
-                                                                            row
-                                                                                .original
-                                                                                .items ||
+                                                                        const order =
+                                                                            row.original;
+                                                                        let items =
                                                                             [];
+
+                                                                        // Para Takeat: mesclar dados do raw (valores corretos) com dados do banco (associações)
+                                                                        if (
+                                                                            order.provider ===
+                                                                                'takeat' &&
+                                                                            order
+                                                                                .raw
+                                                                                ?.basket
+                                                                                ?.orders
+                                                                        ) {
+                                                                            const rawItems =
+                                                                                order
+                                                                                    .raw
+                                                                                    .basket
+                                                                                    .orders;
+                                                                            const dbItems =
+                                                                                order.items ||
+                                                                                [];
+
+                                                                            items =
+                                                                                rawItems.map(
+                                                                                    (
+                                                                                        rawItem: any,
+                                                                                        index: number,
+                                                                                    ) => {
+                                                                                        // Encontrar item correspondente no banco pelo índice ou SKU
+                                                                                        const dbItem =
+                                                                                            dbItems.find(
+                                                                                                (
+                                                                                                    db: any,
+                                                                                                ) =>
+                                                                                                    db.sku ===
+                                                                                                        rawItem.product?.id?.toString() ||
+                                                                                                    db.name ===
+                                                                                                        rawItem
+                                                                                                            .product
+                                                                                                            ?.name,
+                                                                                            ) ||
+                                                                                            dbItems[
+                                                                                                index
+                                                                                            ];
+
+                                                                                        // Mapear complement_categories para options (para exibição)
+                                                                                        const options: any[] =
+                                                                                            [];
+                                                                                        if (
+                                                                                            rawItem.complement_categories
+                                                                                        ) {
+                                                                                            rawItem.complement_categories.forEach(
+                                                                                                (
+                                                                                                    cat: any,
+                                                                                                ) => {
+                                                                                                    cat.order_complements?.forEach(
+                                                                                                        (
+                                                                                                            comp: any,
+                                                                                                        ) => {
+                                                                                                            options.push(
+                                                                                                                {
+                                                                                                                    id: comp.id,
+                                                                                                                    name:
+                                                                                                                        comp
+                                                                                                                            .complement
+                                                                                                                            ?.name ||
+                                                                                                                        '',
+                                                                                                                    quantity:
+                                                                                                                        comp.amount ||
+                                                                                                                        1,
+                                                                                                                    unitPrice: 0,
+                                                                                                                    price: 0,
+                                                                                                                    totalPrice: 0,
+                                                                                                                },
+                                                                                                            );
+                                                                                                        },
+                                                                                                    );
+                                                                                                },
+                                                                                            );
+                                                                                        }
+
+                                                                                        // Mesclar dados: valores do raw + associações do banco
+                                                                                        return {
+                                                                                            id:
+                                                                                                dbItem?.id ||
+                                                                                                rawItem.id,
+                                                                                            qty:
+                                                                                                rawItem.amount ||
+                                                                                                1,
+                                                                                            quantity:
+                                                                                                rawItem.amount ||
+                                                                                                1,
+                                                                                            name:
+                                                                                                rawItem
+                                                                                                    .product
+                                                                                                    ?.name ||
+                                                                                                '',
+                                                                                            sku:
+                                                                                                dbItem?.sku ||
+                                                                                                rawItem.product?.id?.toString(),
+                                                                                            price: parseFloat(
+                                                                                                rawItem.price ||
+                                                                                                    0,
+                                                                                            ),
+                                                                                            unit_price:
+                                                                                                parseFloat(
+                                                                                                    rawItem.price ||
+                                                                                                        0,
+                                                                                                ),
+                                                                                            total_price:
+                                                                                                parseFloat(
+                                                                                                    rawItem.total_price ||
+                                                                                                        0,
+                                                                                                ),
+                                                                                            // Dados do banco (associações)
+                                                                                            internal_product:
+                                                                                                dbItem?.internal_product,
+                                                                                            mappings:
+                                                                                                dbItem?.mappings ||
+                                                                                                [],
+                                                                                            add_ons:
+                                                                                                dbItem?.add_ons ||
+                                                                                                [],
+                                                                                            complement_categories:
+                                                                                                rawItem.complement_categories ||
+                                                                                                [],
+                                                                                            options:
+                                                                                                options,
+                                                                                            observations:
+                                                                                                dbItem?.observations,
+                                                                                        };
+                                                                                    },
+                                                                                );
+                                                                        } else {
+                                                                            // Para iFood e outros: usar raw.items ou items do banco
+                                                                            items =
+                                                                                order
+                                                                                    .raw
+                                                                                    ?.items ||
+                                                                                order.items ||
+                                                                                [];
+                                                                        }
+
                                                                         const displayItems =
                                                                             items.map(
                                                                                 (
@@ -850,6 +997,7 @@ export function DataTable({
                                                                                         item.price ||
                                                                                         0,
                                                                                     totalPrice:
+                                                                                        item.total_price ||
                                                                                         item.totalPrice ||
                                                                                         (item.unit_price ||
                                                                                             item.unitPrice ||
@@ -1091,11 +1239,16 @@ export function DataTable({
                                                                                         </ul>
                                                                                     )}
 
-                                                                                    {/* Complementos/Add-ons (Takeat) */}
+                                                                                    {/* Complementos/Add-ons (só renderizar se NÃO houver options) */}
                                                                                     {item
                                                                                         .add_ons
                                                                                         ?.length >
-                                                                                        0 && (
+                                                                                        0 &&
+                                                                                        (!item.options ||
+                                                                                            item
+                                                                                                .options
+                                                                                                .length ===
+                                                                                                0) && (
                                                                                         <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
                                                                                             {item.add_ons.map(
                                                                                                 (
@@ -1169,44 +1322,65 @@ export function DataTable({
                                                                         </span>
                                                                         <span className="leading-4 font-semibold">
                                                                             {(() => {
-                                                                                // Para iFood: usa raw.items
-                                                                                // Para Takeat: usa items do banco
-                                                                                const items =
-                                                                                    row
-                                                                                        .original
+                                                                                const order =
+                                                                                    row.original;
+                                                                                let total = 0;
+
+                                                                                // Para Takeat: usar basket total_price
+                                                                                if (
+                                                                                    order.provider ===
+                                                                                        'takeat' &&
+                                                                                    order
                                                                                         .raw
-                                                                                        ?.items ||
-                                                                                    row
-                                                                                        .original
-                                                                                        .items ||
-                                                                                    [];
-                                                                                const total =
-                                                                                    items.reduce(
-                                                                                        (
-                                                                                            sum,
-                                                                                            item: any,
-                                                                                        ) => {
-                                                                                            const quantity =
-                                                                                                item.qty ||
-                                                                                                item.quantity ||
-                                                                                                0;
-                                                                                            const unitPrice =
-                                                                                                item.unit_price ||
-                                                                                                item.unitPrice ||
-                                                                                                item.price ||
-                                                                                                0;
-                                                                                            const price =
-                                                                                                item.totalPrice ||
-                                                                                                unitPrice *
-                                                                                                    quantity ||
-                                                                                                0;
-                                                                                            return (
-                                                                                                sum +
-                                                                                                price
-                                                                                            );
-                                                                                        },
-                                                                                        0,
-                                                                                    );
+                                                                                        ?.basket
+                                                                                        ?.total_price
+                                                                                ) {
+                                                                                    total =
+                                                                                        parseFloat(
+                                                                                            String(
+                                                                                                order
+                                                                                                    .raw
+                                                                                                    .basket
+                                                                                                    .total_price,
+                                                                                            ),
+                                                                                        );
+                                                                                } else {
+                                                                                    // Para outros providers: somar items
+                                                                                    const items =
+                                                                                        order
+                                                                                            .raw
+                                                                                            ?.items ||
+                                                                                        order.items ||
+                                                                                        [];
+                                                                                    total =
+                                                                                        items.reduce(
+                                                                                            (
+                                                                                                sum: number,
+                                                                                                item: any,
+                                                                                            ) => {
+                                                                                                const quantity =
+                                                                                                    item.qty ||
+                                                                                                    item.quantity ||
+                                                                                                    0;
+                                                                                                const unitPrice =
+                                                                                                    item.unit_price ||
+                                                                                                    item.unitPrice ||
+                                                                                                    item.price ||
+                                                                                                    0;
+                                                                                                const price =
+                                                                                                    item.totalPrice ||
+                                                                                                    unitPrice *
+                                                                                                        quantity ||
+                                                                                                    0;
+                                                                                                return (
+                                                                                                    sum +
+                                                                                                    price
+                                                                                                );
+                                                                                            },
+                                                                                            0,
+                                                                                        );
+                                                                                }
+
                                                                                 return new Intl.NumberFormat(
                                                                                     'pt-BR',
                                                                                     {

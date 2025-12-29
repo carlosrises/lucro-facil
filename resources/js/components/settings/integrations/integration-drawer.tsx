@@ -305,8 +305,8 @@ export function IntegrationDrawer({
                                                 store.token_expired
                                                     ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/20'
                                                     : !store.active
-                                                        ? 'border-red-500 bg-card'
-                                                        : 'bg-card'
+                                                      ? 'border-red-500 bg-card'
+                                                      : 'bg-card'
                                             }`}
                                         >
                                             <div>

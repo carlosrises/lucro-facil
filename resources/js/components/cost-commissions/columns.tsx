@@ -83,6 +83,41 @@ export const columns = (
         ),
     },
     {
+        accessorKey: 'category',
+        header: 'Categoria',
+        cell: ({ row }) => {
+            const category = row.getValue('category') as string;
+            const categoryConfig: Record<
+                string,
+                { label: string; className: string }
+            > = {
+                cost: {
+                    label: 'Custo',
+                    className: 'bg-red-100 text-red-800 hover:bg-red-100',
+                },
+                commission: {
+                    label: 'Comissão',
+                    className:
+                        'bg-orange-100 text-orange-800 hover:bg-orange-100',
+                },
+                tax: {
+                    label: 'Imposto',
+                    className:
+                        'bg-yellow-100 text-yellow-800 hover:bg-yellow-100',
+                },
+                payment_method: {
+                    label: 'Taxa de Pagamento',
+                    className: 'bg-blue-100 text-blue-800 hover:bg-blue-100',
+                },
+            };
+            const config = categoryConfig[category] || {
+                label: category,
+                className: '',
+            };
+            return <Badge className={config.className}>{config.label}</Badge>;
+        },
+    },
+    {
         accessorKey: 'provider',
         header: 'Marketplace',
         cell: ({ row }) => {

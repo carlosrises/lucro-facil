@@ -42,7 +42,7 @@ class OrderCostService
 
                     // Merge sem duplicatas (usando id como chave)
                     foreach ($additionalTaxes as $tax) {
-                        if (!$costCommissions->contains('id', $tax->id)) {
+                        if (! $costCommissions->contains('id', $tax->id)) {
                             $costCommissions->push($tax);
                         }
                     }
@@ -87,7 +87,7 @@ class OrderCostService
             // Se é taxa de pagamento (payment_method), calcular proporcionalmente por cada pagamento
             if ($tax->category === 'payment_method') {
                 $paymentFees = $this->calculatePaymentMethodTaxes($tax, $order, $revenueBase, $taxBase);
-                
+
                 foreach ($paymentFees as $paymentFee) {
                     if ($paymentFee['calculated_value'] > 0) {
                         $paymentMethods[] = $paymentFee;
@@ -197,7 +197,7 @@ class OrderCostService
 
         // Obter pagamentos do pedido
         $payments = $this->getOrderPayments($order);
-        
+
         if (empty($payments)) {
             return $result;
         }
@@ -214,7 +214,7 @@ class OrderCostService
             }
 
             // Verificar se a taxa se aplica a este método de pagamento
-            if (!$this->shouldApplyTaxToPayment($tax, $payment, $order)) {
+            if (! $this->shouldApplyTaxToPayment($tax, $payment, $order)) {
                 continue;
             }
 
@@ -258,7 +258,7 @@ class OrderCostService
         // Para pedidos Takeat
         if ($order->provider === 'takeat') {
             $rawPayments = $order->raw['session']['payments'] ?? [];
-            
+
             foreach ($rawPayments as $payment) {
                 $method = $payment['payment_method']['method'] ?? $payment['payment_method']['keyword'] ?? null;
                 $name = $payment['payment_method']['name'] ?? 'Pagamento';
@@ -268,14 +268,14 @@ class OrderCostService
                 // Pular subsídios e cupons (não aplicar taxas sobre eles)
                 $lowerName = strtolower($name);
                 $lowerKeyword = strtolower($keyword);
-                
-                $isSubsidy = str_contains($lowerName, 'subsid') 
-                    || str_contains($lowerName, 'cupom') 
+
+                $isSubsidy = str_contains($lowerName, 'subsid')
+                    || str_contains($lowerName, 'cupom')
                     || str_contains($lowerName, 'desconto')
                     || str_contains($lowerKeyword, 'subsid')
                     || str_contains($lowerKeyword, 'cupom')
                     || str_contains($lowerKeyword, 'desconto');
-                
+
                 if ($isSubsidy) {
                     continue;
                 }
@@ -311,7 +311,7 @@ class OrderCostService
             foreach ($order->raw['payments']['methods'] as $payment) {
                 $method = $payment['method'] ?? null;
                 $value = (float) ($payment['value'] ?? 0);
-                
+
                 if ($method && $value > 0) {
                     $payments[] = [
                         'method' => $method,
@@ -333,19 +333,19 @@ class OrderCostService
     {
         $method = $payment['method'] ?? null;
         $keyword = $payment['keyword'] ?? '';
-        
-        if (!$method) {
+
+        if (! $method) {
             return false;
         }
 
         // Se tem payment_type definido (online/offline), verificar
         if (isset($tax->payment_type)) {
             // Verificar primeiro pelo keyword (mais específico para Takeat)
-            $checkMethod = !empty($keyword) ? $keyword : $method;
+            $checkMethod = ! empty($keyword) ? $keyword : $method;
             $isOnline = is_online_payment_method($checkMethod);
-            
+
             // Se a taxa é para online mas o pagamento é offline (ou vice-versa), não aplicar
-            if ($tax->payment_type === 'online' && !$isOnline) {
+            if ($tax->payment_type === 'online' && ! $isOnline) {
                 return false;
             }
             if ($tax->payment_type === 'offline' && $isOnline) {
@@ -373,7 +373,7 @@ class OrderCostService
         float $taxBase
     ): float {
         // Verificar condições de aplicação
-        if (!$this->shouldApplyTax($tax, $order)) {
+        if (! $this->shouldApplyTax($tax, $order)) {
             return 0;
         }
 
@@ -396,11 +396,12 @@ class OrderCostService
         if ($tax->applies_to === 'payment_method' && isset($tax->payment_type)) {
             // Se condition_values está vazio, aplica a TODOS os métodos do tipo especificado
             $conditionValues = $tax->condition_values ?? [];
+
             return $this->checkPaymentMethods($order, $conditionValues, $tax->payment_type);
         }
 
         // Se usa condition_values (múltiplos valores) sem payment_type, usar nova lógica
-        if (!empty($tax->condition_values) && $tax->applies_to === 'payment_method') {
+        if (! empty($tax->condition_values) && $tax->applies_to === 'payment_method') {
             return $this->checkPaymentMethods($order, $tax->condition_values, 'all');
         }
 
@@ -411,7 +412,7 @@ class OrderCostService
             'delivery_only' => $this->checkIsDelivery($order),
             'store' => $order->store_id == $tax->condition_value,
             'all_orders' => true,
-            default => !empty($tax->condition_value) ? false : true,
+            default => ! empty($tax->condition_value) ? false : true,
         };
     }
 
@@ -436,6 +437,7 @@ class OrderCostService
 
         // Para outros providers (iFood, Rappi, etc), verificar orderType
         $orderType = $order->raw['orderType'] ?? $order->origin ?? null;
+
         return $orderType === 'DELIVERY';
     }
 
@@ -452,11 +454,13 @@ class OrderCostService
             if ($normalizedType === 'PDV') {
                 $normalizedType = 'INDOOR';
             }
+
             return $normalizedType === $conditionValue;
         }
 
         // Para outros providers (iFood, Rappi, etc), verificar orderType
         $orderType = $order->raw['orderType'] ?? $order->origin ?? null;
+
         return $orderType === $conditionValue;
     }
 
@@ -474,6 +478,7 @@ class OrderCostService
                     return true;
                 }
             }
+
             return false;
         }
 
@@ -519,9 +524,9 @@ class OrderCostService
             // Verificar se o método atende ao filtro de tipo
             $matchesType = $paymentType === 'all'
                 || ($paymentType === 'online' && $isOnline)
-                || ($paymentType === 'offline' && !$isOnline);
+                || ($paymentType === 'offline' && ! $isOnline);
 
-            if (!$matchesType) {
+            if (! $matchesType) {
                 continue;
             }
 
@@ -579,6 +584,7 @@ class OrderCostService
                     $methods[] = $method;
                 }
             }
+
             return $methods;
         }
 
@@ -589,6 +595,7 @@ class OrderCostService
                     $methods[] = $payment['method'];
                 }
             }
+
             return $methods;
         }
 
@@ -632,7 +639,7 @@ class OrderCostService
                 $this->applyAndSaveCosts($order);
                 $count++;
             } catch (\Exception $e) {
-                \Log::error("Erro ao calcular custos do pedido {$order->id}: " . $e->getMessage());
+                \Log::error("Erro ao calcular custos do pedido {$order->id}: ".$e->getMessage());
             }
         }
 

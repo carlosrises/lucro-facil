@@ -38,11 +38,11 @@ export function ReconnectDialog({
             let endpoint = '';
 
             if (provider === 'takeat') {
-                endpoint = '/integrations/takeat/login';
+                endpoint = '/api/takeat/login';
             } else if (provider === 'ifood') {
-                endpoint = '/integrations/ifood/login';
+                endpoint = '/api/ifood/auth';
             } else if (provider === '99food') {
-                endpoint = '/integrations/99food/login';
+                endpoint = '/api/99food/login';
             } else {
                 toast.error('Provider não suportado');
                 return;

@@ -22,6 +22,11 @@ class CostCommissionsController extends Controller
             $query->where('type', $request->type);
         }
 
+        // Filtro por categoria
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+
         // Filtro por provider
         if ($request->filled('provider')) {
             $query->where('provider', $request->provider);
@@ -75,6 +80,7 @@ class CostCommissionsController extends Controller
             'filters' => [
                 'search' => $request->search,
                 'type' => $request->type,
+                'category' => $request->category,
                 'provider' => $request->provider,
                 'active' => $request->active,
             ],
@@ -123,16 +129,20 @@ class CostCommissionsController extends Controller
         $costCommission = CostCommission::create($validated);
 
         // Se aplicar aos pedidos existentes, disparar job para recalcular
+        $cacheKey = null;
         if ($applyToExisting) {
             \App\Jobs\RecalculateOrderCostsJob::dispatch(
                 $costCommission->id,
                 false, // false = aplica filtro de provider/origin
                 'cost_commission'
             );
+            $cacheKey = "recalculate_progress_{$validated['tenant_id']}_cost_commission_{$costCommission->id}";
         }
 
-        return back()->with('success', 'Custo/Comissão criado com sucesso!'.
-            ($applyToExisting ? ' Recalculando custos dos pedidos existentes...' : ''));
+        return back()->with([
+            'success' => 'Custo/Comissão criado com sucesso!'.($applyToExisting ? ' Recalculando custos dos pedidos existentes...' : ''),
+            'recalculate_cache_key' => $cacheKey,
+        ]);
     }
 
     public function update(Request $request, CostCommission $costCommission)
@@ -175,16 +185,20 @@ class CostCommissionsController extends Controller
         $costCommission->update($validated);
 
         // Se aplicar retroativamente, disparar job para recalcular pedidos
+        $cacheKey = null;
         if ($applyRetroactively) {
             RecalculateOrderCostsJob::dispatch(
                 $costCommission->id,
                 false, // false = aplica filtro de provider/origin
                 'cost_commission'
             );
+            $cacheKey = "recalculate_progress_{$costCommission->tenant_id}_cost_commission_{$costCommission->id}";
         }
 
-        return back()->with('success', 'Custo/Comissão atualizado com sucesso!'.
-            ($applyRetroactively ? ' Recalculando custos dos pedidos existentes...' : ''));
+        return back()->with([
+            'success' => 'Custo/Comissão atualizado com sucesso!'.($applyRetroactively ? ' Recalculando custos dos pedidos existentes...' : ''),
+            'recalculate_cache_key' => $cacheKey,
+        ]);
     }
 
     public function toggle(Request $request, CostCommission $costCommission)
@@ -227,10 +241,32 @@ class CostCommissionsController extends Controller
                 $tenantId, // Passa tenantId para o job
                 $provider  // Passa provider para o job
             );
+            $cacheKey = "recalculate_progress_{$tenantId}_cost_commission_{$costCommissionId}";
 
-            return back()->with('success', 'Custo/Comissão excluído! Recalculando pedidos existentes...');
+            return back()->with([
+                'success' => 'Custo/Comissão excluído! Recalculando pedidos existentes...',
+                'recalculate_cache_key' => $cacheKey,
+            ]);
         }
 
         return back()->with('success', 'Custo/Comissão excluído com sucesso!');
+    }
+
+    public function getRecalculateProgress(Request $request)
+    {
+        $tenantId = $request->user()->tenant_id;
+        $cacheKey = $request->input('cache_key');
+
+        if ($cacheKey) {
+            $progress = \Cache::get($cacheKey);
+
+            if ($progress) {
+                return response()->json($progress);
+            }
+        }
+
+        return response()->json([
+            'status' => 'idle',
+        ]);
     }
 }

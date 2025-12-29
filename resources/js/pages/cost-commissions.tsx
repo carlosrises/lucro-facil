@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { CostCommission } from '@/components/cost-commissions/columns';
 import { DataTable } from '@/components/cost-commissions/data-table';
 import { CostCommissionFormDialog } from '@/components/cost-commissions/form-drawer';
+import { RecalculateProgress } from '@/components/cost-commissions/recalculate-progress';
 import {
     AlertDialog,
     AlertDialogCancel,
@@ -48,8 +49,11 @@ type CostCommissionsPageProps = {
 };
 
 export default function CostCommissions() {
-    const { data, pagination, filters, integratedProviders } =
+    const { data, pagination, filters, integratedProviders, flash } =
         usePage<CostCommissionsPageProps>().props;
+
+    // Pegar recalculate_cache_key do flash message
+    const recalculateCacheKey = (flash as any)?.recalculate_cache_key;
 
     const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
@@ -57,6 +61,16 @@ export default function CostCommissions() {
         React.useState<CostCommission | null>(null);
     const [itemToDelete, setItemToDelete] =
         React.useState<CostCommission | null>(null);
+    const [currentCacheKey, setCurrentCacheKey] = React.useState<string | null>(
+        recalculateCacheKey || null,
+    );
+
+    // Atualizar cache key quando receber novo do backend
+    React.useEffect(() => {
+        if (recalculateCacheKey) {
+            setCurrentCacheKey(recalculateCacheKey);
+        }
+    }, [recalculateCacheKey]);
 
     const handleNew = () => {
         setSelectedItem(null);
@@ -106,6 +120,12 @@ export default function CostCommissions() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Custos & Comissões" />
+
+            {/* Componente de progresso do recálculo */}
+            <RecalculateProgress
+                cacheKey={currentCacheKey}
+                onComplete={() => setCurrentCacheKey(null)}
+            />
 
             <div className="flex flex-1 flex-col">
                 <div className="@container/main flex flex-1 flex-col gap-2">

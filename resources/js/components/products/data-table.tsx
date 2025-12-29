@@ -3,7 +3,6 @@ import {
     flexRender,
     getCoreRowModel,
     getFilteredRowModel,
-    getPaginationRowModel,
     getSortedRowModel,
     SortingState,
     useReactTable,
@@ -220,7 +219,6 @@ export function DataTable({
         onSortingChange: setSorting,
         onColumnFiltersChange: setColumnFilters,
         getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
         onColumnVisibilityChange: setColumnVisibility,
@@ -231,22 +229,35 @@ export function DataTable({
             columnVisibility,
             rowSelection,
         },
+        manualPagination: true,
     });
 
     const updateFilters = (newFilters: Partial<ProductsFilters>) => {
-        const updatedFilters = { ...filters, ...newFilters };
+        const merged = {
+            ...filters,
+            per_page: filters?.per_page ?? pagination?.per_page ?? 10,
+            ...newFilters,
+        };
 
-        // Remove valores vazios/null/undefined
+        // Se mudou per_page, resetar para página 1
+        if ('per_page' in newFilters) {
+            merged.page = 1;
+        }
+
+        // Remove valores vazios/null/undefined mantendo per_page e page
         const cleanFilters = Object.fromEntries(
-            Object.entries(updatedFilters).filter(
-                ([, value]) =>
-                    value !== '' && value !== null && value !== undefined,
+            Object.entries(merged).filter(
+                ([key, value]) =>
+                    key === 'per_page' ||
+                    key === 'page' ||
+                    (value !== '' && value !== null && value !== undefined),
             ),
         );
 
         router.get('/products', cleanFilters, {
             preserveState: true,
             preserveScroll: true,
+            replace: true,
         });
     };
 

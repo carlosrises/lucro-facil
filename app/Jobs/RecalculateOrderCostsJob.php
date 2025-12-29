@@ -27,6 +27,17 @@ class RecalculateOrderCostsJob implements ShouldQueue
      */
     public function handle(OrderCostService $costService): void
     {
+        $cacheKey = $this->getCacheKey();
+
+        // Inicializar progresso no cache
+        \Cache::put($cacheKey, [
+            'status' => 'processing',
+            'total' => 0,
+            'processed' => 0,
+            'percentage' => 0,
+            'started_at' => now()->toISOString(),
+        ], now()->addHours(2));
+
         // Se type for 'product', buscar pedidos que têm itens com esse produto
         if ($this->type === 'product') {
             $query = Order::whereHas('items', function ($q) {
@@ -51,6 +62,10 @@ class RecalculateOrderCostsJob implements ShouldQueue
                 }
             } elseif (!$costCommission) {
                 \Log::error("CostCommission não encontrada e sem dados alternativos: {$this->referenceId}");
+                \Cache::put($cacheKey, [
+                    'status' => 'error',
+                    'message' => 'Registro não encontrado',
+                ], now()->addHours(2));
                 return;
             } else {
                 // Registro encontrado, usar seus dados
@@ -68,11 +83,64 @@ class RecalculateOrderCostsJob implements ShouldQueue
             }
         }
 
+        // Contar total de pedidos
+        $total = $query->count();
+
+        \Cache::put($cacheKey, [
+            'status' => 'processing',
+            'total' => $total,
+            'processed' => 0,
+            'percentage' => 0,
+            'started_at' => now()->toISOString(),
+        ], now()->addHours(2));
+
+        // Se não houver pedidos, finalizar
+        if ($total === 0) {
+            \Cache::put($cacheKey, [
+                'status' => 'completed',
+                'total' => 0,
+                'processed' => 0,
+                'percentage' => 100,
+                'completed_at' => now()->toISOString(),
+            ], now()->addHours(2));
+            return;
+        }
+
         // Processar em chunks para não sobrecarregar memória
-        $query->chunk(100, function ($orders) use ($costService) {
+        $processed = 0;
+        $query->chunk(100, function ($orders) use ($costService, $cacheKey, &$processed, $total) {
             $costService->recalculateBatch($orders);
+            $processed += $orders->count();
+
+            // Atualizar progresso no cache
+            \Cache::put($cacheKey, [
+                'status' => 'processing',
+                'total' => $total,
+                'processed' => $processed,
+                'percentage' => round(($processed / $total) * 100, 1),
+                'started_at' => \Cache::get($cacheKey)['started_at'] ?? now()->toISOString(),
+            ], now()->addHours(2));
         });
 
-        \Log::info("Recálculo de custos concluído - type: {$this->type}, referenceId: {$this->referenceId}");
+        // Marcar como concluído
+        \Cache::put($cacheKey, [
+            'status' => 'completed',
+            'total' => $total,
+            'processed' => $processed,
+            'percentage' => 100,
+            'started_at' => \Cache::get($cacheKey)['started_at'] ?? now()->toISOString(),
+            'completed_at' => now()->toISOString(),
+        ], now()->addHours(2));
+
+        \Log::info("Recálculo de custos concluído - type: {$this->type}, referenceId: {$this->referenceId}, total: {$total}");
+    }
+
+    /**
+     * Get cache key for tracking progress
+     */
+    private function getCacheKey(): string
+    {
+        $tenantId = $this->tenantId ?? (\App\Models\CostCommission::find($this->referenceId)?->tenant_id ?? 'unknown');
+        return "recalculate_progress_{$tenantId}_{$this->type}_{$this->referenceId}";
     }
 }

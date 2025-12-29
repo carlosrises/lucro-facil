@@ -339,23 +339,27 @@ export const columns: ColumnDef<Order>[] = [
                 marketplaces.includes(origin)
             ) {
                 return (
-                    <div className="flex items-center gap-1">
-                        <ProviderBadge provider={origin} />
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Badge
-                                        variant="outline"
-                                        className="h-4 px-1 text-[9px] font-normal whitespace-nowrap"
-                                    >
-                                        via TK
-                                    </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>Pedido integrado via Takeat</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                    <div className="flex min-w-0 items-center gap-1">
+                        <div className="shrink-0">
+                            <ProviderBadge provider={origin} />
+                        </div>
+                        <div>
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Badge
+                                            variant="outline"
+                                            className="h-4 shrink-0 px-1 text-[9px] font-normal whitespace-nowrap"
+                                        >
+                                            via TK
+                                        </Badge>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>Pedido integrado via Takeat</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        </div>
                     </div>
                 );
             }
@@ -782,6 +786,7 @@ export const columns: ColumnDef<Order>[] = [
             const provider = row.original.provider;
 
             // Usar a mesma lógica do "Total do Pedido"
+            // Para Takeat: prioridade total_delivery_price > total_price (não usar old_total_price)
             let orderTotal = 0;
             if (raw?.total?.orderAmount) {
                 orderTotal = parseFloat(String(raw.total.orderAmount));
@@ -789,10 +794,6 @@ export const columns: ColumnDef<Order>[] = [
                 if (raw?.session?.total_delivery_price) {
                     orderTotal = parseFloat(
                         String(raw.session.total_delivery_price),
-                    );
-                } else if (raw?.session?.old_total_price) {
-                    orderTotal = parseFloat(
-                        String(raw.session.old_total_price),
                     );
                 } else if (raw?.session?.total_price) {
                     orderTotal = parseFloat(String(raw.session.total_price));
@@ -835,8 +836,8 @@ export const columns: ColumnDef<Order>[] = [
                 return sum + calculateItemCost(item);
             }, 0);
 
-            // Calcular impostos totais
-            const totalTax = items.reduce((sum, item) => {
+            // Calcular impostos dos produtos
+            const productTax = items.reduce((sum, item) => {
                 if (
                     item.internal_product?.tax_category?.total_tax_rate !==
                         undefined &&
@@ -852,6 +853,17 @@ export const columns: ColumnDef<Order>[] = [
                 return sum;
             }, 0);
 
+            // Impostos adicionais (da categoria 'tax' em calculated_costs)
+            const calculatedCosts = row.original.calculated_costs;
+            const additionalTaxes = calculatedCosts?.taxes || [];
+            const totalAdditionalTax = additionalTaxes.reduce(
+                (sum: number, tax: any) => sum + (tax.calculated_value || 0),
+                0,
+            );
+
+            // Total de impostos = impostos dos produtos + impostos adicionais
+            const totalTax = productTax + totalAdditionalTax;
+
             // Adicionar custos e comissões da página "Custos e Comissões"
             const extraCosts =
                 typeof row.original.total_costs === 'string'
@@ -863,7 +875,6 @@ export const columns: ColumnDef<Order>[] = [
                     : (row.original.total_commissions ?? 0);
 
             // Adicionar taxas de pagamento (payment_methods)
-            const calculatedCosts = row.original.calculated_costs;
             const paymentMethodFees = calculatedCosts?.payment_methods || [];
             const totalPaymentMethodFee = paymentMethodFees.reduce(
                 (sum: number, fee: any) => sum + (fee.calculated_value || 0),
@@ -899,16 +910,16 @@ export const columns: ColumnDef<Order>[] = [
                 }, 0);
             }
 
-            // Base de cálculo para margem
-            // Se usar total_delivery_price, NÃO somar subsídio (já está incluído)
-            // Se usar old_total_price ou total_price, SOMAR subsídio
+            // Base de cálculo para margem (mesmo cálculo do card)
+            // orderTotal já é total_delivery_price (se houver) ou total_price
             let subtotal = orderTotal;
 
-            // Verifica se usou total_delivery_price (que já inclui subsídio e delivery)
+            // Para Takeat: verificar se orderTotal já é total_delivery_price
+            // Se for, NÃO precisa somar nada (já inclui delivery e subsídio)
+            // Se não for, precisa somar subsídio e delivery
             const usedTotalDeliveryPrice =
                 provider === 'takeat' && raw?.session?.total_delivery_price;
 
-            // Se NÃO usou total_delivery_price, precisa somar subsídio e delivery
             if (!usedTotalDeliveryPrice) {
                 subtotal += totalSubsidy + deliveryFee;
             }

@@ -276,7 +276,12 @@ export function TakeatDrawer({
                         <div className="p-4 pb-0">
                             <div className="mb-4 rounded-lg bg-blue-50 p-3 dark:bg-blue-950/20">
                                 <p className="text-sm text-blue-900 dark:text-blue-100">
-                                    <strong>🔒 Reconexão automática:</strong> Suas credenciais são criptografadas e salvas. O sistema reconecta automaticamente antes da expiração (15 dias). Só será necessário reconectar manualmente se a senha for alterada.
+                                    <strong>🔒 Reconexão automática:</strong>{' '}
+                                    Suas credenciais são criptografadas e
+                                    salvas. O sistema reconecta automaticamente
+                                    antes da expiração (15 dias). Só será
+                                    necessário reconectar manualmente se a senha
+                                    for alterada.
                                 </p>
                             </div>
                             <p className="text-sm text-muted-foreground">

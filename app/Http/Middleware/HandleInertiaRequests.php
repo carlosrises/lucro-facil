@@ -57,6 +57,7 @@ class HandleInertiaRequests extends Middleware
                 'error' => $request->session()->get('error'),
                 'generated_password' => $request->session()->get('generated_password'),
                 'client_email' => $request->session()->get('client_email'),
+                'recalculate_cache_key' => $request->session()->get('recalculate_cache_key'),
             ],
         ];
     }

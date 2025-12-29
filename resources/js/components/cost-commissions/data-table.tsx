@@ -55,6 +55,7 @@ type Pagination = {
 type Filters = {
     search?: string;
     type?: string;
+    category?: string;
     provider?: string;
     active?: string;
 };
@@ -145,6 +146,8 @@ export function DataTable({
 
         if (filters.search) params.search = filters.search;
         if (filters.type) params.type = filters.type;
+        if (filters.category) params.category = filters.category;
+        if (filters.provider) params.provider = filters.provider;
         if (filters.active) params.active = filters.active;
 
         router.get('/cost-commissions', params, {
@@ -155,6 +158,7 @@ export function DataTable({
 
     const columnLabels: Record<string, string> = {
         name: 'Nome',
+        category: 'Categoria',
         type: 'Tipo',
         value: 'Valor',
         provider: 'Marketplace',
@@ -186,6 +190,35 @@ export function DataTable({
                         className="w-[200px]"
                     />
 
+                    {/* Filtro por categoria */}
+                    <Select
+                        value={
+                            filters?.category && filters.category !== ''
+                                ? filters.category
+                                : 'all'
+                        }
+                        onValueChange={(value) =>
+                            updateFilters({
+                                category: value === 'all' ? '' : value,
+                            })
+                        }
+                    >
+                        <SelectTrigger className="h-9 w-[180px]">
+                            <SelectValue placeholder="Categoria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">
+                                Todas as categorias
+                            </SelectItem>
+                            <SelectItem value="cost">Custo</SelectItem>
+                            <SelectItem value="commission">Comissão</SelectItem>
+                            <SelectItem value="tax">Imposto</SelectItem>
+                            <SelectItem value="payment_method">
+                                Taxa de Pagamento
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+
                     {/* Filtro por tipo */}
                     <Select
                         value={
@@ -203,7 +236,7 @@ export function DataTable({
                             <SelectValue placeholder="Tipo" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">Todos</SelectItem>
+                            <SelectItem value="all">Todos os tipos</SelectItem>
                             <SelectItem value="percentage">
                                 Percentual %
                             </SelectItem>
@@ -228,7 +261,7 @@ export function DataTable({
                             <SelectValue placeholder="Status" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">Todos</SelectItem>
+                            <SelectItem value="all">Todos os status</SelectItem>
                             <SelectItem value="1">Ativos</SelectItem>
                             <SelectItem value="0">Inativos</SelectItem>
                         </SelectContent>

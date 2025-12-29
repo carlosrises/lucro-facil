@@ -65,6 +65,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('cost-commissions/{costCommission}', [CostCommissionsController::class, 'update'])->name('cost-commissions.update');
     Route::patch('cost-commissions/{costCommission}/toggle', [CostCommissionsController::class, 'toggle'])->name('cost-commissions.toggle');
     Route::delete('cost-commissions/{costCommission}', [CostCommissionsController::class, 'destroy'])->name('cost-commissions.destroy');
+    Route::get('cost-commissions/recalculate-progress', [CostCommissionsController::class, 'getRecalculateProgress'])->name('cost-commissions.recalculate-progress');
 
     // Categories Management Page
     Route::get('categories', [CategoriesController::class, 'manage'])->name('categories.manage');

@@ -387,200 +387,188 @@ export function ItemMappingsDialog({
                                 <Label className="text-base font-semibold">
                                     Complementos ({item.add_ons.length})
                                 </Label>
-                                <ScrollArea className="h-[400px]">
-                                    <div className="space-y-3">
-                                        {item.add_ons.map((addon, index) => {
-                                            const addonMapping = addonMappings[
-                                                index
-                                            ] || {
-                                                productId: null,
-                                                quantity: 1,
-                                                optionType: 'addon' as const,
-                                                autoFraction: false,
-                                            };
-                                            return (
-                                                <div
-                                                    key={index}
-                                                    className="space-y-3 rounded-lg border p-4"
-                                                >
-                                                    <div className="mb-2 flex items-center gap-2">
-                                                        <Badge variant="secondary">
-                                                            {addon.quantity}x{' '}
-                                                            {addon.name}
-                                                        </Badge>
-                                                        {addon.price > 0 && (
-                                                            <span className="text-xs text-muted-foreground">
-                                                                {new Intl.NumberFormat(
-                                                                    'pt-BR',
-                                                                    {
-                                                                        style: 'currency',
-                                                                        currency:
-                                                                            'BRL',
-                                                                    },
-                                                                ).format(
-                                                                    addon.price,
-                                                                )}
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="space-y-2">
-                                                        <Label className="text-sm">
-                                                            Produto Interno
-                                                        </Label>
-                                                        <Combobox
-                                                            options={[
+                                <div className="space-y-3">
+                                    {item.add_ons.map((addon, index) => {
+                                        const addonMapping = addonMappings[
+                                            index
+                                        ] || {
+                                            productId: null,
+                                            quantity: 1,
+                                            optionType: 'addon' as const,
+                                            autoFraction: false,
+                                        };
+                                        return (
+                                            <div
+                                                key={index}
+                                                className="space-y-3 rounded-lg border p-4"
+                                            >
+                                                <div className="mb-2 flex items-center gap-2">
+                                                    <Badge variant="secondary">
+                                                        {addon.quantity}x{' '}
+                                                        {addon.name}
+                                                    </Badge>
+                                                    {addon.price > 0 && (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {new Intl.NumberFormat(
+                                                                'pt-BR',
                                                                 {
-                                                                    value: '',
-                                                                    label: '(Nenhum)',
+                                                                    style: 'currency',
+                                                                    currency:
+                                                                        'BRL',
                                                                 },
-                                                                ...internalProducts.map(
-                                                                    (
-                                                                        product,
-                                                                    ) => ({
-                                                                        value: product.id.toString(),
-                                                                        label: `${product.name}${product.sku ? ` • ${product.sku}` : ''} • ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(product.unit_cost))}`,
-                                                                    }),
-                                                                ),
-                                                            ]}
-                                                            value={
-                                                                addonMapping.productId?.toString() ||
-                                                                ''
-                                                            }
-                                                            onChange={(value) =>
-                                                                setAddonMappings(
-                                                                    {
-                                                                        ...addonMappings,
-                                                                        [index]:
-                                                                            {
-                                                                                ...addonMapping,
-                                                                                productId:
-                                                                                    value
-                                                                                        ? parseInt(
-                                                                                              value,
-                                                                                          )
-                                                                                        : null,
-                                                                            },
-                                                                    },
-                                                                )
-                                                            }
-                                                            placeholder="Selecione o produto (opcional)"
-                                                            emptyMessage="Nenhum produto encontrado"
-                                                            searchPlaceholder="Buscar..."
-                                                        />
-                                                    </div>
-
-                                                    {addonMapping.productId && (
-                                                        <>
-                                                            <div className="space-y-2">
-                                                                <Label className="text-sm">
-                                                                    Tipo de
-                                                                    Opção
-                                                                </Label>
-                                                                <Combobox
-                                                                    options={[
-                                                                        {
-                                                                            value: 'pizza_flavor',
-                                                                            label: '🍕 Sabor de Pizza',
-                                                                        },
-                                                                        {
-                                                                            value: 'regular',
-                                                                            label: '📦 Item Regular',
-                                                                        },
-                                                                        {
-                                                                            value: 'addon',
-                                                                            label: '➕ Complemento',
-                                                                        },
-                                                                        {
-                                                                            value: 'drink',
-                                                                            label: '🥤 Bebida',
-                                                                        },
-                                                                        {
-                                                                            value: 'observation',
-                                                                            label: '📝 Observação',
-                                                                        },
-                                                                    ]}
-                                                                    value={
-                                                                        addonMapping.optionType ||
-                                                                        'addon'
-                                                                    }
-                                                                    onChange={(
-                                                                        value,
-                                                                    ) =>
-                                                                        setAddonMappings(
-                                                                            {
-                                                                                ...addonMappings,
-                                                                                [index]:
-                                                                                    {
-                                                                                        ...addonMapping,
-                                                                                        optionType:
-                                                                                            value as any,
-                                                                                    },
-                                                                            },
-                                                                        )
-                                                                    }
-                                                                    placeholder="Selecione o tipo"
-                                                                    emptyMessage="Nenhum tipo encontrado"
-                                                                    searchPlaceholder="Buscar..."
-                                                                />
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    Defina o
-                                                                    tipo para
-                                                                    cálculos
-                                                                    automáticos
-                                                                </p>
-                                                            </div>
-
-                                                            <div className="space-y-2">
-                                                                <Label className="text-sm">
-                                                                    Porcentagem
-                                                                </Label>
-                                                                <Input
-                                                                    type="number"
-                                                                    min="1"
-                                                                    max="100"
-                                                                    step="25"
-                                                                    value={
-                                                                        addonMapping.quantity *
-                                                                        100
-                                                                    }
-                                                                    onChange={(
-                                                                        e,
-                                                                    ) =>
-                                                                        setAddonMappings(
-                                                                            {
-                                                                                ...addonMappings,
-                                                                                [index]:
-                                                                                    {
-                                                                                        ...addonMapping,
-                                                                                        quantity:
-                                                                                            (parseFloat(
-                                                                                                e
-                                                                                                    .target
-                                                                                                    .value,
-                                                                                            ) ||
-                                                                                                100) /
-                                                                                            100,
-                                                                                    },
-                                                                            },
-                                                                        )
-                                                                    }
-                                                                    placeholder="Ex: 25 para 25%"
-                                                                />
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    100% =
-                                                                    inteiro |
-                                                                    50% = metade
-                                                                    | 25% = 1/4
-                                                                </p>
-                                                            </div>
-                                                        </>
+                                                            ).format(
+                                                                addon.price,
+                                                            )}
+                                                        </span>
                                                     )}
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                </ScrollArea>
+
+                                                <div className="space-y-2">
+                                                    <Label className="text-sm">
+                                                        Produto Interno
+                                                    </Label>
+                                                    <Combobox
+                                                        options={[
+                                                            {
+                                                                value: '',
+                                                                label: '(Nenhum)',
+                                                            },
+                                                            ...internalProducts.map(
+                                                                (product) => ({
+                                                                    value: product.id.toString(),
+                                                                    label: `${product.name}${product.sku ? ` • ${product.sku}` : ''} • ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(product.unit_cost))}`,
+                                                                }),
+                                                            ),
+                                                        ]}
+                                                        value={
+                                                            addonMapping.productId?.toString() ||
+                                                            ''
+                                                        }
+                                                        onChange={(value) =>
+                                                            setAddonMappings({
+                                                                ...addonMappings,
+                                                                [index]: {
+                                                                    ...addonMapping,
+                                                                    productId:
+                                                                        value
+                                                                            ? parseInt(
+                                                                                  value,
+                                                                              )
+                                                                            : null,
+                                                                },
+                                                            })
+                                                        }
+                                                        placeholder="Selecione o produto (opcional)"
+                                                        emptyMessage="Nenhum produto encontrado"
+                                                        searchPlaceholder="Buscar..."
+                                                    />
+                                                </div>
+
+                                                {addonMapping.productId && (
+                                                    <>
+                                                        <div className="space-y-2">
+                                                            <Label className="text-sm">
+                                                                Tipo de Opção
+                                                            </Label>
+                                                            <Combobox
+                                                                options={[
+                                                                    {
+                                                                        value: 'pizza_flavor',
+                                                                        label: '🍕 Sabor de Pizza',
+                                                                    },
+                                                                    {
+                                                                        value: 'regular',
+                                                                        label: '📦 Item Regular',
+                                                                    },
+                                                                    {
+                                                                        value: 'addon',
+                                                                        label: '➕ Complemento',
+                                                                    },
+                                                                    {
+                                                                        value: 'drink',
+                                                                        label: '🥤 Bebida',
+                                                                    },
+                                                                    {
+                                                                        value: 'observation',
+                                                                        label: '📝 Observação',
+                                                                    },
+                                                                ]}
+                                                                value={
+                                                                    addonMapping.optionType ||
+                                                                    'addon'
+                                                                }
+                                                                onChange={(
+                                                                    value,
+                                                                ) =>
+                                                                    setAddonMappings(
+                                                                        {
+                                                                            ...addonMappings,
+                                                                            [index]:
+                                                                                {
+                                                                                    ...addonMapping,
+                                                                                    optionType:
+                                                                                        value as any,
+                                                                                },
+                                                                        },
+                                                                    )
+                                                                }
+                                                                placeholder="Selecione o tipo"
+                                                                emptyMessage="Nenhum tipo encontrado"
+                                                                searchPlaceholder="Buscar..."
+                                                            />
+                                                            <p className="text-xs text-muted-foreground">
+                                                                Defina o tipo
+                                                                para cálculos
+                                                                automáticos
+                                                            </p>
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <Label className="text-sm">
+                                                                Porcentagem
+                                                            </Label>
+                                                            <Input
+                                                                type="number"
+                                                                min="1"
+                                                                max="100"
+                                                                step="25"
+                                                                value={
+                                                                    addonMapping.quantity *
+                                                                    100
+                                                                }
+                                                                onChange={(e) =>
+                                                                    setAddonMappings(
+                                                                        {
+                                                                            ...addonMappings,
+                                                                            [index]:
+                                                                                {
+                                                                                    ...addonMapping,
+                                                                                    quantity:
+                                                                                        (parseFloat(
+                                                                                            e
+                                                                                                .target
+                                                                                                .value,
+                                                                                        ) ||
+                                                                                            100) /
+                                                                                        100,
+                                                                                },
+                                                                        },
+                                                                    )
+                                                                }
+                                                                placeholder="Ex: 25 para 25%"
+                                                            />
+                                                            <p className="text-xs text-muted-foreground">
+                                                                100% = inteiro |
+                                                                50% = metade |
+                                                                25% = 1/4
+                                                            </p>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         )}
                     </div>

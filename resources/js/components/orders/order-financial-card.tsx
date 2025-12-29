@@ -10,6 +10,7 @@ import {
     ArrowDownLeft,
     ArrowRightLeft,
     ArrowUpRight,
+    DollarSign,
     Plus,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -87,26 +88,20 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
         let grossTotal = parseFloat(String(order?.gross_total || '0')); // Usado para subtotal
 
         if (order?.provider === 'takeat') {
-            // Prioridade para old_total_price (valor dos itens ANTES do desconto)
-            // Se não houver, usar total_price (valor dos itens sem taxa de entrega)
+            // orderTotal = valor dos itens ANTES do desconto (para exibição)
             if (order?.raw?.session?.old_total_price) {
                 orderTotal = parseFloat(
                     String(order.raw.session.old_total_price),
                 );
             } else if (order?.raw?.session?.total_price) {
-                orderTotal = parseFloat(
-                    String(order.raw.session.total_price),
-                );
+                orderTotal = parseFloat(String(order.raw.session.total_price));
             }
-            
-            // Para grossTotal (usado no cálculo de subtotal), usar a mesma lógica anterior
+
+            // grossTotal = valor APÓS desconto (usado no cálculo de subtotal/receita)
+            // Prioridade: total_delivery_price > total_price
             if (order?.raw?.session?.total_delivery_price) {
                 grossTotal = parseFloat(
                     String(order.raw.session.total_delivery_price),
-                );
-            } else if (order?.raw?.session?.old_total_price) {
-                grossTotal = parseFloat(
-                    String(order.raw.session.old_total_price),
                 );
             } else if (order?.raw?.session?.total_price) {
                 grossTotal = parseFloat(String(order.raw.session.total_price));
@@ -334,32 +329,14 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                 </div>
                             </li>
 
-                            {/* Total (primeiro - 100%) */}
-                            <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                                <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                    <div className="flex items-center justify-center rounded-full bg-blue-100 p-1 text-blue-900">
-                                        <ArrowUpRight className="h-3 w-3" />
-                                    </div>
-                                    <span className="flex-grow text-sm leading-4 font-semibold">
-                                        Total
-                                    </span>
-                                    <span className="text-sm leading-4 font-semibold whitespace-nowrap">
-                                        {formatCurrency(financials.grossTotal)}
-                                    </span>
-                                    <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                        100,0%
-                                    </span>
-                                </div>
-                            </li>
-
-                            {/* Pedido */}
+                            {/* Total do Pedido */}
                             <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
                                 <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
                                     <div className="flex items-center justify-center rounded-full bg-blue-100 p-0.5 text-blue-900">
                                         <ArrowUpRight className="h-4 w-4" />
                                     </div>
                                     <span className="flex-grow text-sm leading-4 font-semibold">
-                                        Pedido
+                                        Total do pedido
                                     </span>
                                     <span className="text-sm leading-4 font-semibold whitespace-nowrap">
                                         {formatCurrency(financials.orderTotal)}
@@ -409,7 +386,8 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                             Descontos
                                         </span>
                                         <span className="text-sm leading-4 whitespace-nowrap">
-                                            -{formatCurrency(
+                                            -
+                                            {formatCurrency(
                                                 financials.discountTotal,
                                             )}
                                         </span>
@@ -427,7 +405,8 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                     Desconto da loja
                                                 </span>
                                                 <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
-                                                    -{formatCurrency(
+                                                    -
+                                                    {formatCurrency(
                                                         financials.storeDiscount,
                                                     )}
                                                 </span>
@@ -440,7 +419,8 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                     (subsídio)
                                                 </span>
                                                 <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
-                                                    -{formatCurrency(
+                                                    -
+                                                    {formatCurrency(
                                                         financials.totalSubsidy,
                                                     )}
                                                 </span>
@@ -1076,7 +1056,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                             <li className="flex flex-col gap-2 px-0 py-4">
                                 <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
                                     <div className="flex items-center justify-center rounded-full bg-green-100 p-1 text-green-900">
-                                        <ArrowUpRight className="h-3 w-3" />
+                                        <DollarSign className="h-3 w-3" />
                                     </div>
                                     <span className="flex-grow text-sm leading-4 font-semibold">
                                         Receita líquida

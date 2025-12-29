@@ -39,8 +39,10 @@ class ProductsController extends Controller
             )
             ->orderBy('name');
 
-        $perPage = (int) $request->input('per_page', 10);
-        $products = $query->paginate($perPage)->withQueryString();
+        $perPage = max(10, min(100, (int) $request->input('per_page', 10)));
+        $products = $query->paginate($perPage)
+            ->appends($request->except('page'))
+            ->withQueryString();
 
         // Buscar ingredients ativos para o formulário
         $ingredients = Ingredient::where('tenant_id', tenant_id())
