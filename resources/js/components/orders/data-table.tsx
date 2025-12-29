@@ -19,6 +19,7 @@ import {
     Table,
     TableBody,
     TableCell,
+    TableFooter,
     TableHead,
     TableHeader,
     TableRow,
@@ -78,6 +79,7 @@ import { OrderFinancialCard } from '@/components/orders/order-financial-card';
 import { QuickAssociateDialog } from '@/components/orders/quick-associate-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { MultiSelect } from '@/components/ui/multi-select';
 import {
     Select,
     SelectContent,
@@ -85,7 +87,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { MultiSelect } from '@/components/ui/multi-select';
 import { Link, router } from '@inertiajs/react';
 import { DateRange } from 'react-day-picker';
 import {
@@ -287,13 +288,15 @@ export function DataTable({
     }, [columnVisibility]);
 
     // Estado local para payment_method (multiselect)
-    const [localPaymentMethods, setLocalPaymentMethods] = React.useState<string[]>(
-        () => filters?.payment_method ? filters.payment_method.split(',') : []
-    );
+    const [localPaymentMethods, setLocalPaymentMethods] = React.useState<
+        string[]
+    >(() => (filters?.payment_method ? filters.payment_method.split(',') : []));
 
     // Sincronizar estado local com filtros do servidor
     React.useEffect(() => {
-        const serverMethods = filters?.payment_method ? filters.payment_method.split(',') : [];
+        const serverMethods = filters?.payment_method
+            ? filters.payment_method.split(',')
+            : [];
         setLocalPaymentMethods(serverMethods);
     }, [filters?.payment_method]);
 
@@ -639,7 +642,10 @@ export function DataTable({
                         onChange={(values) => {
                             setLocalPaymentMethods(values);
                             updateFilters({
-                                payment_method: values.length > 0 ? values.join(',') : undefined,
+                                payment_method:
+                                    values.length > 0
+                                        ? values.join(',')
+                                        : undefined,
                             });
                         }}
                         searchPlaceholder="Buscar método..."
@@ -749,6 +755,9 @@ export function DataTable({
                                         'cost',
                                         'tax',
                                         'extra_cost',
+                                        'total_costs',
+                                        'total_commissions',
+                                        'payment_fees',
                                         'net_total',
                                         'margin',
                                     ].includes(header.column.id);
@@ -2021,6 +2030,490 @@ export function DataTable({
                             </TableRow>
                         )}
                     </TableBody>
+
+                    {/* Rodapé com totais */}
+                    <TableFooter>
+                        <TableRow className="bg-muted hover:bg-muted">
+                            {table.getVisibleLeafColumns().map((column) => {
+                                // Colunas que devem mostrar totais
+                                const showTotal = [
+                                    'total',
+                                    'cost',
+                                    'tax',
+                                    'total_costs',
+                                    'total_commissions',
+                                    'payment_fees',
+                                    'net_total',
+                                ].includes(column.id);
+
+                                if (!showTotal) {
+                                    return <TableCell key={column.id} />;
+                                }
+
+                                // Calcular total da coluna
+                                const total = table
+                                    .getRowModel()
+                                    .rows.reduce((sum, row) => {
+                                        const order = row.original;
+                                        const items = order.items || [];
+                                        const raw = order.raw;
+                                        const isCancelled =
+                                            order.status === 'CANCELLED';
+
+                                        // Não somar pedidos cancelados
+                                        if (isCancelled) return sum;
+
+                                        if (column.id === 'total') {
+                                            // Total do pedido
+                                            let amount = 0;
+                                            if (raw?.total?.orderAmount) {
+                                                amount = parseFloat(
+                                                    String(
+                                                        raw.total.orderAmount,
+                                                    ),
+                                                );
+                                            } else if (
+                                                order.provider === 'takeat'
+                                            ) {
+                                                if (
+                                                    raw?.session
+                                                        ?.total_delivery_price
+                                                ) {
+                                                    amount = parseFloat(
+                                                        String(
+                                                            raw.session
+                                                                .total_delivery_price,
+                                                        ),
+                                                    );
+                                                } else if (
+                                                    raw?.session
+                                                        ?.old_total_price
+                                                ) {
+                                                    amount = parseFloat(
+                                                        String(
+                                                            raw.session
+                                                                .old_total_price,
+                                                        ),
+                                                    );
+                                                } else if (
+                                                    raw?.session?.total_price
+                                                ) {
+                                                    amount = parseFloat(
+                                                        String(
+                                                            raw.session
+                                                                .total_price,
+                                                        ),
+                                                    );
+                                                } else {
+                                                    amount = parseFloat(
+                                                        order.gross_total ||
+                                                            '0',
+                                                    );
+                                                }
+                                            } else {
+                                                amount = parseFloat(
+                                                    order.gross_total || '0',
+                                                );
+                                            }
+                                            return sum + amount;
+                                        }
+
+                                        if (column.id === 'cost') {
+                                            // CMV
+                                            const totalCost = items.reduce(
+                                                (itemSum, item) => {
+                                                    return (
+                                                        itemSum +
+                                                        calculateItemCost(item)
+                                                    );
+                                                },
+                                                0,
+                                            );
+                                            return sum + totalCost;
+                                        }
+
+                                        if (column.id === 'tax') {
+                                            // Impostos (produtos + adicionais)
+                                            const productTax = items.reduce(
+                                                (itemSum, item) => {
+                                                    if (
+                                                        item.internal_product
+                                                            ?.tax_category
+                                                            ?.total_tax_rate !==
+                                                            undefined &&
+                                                        item.internal_product
+                                                            ?.tax_category
+                                                            ?.total_tax_rate !==
+                                                            null
+                                                    ) {
+                                                        const quantity =
+                                                            item.qty ||
+                                                            item.quantity ||
+                                                            0;
+                                                        const unitPrice =
+                                                            item.unit_price ||
+                                                            item.price ||
+                                                            0;
+                                                        const itemTotal =
+                                                            quantity *
+                                                            unitPrice;
+                                                        const taxRate =
+                                                            item
+                                                                .internal_product
+                                                                .tax_category
+                                                                .total_tax_rate /
+                                                            100;
+                                                        return (
+                                                            itemSum +
+                                                            itemTotal * taxRate
+                                                        );
+                                                    }
+                                                    return itemSum;
+                                                },
+                                                0,
+                                            );
+
+                                            const calculatedCosts =
+                                                order.calculated_costs;
+                                            const additionalTaxes =
+                                                calculatedCosts?.taxes || [];
+                                            const totalAdditionalTax =
+                                                additionalTaxes.reduce(
+                                                    (
+                                                        taxSum: number,
+                                                        tax: any,
+                                                    ) =>
+                                                        taxSum +
+                                                        (tax.calculated_value ||
+                                                            0),
+                                                    0,
+                                                );
+
+                                            return (
+                                                sum +
+                                                productTax +
+                                                totalAdditionalTax
+                                            );
+                                        }
+
+                                        if (column.id === 'total_costs') {
+                                            // Custos
+                                            const totalCosts =
+                                                order.total_costs;
+                                            if (
+                                                totalCosts !== null &&
+                                                totalCosts !== undefined
+                                            ) {
+                                                const value =
+                                                    typeof totalCosts ===
+                                                    'string'
+                                                        ? parseFloat(totalCosts)
+                                                        : totalCosts;
+                                                return sum + value;
+                                            }
+                                            return sum;
+                                        }
+
+                                        if (column.id === 'total_commissions') {
+                                            // Comissões
+                                            const totalCommissions =
+                                                order.total_commissions;
+                                            if (
+                                                totalCommissions !== null &&
+                                                totalCommissions !== undefined
+                                            ) {
+                                                const value =
+                                                    typeof totalCommissions ===
+                                                    'string'
+                                                        ? parseFloat(
+                                                              totalCommissions,
+                                                          )
+                                                        : totalCommissions;
+                                                return sum + value;
+                                            }
+                                            return sum;
+                                        }
+
+                                        if (column.id === 'payment_fees') {
+                                            // Taxa Pgto
+                                            const calculatedCosts =
+                                                order.calculated_costs;
+                                            const paymentMethodFees =
+                                                calculatedCosts?.payment_methods ||
+                                                [];
+                                            const totalPaymentFee =
+                                                paymentMethodFees.reduce(
+                                                    (
+                                                        feeSum: number,
+                                                        fee: any,
+                                                    ) =>
+                                                        feeSum +
+                                                        (fee.calculated_value ||
+                                                            0),
+                                                    0,
+                                                );
+                                            return sum + totalPaymentFee;
+                                        }
+
+                                        if (column.id === 'net_total') {
+                                            // Total líquido (mesma lógica da coluna)
+                                            let orderTotal = 0;
+                                            if (raw?.total?.orderAmount) {
+                                                orderTotal = parseFloat(
+                                                    String(
+                                                        raw.total.orderAmount,
+                                                    ),
+                                                );
+                                            } else if (
+                                                order.provider === 'takeat'
+                                            ) {
+                                                if (
+                                                    raw?.session
+                                                        ?.total_delivery_price
+                                                ) {
+                                                    orderTotal = parseFloat(
+                                                        String(
+                                                            raw.session
+                                                                .total_delivery_price,
+                                                        ),
+                                                    );
+                                                } else if (
+                                                    raw?.session
+                                                        ?.old_total_price
+                                                ) {
+                                                    orderTotal = parseFloat(
+                                                        String(
+                                                            raw.session
+                                                                .old_total_price,
+                                                        ),
+                                                    );
+                                                } else if (
+                                                    raw?.session?.total_price
+                                                ) {
+                                                    orderTotal = parseFloat(
+                                                        String(
+                                                            raw.session
+                                                                .total_price,
+                                                        ),
+                                                    );
+                                                } else {
+                                                    orderTotal = parseFloat(
+                                                        order.gross_total ||
+                                                            '0',
+                                                    );
+                                                }
+                                            } else {
+                                                orderTotal = parseFloat(
+                                                    order.gross_total || '0',
+                                                );
+                                            }
+
+                                            const totalCost = items.reduce(
+                                                (itemSum, item) => {
+                                                    return (
+                                                        itemSum +
+                                                        calculateItemCost(item)
+                                                    );
+                                                },
+                                                0,
+                                            );
+
+                                            const productTax = items.reduce(
+                                                (itemSum, item) => {
+                                                    if (
+                                                        item.internal_product
+                                                            ?.tax_category
+                                                            ?.total_tax_rate !==
+                                                            undefined &&
+                                                        item.internal_product
+                                                            ?.tax_category
+                                                            ?.total_tax_rate !==
+                                                            null
+                                                    ) {
+                                                        const quantity =
+                                                            item.qty ||
+                                                            item.quantity ||
+                                                            0;
+                                                        const unitPrice =
+                                                            item.unit_price ||
+                                                            item.price ||
+                                                            0;
+                                                        const itemTotal =
+                                                            quantity *
+                                                            unitPrice;
+                                                        const taxRate =
+                                                            item
+                                                                .internal_product
+                                                                .tax_category
+                                                                .total_tax_rate /
+                                                            100;
+                                                        return (
+                                                            itemSum +
+                                                            itemTotal * taxRate
+                                                        );
+                                                    }
+                                                    return itemSum;
+                                                },
+                                                0,
+                                            );
+
+                                            const calculatedCosts =
+                                                order.calculated_costs;
+                                            const additionalTaxes =
+                                                calculatedCosts?.taxes || [];
+                                            const totalAdditionalTax =
+                                                additionalTaxes.reduce(
+                                                    (
+                                                        taxSum: number,
+                                                        tax: any,
+                                                    ) =>
+                                                        taxSum +
+                                                        (tax.calculated_value ||
+                                                            0),
+                                                    0,
+                                                );
+
+                                            const totalTax =
+                                                productTax + totalAdditionalTax;
+
+                                            const extraCosts =
+                                                typeof order.total_costs ===
+                                                'string'
+                                                    ? parseFloat(
+                                                          order.total_costs,
+                                                      )
+                                                    : (order.total_costs ?? 0);
+                                            const commissions =
+                                                typeof order.total_commissions ===
+                                                'string'
+                                                    ? parseFloat(
+                                                          order.total_commissions,
+                                                      )
+                                                    : (order.total_commissions ??
+                                                      0);
+
+                                            const paymentMethodFees =
+                                                calculatedCosts?.payment_methods ||
+                                                [];
+                                            const totalPaymentMethodFee =
+                                                paymentMethodFees.reduce(
+                                                    (
+                                                        feeSum: number,
+                                                        fee: any,
+                                                    ) =>
+                                                        feeSum +
+                                                        (fee.calculated_value ||
+                                                            0),
+                                                    0,
+                                                );
+
+                                            let deliveryFee = 0;
+                                            let totalSubsidy = 0;
+                                            if (order.provider === 'takeat') {
+                                                deliveryFee =
+                                                    typeof order.delivery_fee ===
+                                                    'string'
+                                                        ? parseFloat(
+                                                              order.delivery_fee,
+                                                          )
+                                                        : (order.delivery_fee ??
+                                                          0);
+
+                                                const payments =
+                                                    raw?.session?.payments ||
+                                                    [];
+                                                totalSubsidy = payments.reduce(
+                                                    (
+                                                        paymentSum: number,
+                                                        payment: any,
+                                                    ) => {
+                                                        const paymentName = (
+                                                            payment
+                                                                .payment_method
+                                                                ?.name || ''
+                                                        ).toLowerCase();
+                                                        const paymentKeyword = (
+                                                            payment
+                                                                .payment_method
+                                                                ?.keyword || ''
+                                                        ).toLowerCase();
+                                                        const isSubsidy =
+                                                            paymentName.includes(
+                                                                'subsid',
+                                                            ) ||
+                                                            paymentName.includes(
+                                                                'cupom',
+                                                            ) ||
+                                                            paymentKeyword.includes(
+                                                                'subsid',
+                                                            ) ||
+                                                            paymentKeyword.includes(
+                                                                'cupom',
+                                                            );
+
+                                                        return isSubsidy
+                                                            ? paymentSum +
+                                                                  parseFloat(
+                                                                      payment.payment_value ||
+                                                                          '0',
+                                                                  )
+                                                            : paymentSum;
+                                                    },
+                                                    0,
+                                                );
+                                            }
+
+                                            let subtotal = orderTotal;
+                                            const usedTotalDeliveryPrice =
+                                                order.provider === 'takeat' &&
+                                                raw?.session
+                                                    ?.total_delivery_price;
+                                            if (!usedTotalDeliveryPrice) {
+                                                subtotal +=
+                                                    totalSubsidy + deliveryFee;
+                                            }
+
+                                            const netTotal =
+                                                subtotal -
+                                                totalCost -
+                                                totalTax -
+                                                extraCosts -
+                                                commissions -
+                                                totalPaymentMethodFee;
+
+                                            return sum + netTotal;
+                                        }
+
+                                        return sum;
+                                    }, 0);
+
+                                // Alinhar à direita se for coluna numérica
+                                const isNumeric = [
+                                    'total',
+                                    'cost',
+                                    'tax',
+                                    'total_costs',
+                                    'total_commissions',
+                                    'payment_fees',
+                                    'net_total',
+                                ].includes(column.id);
+
+                                return (
+                                    <TableCell
+                                        key={column.id}
+                                        className={`font-semibold ${isNumeric ? 'text-right' : ''}`}
+                                    >
+                                        {total > 0
+                                            ? new Intl.NumberFormat('pt-BR', {
+                                                  style: 'currency',
+                                                  currency: 'BRL',
+                                              }).format(total)
+                                            : '--'}
+                                    </TableCell>
+                                );
+                            })}
+                        </TableRow>
+                    </TableFooter>
                 </Table>
             </div>
 

@@ -530,7 +530,7 @@ export const columns: ColumnDef<Order>[] = [
     },
     {
         accessorKey: 'total_costs',
-        header: () => <div className="text-right">Custos</div>,
+        header: 'Custos',
         meta: {
             label: 'Custos',
         },
@@ -567,7 +567,7 @@ export const columns: ColumnDef<Order>[] = [
     },
     {
         accessorKey: 'total_commissions',
-        header: () => <div className="text-right">Comissões</div>,
+        header: 'Comissões',
         meta: {
             label: 'Comissões',
         },
@@ -605,6 +605,9 @@ export const columns: ColumnDef<Order>[] = [
     {
         accessorKey: 'payment_fees',
         header: 'Taxa Pgto',
+        meta: {
+            label: 'Taxa Pgto',
+        },
         cell: ({ row }) => {
             const calculatedCosts = row.original.calculated_costs;
             const paymentMethodFees = calculatedCosts?.payment_methods || [];
@@ -616,16 +619,20 @@ export const columns: ColumnDef<Order>[] = [
             const isCancelled = row.original.status === 'CANCELLED';
 
             return totalPaymentFee > 0 ? (
-                <span
-                    className={`text-sm ${
-                        isCancelled ? 'text-muted-foreground line-through' : ''
-                    }`}
-                >
-                    {new Intl.NumberFormat('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                    }).format(totalPaymentFee)}
-                </span>
+                <div className="text-right">
+                    <span
+                        className={`text-sm ${
+                            isCancelled
+                                ? 'text-muted-foreground line-through'
+                                : ''
+                        }`}
+                    >
+                        {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                        }).format(totalPaymentFee)}
+                    </span>
+                </div>
             ) : (
                 <span className="text-muted-foreground">--</span>
             );
