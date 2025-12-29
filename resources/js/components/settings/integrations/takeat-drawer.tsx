@@ -21,7 +21,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { LogIn, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { AlertCircle, LogIn, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -46,6 +46,8 @@ interface Store {
     external_store_id: string;
     active: boolean;
     excluded_channels?: string[];
+    token_expired?: boolean;
+    token_expiring_soon?: boolean;
 }
 
 const AVAILABLE_CHANNELS = [
@@ -272,6 +274,11 @@ export function TakeatDrawer({
                         </DrawerHeader>
 
                         <div className="p-4 pb-0">
+                            <div className="mb-4 rounded-lg bg-blue-50 p-3 dark:bg-blue-950/20">
+                                <p className="text-sm text-blue-900 dark:text-blue-100">
+                                    <strong>🔒 Reconexão automática:</strong> Suas credenciais são criptografadas e salvas. O sistema reconecta automaticamente antes da expiração (15 dias). Só será necessário reconectar manualmente se a senha for alterada.
+                                </p>
+                            </div>
                             <p className="text-sm text-muted-foreground">
                                 Com a integração com o Takeat você importa
                                 pedidos de iFood, 99Food, Keeta, PDV e outros
@@ -298,14 +305,27 @@ export function TakeatDrawer({
                                     {stores.map((store) => (
                                         <li
                                             key={store.id}
-                                            className={`flex items-center justify-between rounded-md border bg-card px-3 py-2`}
+                                            className={`flex items-center justify-between rounded-md border px-3 py-2 ${
+                                                store.token_expired
+                                                    ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/20'
+                                                    : 'bg-card'
+                                            }`}
                                         >
                                             <div className="flex-1">
                                                 <h3 className="flex items-center gap-2 text-sm font-medium">
+                                                    {store.token_expired && (
+                                                        <AlertCircle className="h-4 w-4 text-red-600" />
+                                                    )}
                                                     <span>
                                                         {store.display_name}
                                                     </span>
                                                 </h3>
+                                                {store.token_expired && (
+                                                    <p className="text-xs text-red-700 dark:text-red-400">
+                                                        Token expirado -
+                                                        Credenciais inválidas
+                                                    </p>
+                                                )}
                                                 {store.excluded_channels &&
                                                     store.excluded_channels
                                                         .length > 0 && (
@@ -330,6 +350,27 @@ export function TakeatDrawer({
                                             </div>
 
                                             <div className="flex items-center gap-1">
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => {
+                                                                setLoginDialogOpen(
+                                                                    true,
+                                                                );
+                                                                setEmail('');
+                                                                setPassword('');
+                                                            }}
+                                                        >
+                                                            <LogIn className="h-4 w-4" />
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>Reconectar loja</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
                                                         <Button

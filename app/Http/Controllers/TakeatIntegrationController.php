@@ -13,7 +13,7 @@ class TakeatIntegrationController extends Controller
      */
     public function login(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
         ]);
@@ -21,13 +21,13 @@ class TakeatIntegrationController extends Controller
         logger()->info('🔐 Takeat: Tentativa de login', [
             'tenant_id' => auth()->user()->tenant_id,
             'user_id' => auth()->id(),
-            'email' => $request->email,
+            'email' => $validated['email'],
         ]);
 
         try {
             $authData = TakeatClient::authenticate(
-                $request->email,
-                $request->password
+                $validated['email'],
+                $validated['password']
             );
 
             $restaurantId = (string) $authData['restaurant']['id'];
@@ -51,19 +51,24 @@ class TakeatIntegrationController extends Controller
             // Salvar token JWT no OauthToken (expira em 15 dias)
             $expiresAt = now()->addDays(15);
 
-            \App\Models\OauthToken::updateOrCreate(
+            $oauthToken = \App\Models\OauthToken::updateOrCreate(
                 [
                     'tenant_id' => $tenantId,
                     'store_id' => $store->id,
                     'provider' => 'takeat',
                 ],
                 [
+                    'username' => $validated['email'],
                     'access_token' => $token,
                     'refresh_token' => null, // Takeat não usa refresh token
                     'expires_at' => $expiresAt,
                     'scopes' => null,
                 ]
             );
+
+            // Criptografar e salvar a senha para reconexão automática
+            $oauthToken->setPassword($validated['password']);
+            $oauthToken->save();
 
             logger()->info('✅ Takeat: Login concluído com sucesso', [
                 'tenant_id' => $tenantId,
@@ -100,6 +105,13 @@ class TakeatIntegrationController extends Controller
         $stores = Store::where('tenant_id', auth()->user()->tenant_id)
             ->where('provider', 'takeat')
             ->get();
+
+        // Adicionar informações de token expirado
+        $stores->transform(function ($store) {
+            $store->token_expired = $store->hasExpiredToken();
+            $store->token_expiring_soon = $store->hasTokenExpiringSoon();
+            return $store;
+        });
 
         return response()->json(['stores' => $stores]);
     }

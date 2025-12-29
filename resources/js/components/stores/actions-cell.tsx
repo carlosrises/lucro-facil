@@ -7,20 +7,34 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Clock, Info, MoreVertical, PauseCircle } from 'lucide-react';
+import {
+    Clock,
+    Info,
+    MoreVertical,
+    PauseCircle,
+    RefreshCw,
+} from 'lucide-react';
 import { useState } from 'react';
 import { InterruptionsDialog } from './interruptions-dialog';
 import { OpeningHoursDialog } from './opening-hours-dialog';
+import { ReconnectDialog } from './reconnect-dialog';
 import { StatusDialog } from './status-dialog';
 
 type ActionsCellProps = {
     storeId: number;
+    provider: string;
+    tokenExpired?: boolean;
 };
 
-export function ActionsCell({ storeId }: ActionsCellProps) {
+export function ActionsCell({
+    storeId,
+    provider,
+    tokenExpired,
+}: ActionsCellProps) {
     const [interruptionsOpen, setInterruptionsOpen] = useState(false);
     const [openingHoursOpen, setOpeningHoursOpen] = useState(false);
     const [statusOpen, setStatusOpen] = useState(false);
+    const [reconnectOpen, setReconnectOpen] = useState(false);
 
     return (
         <>
@@ -34,6 +48,21 @@ export function ActionsCell({ storeId }: ActionsCellProps) {
                 <DropdownMenuContent align="end">
                     <DropdownMenuLabel>Ações</DropdownMenuLabel>
                     <DropdownMenuSeparator />
+                    {(provider === 'takeat' ||
+                        provider === 'ifood' ||
+                        provider === '99food') && (
+                        <>
+                            <DropdownMenuItem
+                                onClick={() => setReconnectOpen(true)}
+                            >
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                {tokenExpired
+                                    ? 'Reconectar (Token expirado)'
+                                    : 'Reconectar'}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                        </>
+                    )}
                     <DropdownMenuItem onClick={() => setStatusOpen(true)}>
                         <Info className="mr-2 h-4 w-4" />
                         Ver Status
@@ -55,6 +84,12 @@ export function ActionsCell({ storeId }: ActionsCellProps) {
                 storeId={storeId}
                 open={statusOpen}
                 onOpenChange={setStatusOpen}
+            />
+            <ReconnectDialog
+                storeId={storeId}
+                provider={provider}
+                open={reconnectOpen}
+                onOpenChange={setReconnectOpen}
             />
             <InterruptionsDialog
                 storeId={storeId}

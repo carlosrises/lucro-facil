@@ -80,13 +80,34 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
 
     // Função helper para calcular todos os valores financeiros
     const calculateFinancials = () => {
-        // Para Takeat: usar old_total_price do raw (antes de descontos) se disponível
-        // Caso contrário, usar total_price ou gross_total do banco
-        let grossTotal = parseFloat(String(order?.gross_total || '0'));
+        // Para Takeat:
+        // - orderTotal (Pedido) = old_total_price OU total_price (valor dos itens)
+        // - grossTotal = total_delivery_price (usado para cálculo de subtotal)
+        let orderTotal = parseFloat(String(order?.gross_total || '0')); // Valor do pedido (itens)
+        let grossTotal = parseFloat(String(order?.gross_total || '0')); // Usado para subtotal
 
         if (order?.provider === 'takeat') {
+            // Prioridade para old_total_price (valor dos itens ANTES do desconto)
+            // Se não houver, usar total_price (valor dos itens sem taxa de entrega)
             if (order?.raw?.session?.old_total_price) {
-                grossTotal = parseFloat(String(order.raw.session.old_total_price));
+                orderTotal = parseFloat(
+                    String(order.raw.session.old_total_price),
+                );
+            } else if (order?.raw?.session?.total_price) {
+                orderTotal = parseFloat(
+                    String(order.raw.session.total_price),
+                );
+            }
+            
+            // Para grossTotal (usado no cálculo de subtotal), usar a mesma lógica anterior
+            if (order?.raw?.session?.total_delivery_price) {
+                grossTotal = parseFloat(
+                    String(order.raw.session.total_delivery_price),
+                );
+            } else if (order?.raw?.session?.old_total_price) {
+                grossTotal = parseFloat(
+                    String(order.raw.session.old_total_price),
+                );
             } else if (order?.raw?.session?.total_price) {
                 grossTotal = parseFloat(String(order.raw.session.total_price));
             }
@@ -143,11 +164,50 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
         // Desconto loja = desconto - subsídio
         const storeDiscount = discountTotal - totalSubsidy;
 
-        // Pago pelo cliente (net_total já é o que o cliente pagou)
-        const paidByClient = netTotal;
+        // Pago pelo cliente (soma dos pagamentos reais)
+        let paidByClient = realPayments.reduce(
+            (sum: number, payment: unknown) => {
+                const p = payment as { payment_value?: string | number };
+                return sum + parseFloat(String(p.payment_value || '0'));
+            },
+            0,
+        );
 
-        // Subtotal = Pago pelo cliente + Subsídio + Taxa de entrega
-        const subtotal = paidByClient + totalSubsidy + deliveryFee;
+        // Se não houver pagamentos, usar old_total_price como fallback
+        if (paidByClient === 0 && realPayments.length === 0) {
+            if (
+                order?.provider === 'takeat' &&
+                order?.raw?.session?.old_total_price
+            ) {
+                paidByClient = parseFloat(
+                    String(order.raw.session.old_total_price),
+                );
+            } else if (
+                order?.provider === 'takeat' &&
+                order?.raw?.session?.total_price
+            ) {
+                paidByClient = parseFloat(
+                    String(order.raw.session.total_price),
+                );
+            } else {
+                paidByClient = parseFloat(String(order?.gross_total || '0'));
+            }
+        }
+
+        // Subtotal para cálculo de receita líquida
+        // Se usar total_delivery_price, NÃO somar subsídio (já está incluído)
+        // Se usar old_total_price ou total_price, SOMAR subsídio
+        let subtotal = grossTotal;
+
+        // Verifica se usou total_delivery_price (que já inclui subsídio e delivery)
+        const usedTotalDeliveryPrice =
+            order?.provider === 'takeat' &&
+            order?.raw?.session?.total_delivery_price;
+
+        // Se NÃO usou total_delivery_price, precisa somar subsídio e delivery
+        if (!usedTotalDeliveryPrice) {
+            subtotal += totalSubsidy + deliveryFee;
+        }
 
         // CMV (custo dos produtos)
         const items = order?.items || [];
@@ -210,6 +270,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
             totalPaymentMethodFee;
 
         return {
+            orderTotal, // Valor do pedido (itens antes de desconto)
             grossTotal,
             discountTotal,
             storeDiscount,
@@ -273,14 +334,14 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                 </div>
                             </li>
 
-                            {/* Total do pedido */}
+                            {/* Total (primeiro - 100%) */}
                             <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
                                 <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
                                     <div className="flex items-center justify-center rounded-full bg-blue-100 p-1 text-blue-900">
                                         <ArrowUpRight className="h-3 w-3" />
                                     </div>
                                     <span className="flex-grow text-sm leading-4 font-semibold">
-                                        Total do pedido
+                                        Total
                                     </span>
                                     <span className="text-sm leading-4 font-semibold whitespace-nowrap">
                                         {formatCurrency(financials.grossTotal)}
@@ -290,6 +351,52 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                     </span>
                                 </div>
                             </li>
+
+                            {/* Pedido */}
+                            <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                                <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                    <div className="flex items-center justify-center rounded-full bg-blue-100 p-0.5 text-blue-900">
+                                        <ArrowUpRight className="h-4 w-4" />
+                                    </div>
+                                    <span className="flex-grow text-sm leading-4 font-semibold">
+                                        Pedido
+                                    </span>
+                                    <span className="text-sm leading-4 font-semibold whitespace-nowrap">
+                                        {formatCurrency(financials.orderTotal)}
+                                    </span>
+                                    <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                        {formatPercentage(
+                                            financials.orderTotal,
+                                            financials.grossTotal,
+                                        )}
+                                    </span>
+                                </div>
+                            </li>
+
+                            {/* Taxa de entrega */}
+                            {financials.deliveryFee > 0 && (
+                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                        <div className="flex items-center justify-center rounded-full bg-blue-100 p-0.5 text-blue-900">
+                                            <ArrowUpRight className="h-4 w-4" />
+                                        </div>
+                                        <span className="flex-grow text-sm leading-4 font-semibold">
+                                            Taxa de entrega
+                                        </span>
+                                        <span className="text-sm leading-4 font-semibold whitespace-nowrap">
+                                            {formatCurrency(
+                                                financials.deliveryFee,
+                                            )}
+                                        </span>
+                                        <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                            {formatPercentage(
+                                                financials.deliveryFee,
+                                                financials.grossTotal,
+                                            )}
+                                        </span>
+                                    </div>
+                                </li>
+                            )}
 
                             {/* Descontos */}
                             {financials.discountTotal > 0 && (
@@ -302,7 +409,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                             Descontos
                                         </span>
                                         <span className="text-sm leading-4 whitespace-nowrap">
-                                            {formatCurrency(
+                                            -{formatCurrency(
                                                 financials.discountTotal,
                                             )}
                                         </span>
@@ -320,7 +427,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                     Desconto da loja
                                                 </span>
                                                 <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
-                                                    {formatCurrency(
+                                                    -{formatCurrency(
                                                         financials.storeDiscount,
                                                     )}
                                                 </span>
@@ -333,7 +440,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                     (subsídio)
                                                 </span>
                                                 <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
-                                                    {formatCurrency(
+                                                    -{formatCurrency(
                                                         financials.totalSubsidy,
                                                     )}
                                                 </span>
@@ -347,31 +454,6 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                             </li>
                                         )}
                                     </ul>
-                                </li>
-                            )}
-
-                            {/* Taxa de entrega subsidiada */}
-                            {financials.deliveryFee > 0 && (
-                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                        <div className="flex items-center justify-center rounded-full bg-blue-100 p-0.5 text-blue-900">
-                                            <ArrowUpRight className="h-4 w-4" />
-                                        </div>
-                                        <span className="flex-grow text-sm leading-4 font-semibold">
-                                            Taxa de entrega subsidiada
-                                        </span>
-                                        <span className="text-sm leading-4 font-semibold whitespace-nowrap">
-                                            {formatCurrency(
-                                                financials.deliveryFee,
-                                            )}
-                                        </span>
-                                        <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                            {formatPercentage(
-                                                financials.deliveryFee,
-                                                financials.grossTotal,
-                                            )}
-                                        </span>
-                                    </div>
                                 </li>
                             )}
 

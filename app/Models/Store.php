@@ -41,4 +41,32 @@ class Store extends Model
     {
         return $this->hasMany(Order::class);
     }
+
+    /**
+     * Verifica se o token OAuth está expirado ou não existe
+     */
+    public function hasExpiredToken(): bool
+    {
+        if (!$this->oauthToken) {
+            return true;
+        }
+
+        if (!$this->oauthToken->expires_at) {
+            return false;
+        }
+
+        return $this->oauthToken->expires_at->isPast();
+    }
+
+    /**
+     * Verifica se o token OAuth está próximo de expirar (menos de 48h)
+     */
+    public function hasTokenExpiringSoon(): bool
+    {
+        if (!$this->oauthToken || !$this->oauthToken->expires_at) {
+            return false;
+        }
+
+        return $this->oauthToken->expires_at->diffInHours(now()) < 48;
+    }
 }

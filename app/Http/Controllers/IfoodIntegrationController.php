@@ -139,6 +139,13 @@ class IfoodIntegrationController extends Controller
             ->where('provider', 'ifood')
             ->get();
 
+        // Adicionar informações de token expirado
+        $stores->transform(function ($store) {
+            $store->token_expired = $store->hasExpiredToken();
+            $store->token_expiring_soon = $store->hasTokenExpiringSoon();
+            return $store;
+        });
+
         return response()->json(['stores' => $stores]);
     }
 

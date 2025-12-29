@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { ColumnDef } from '@tanstack/react-table';
-import { AlertTriangle } from 'lucide-react';
+import { AlertCircle, AlertTriangle } from 'lucide-react';
 import { ProviderBadge } from '../provider-badge';
 import { ActionsCell } from './actions-cell';
 
@@ -12,6 +12,8 @@ export type Store = {
     active: boolean;
     created_at: string;
     updated_at: string;
+    token_expired?: boolean;
+    token_expiring_soon?: boolean;
 };
 
 export const columns: ColumnDef<Store>[] = [
@@ -53,6 +55,9 @@ export const columns: ColumnDef<Store>[] = [
         cell: ({ row, getValue }) => {
             const isActive = Boolean(getValue());
             const isIfood = row.original.provider === 'ifood';
+            const tokenExpired = row.original.token_expired;
+            const tokenExpiringSoon = row.original.token_expiring_soon;
+
             return (
                 <div className="flex items-center gap-2">
                     <Badge
@@ -66,6 +71,15 @@ export const columns: ColumnDef<Store>[] = [
                     </Badge>
                     {!isActive && isIfood && (
                         <AlertTriangle className="text-red-500" size={16} />
+                    )}
+                    {tokenExpired && (
+                        <Badge
+                            variant="destructive"
+                            className="flex items-center gap-1"
+                        >
+                            <AlertCircle size={12} />
+                            Token expirado
+                        </Badge>
                     )}
                 </div>
             );
@@ -105,12 +119,21 @@ export const columns: ColumnDef<Store>[] = [
         cell: ({ row }) => {
             const store = row.original;
             const isIfood = store.provider === 'ifood';
+            const hasSupportedProvider = ['ifood', 'takeat', '99food'].includes(
+                store.provider,
+            );
 
-            if (!isIfood) {
+            if (!hasSupportedProvider) {
                 return <span className="text-xs text-muted-foreground">—</span>;
             }
 
-            return <ActionsCell storeId={store.id} />;
+            return (
+                <ActionsCell
+                    storeId={store.id}
+                    provider={store.provider}
+                    tokenExpired={store.token_expired}
+                />
+            );
         },
     },
 ];

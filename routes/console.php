@@ -12,30 +12,45 @@ Artisan::command('inspire', function () {
 // Execute com: php artisan ifood:polling
 // Ou mantenha rodando em background com supervisor/systemd
 
+// DESATIVADO TEMPORARIAMENTE - iFood
 // Sincronização manual de pedidos (fallback)
-Schedule::command('ifood:sync-orders')
-    ->everyMinute()
-    ->withoutOverlapping()
-    ->runInBackground();
+// Schedule::command('ifood:sync-orders')
+//     ->everyMinute()
+//     ->withoutOverlapping()
+//     ->runInBackground();
 
+// DESATIVADO TEMPORARIAMENTE - iFood
 // Sincronização de vendas (relatório financeiro)
-Schedule::command('ifood:sync-sales')
-    ->everyMinute()
-    ->withoutOverlapping()
-    ->runInBackground();
+// Schedule::command('ifood:sync-sales')
+//     ->everyMinute()
+//     ->withoutOverlapping()
+//     ->runInBackground();
 
+// DESATIVADO TEMPORARIAMENTE - iFood
 // Sincronização histórica de vendas (retroativo - últimos 7 dias para garantir)
-// Executa 1x por dia às 02:00 para pegar vendas que possam ter sido perdidas
-Schedule::command('ifood:sync-historical-sales --from=-7days')
+// Executa 2x por dia às 02:00 e 17:00 de Brasília para pegar vendas que possam ter sido perdidas
+// Schedule::command('ifood:sync-historical-sales --from=-7days')
+//     ->dailyAt('02:00')
+//     ->timezone('America/Sao_Paulo')
+//     ->withoutOverlapping()
+//     ->runInBackground();
+
+// Schedule::command('ifood:sync-historical-sales --from=-7days')
+//     ->dailyAt('17:00')
+//     ->timezone('America/Sao_Paulo')
+//     ->withoutOverlapping()
+//     ->runInBackground();
+
+// Sincronização de pedidos Takeat
+// Executa 2x por dia às 02:00 e 17:00 de Brasília para sincronizar pedidos do dia anterior
+Schedule::command('takeat:sync-orders --date=yesterday')
     ->dailyAt('02:00')
     ->timezone('America/Sao_Paulo')
     ->withoutOverlapping()
     ->runInBackground();
 
-// Sincronização de pedidos Takeat
-// Executa 1x por dia às 02:00 de Brasília para sincronizar pedidos do dia anterior
 Schedule::command('takeat:sync-orders --date=yesterday')
-    ->dailyAt('02:00')
+    ->dailyAt('17:00')
     ->timezone('America/Sao_Paulo')
     ->withoutOverlapping()
     ->runInBackground();
@@ -47,3 +62,10 @@ Schedule::command('entries:generate-recurring')
     ->timezone('America/Sao_Paulo')
     ->withoutOverlapping()
     ->runInBackground();
+
+// Verificar e alertar sobre tokens próximos de expirar
+// Executa diariamente às 08:00 de Brasília
+Schedule::job(new \App\Jobs\RefreshTakeatTokensJob())
+    ->dailyAt('08:00')
+    ->timezone('America/Sao_Paulo')
+    ->withoutOverlapping();

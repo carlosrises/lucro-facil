@@ -407,9 +407,13 @@ export const columns: ColumnDef<Order>[] = [
             if (raw?.total?.orderAmount) {
                 amount = parseFloat(String(raw.total.orderAmount));
             }
-            // Takeat: usar old_total_price (valor antes do desconto) ou total_price
+            // Takeat: priorizar total_delivery_price
             else if (row.original.provider === 'takeat') {
-                if (raw?.session?.old_total_price) {
+                if (raw?.session?.total_delivery_price) {
+                    amount = parseFloat(
+                        String(raw.session.total_delivery_price),
+                    );
+                } else if (raw?.session?.old_total_price) {
                     amount = parseFloat(String(raw.session.old_total_price));
                 } else if (raw?.session?.total_price) {
                     amount = parseFloat(String(raw.session.total_price));
@@ -578,11 +582,21 @@ export const columns: ColumnDef<Order>[] = [
 
             // Para Takeat, calcular net_total considerando custos, impostos e taxas
             if (row.original.provider === 'takeat') {
-                // Pegar o total final do pedido
-                const totalFinal =
-                    typeof row.original.net_total === 'string'
-                        ? parseFloat(row.original.net_total)
-                        : (row.original.net_total ?? 0);
+                // Usar a mesma lógica do "Total do Pedido" para a base de cálculo
+                let orderTotal = 0;
+                if (raw?.session?.total_delivery_price) {
+                    orderTotal = parseFloat(
+                        String(raw.session.total_delivery_price),
+                    );
+                } else if (raw?.session?.old_total_price) {
+                    orderTotal = parseFloat(
+                        String(raw.session.old_total_price),
+                    );
+                } else if (raw?.session?.total_price) {
+                    orderTotal = parseFloat(String(raw.session.total_price));
+                } else {
+                    orderTotal = parseFloat(row.original.gross_total || '0');
+                }
 
                 // Calcular custo total dos produtos
                 const totalCost = items.reduce((sum, item) => {
@@ -660,9 +674,21 @@ export const columns: ColumnDef<Order>[] = [
                     0,
                 );
 
+                // Calcular subtotal para Total líquido
+                // Se usar total_delivery_price, NÃO somar subsídio (já está incluído)
+                const deliveryFee = parseFloat(
+                    String(row.original.delivery_fee || '0'),
+                );
+                let subtotal = orderTotal;
+                const usedTotalDeliveryPrice =
+                    raw?.session?.total_delivery_price;
+                if (!usedTotalDeliveryPrice) {
+                    subtotal += totalSubsidy + deliveryFee;
+                }
+
+                // Líquido = Subtotal - CMV - Impostos - Custos - Comissões - Taxas de Pagamento
                 const netTotal =
-                    totalFinal +
-                    totalSubsidy -
+                    subtotal -
                     totalCost -
                     totalTax -
                     totalAdditionalTax -
@@ -671,7 +697,7 @@ export const columns: ColumnDef<Order>[] = [
                     totalPaymentFees;
                 const isCancelled = row.original.status === 'CANCELLED';
 
-                return totalFinal > 0 ? (
+                return orderTotal > 0 ? (
                     <span
                         className={`${
                             isCancelled
@@ -755,13 +781,27 @@ export const columns: ColumnDef<Order>[] = [
             const status = row.original.status;
             const provider = row.original.provider;
 
-            // Para Takeat, usar net_total; para outros, usar raw.total.orderAmount
-            const orderTotal =
-                provider === 'takeat'
-                    ? typeof row.original.net_total === 'string'
-                        ? parseFloat(row.original.net_total)
-                        : (row.original.net_total ?? 0)
-                    : (raw?.total?.orderAmount ?? 0);
+            // Usar a mesma lógica do "Total do Pedido"
+            let orderTotal = 0;
+            if (raw?.total?.orderAmount) {
+                orderTotal = parseFloat(String(raw.total.orderAmount));
+            } else if (provider === 'takeat') {
+                if (raw?.session?.total_delivery_price) {
+                    orderTotal = parseFloat(
+                        String(raw.session.total_delivery_price),
+                    );
+                } else if (raw?.session?.old_total_price) {
+                    orderTotal = parseFloat(
+                        String(raw.session.old_total_price),
+                    );
+                } else if (raw?.session?.total_price) {
+                    orderTotal = parseFloat(String(raw.session.total_price));
+                } else {
+                    orderTotal = parseFloat(row.original.gross_total || '0');
+                }
+            } else {
+                orderTotal = parseFloat(row.original.gross_total || '0');
+            }
 
             // Pega marginSettings do table.options.meta
             const marginSettings = (
@@ -859,8 +899,19 @@ export const columns: ColumnDef<Order>[] = [
                 }, 0);
             }
 
-            // Base de cálculo: orderTotal + subsídio + delivery fee
-            const subtotal = orderTotal + totalSubsidy + deliveryFee;
+            // Base de cálculo para margem
+            // Se usar total_delivery_price, NÃO somar subsídio (já está incluído)
+            // Se usar old_total_price ou total_price, SOMAR subsídio
+            let subtotal = orderTotal;
+
+            // Verifica se usou total_delivery_price (que já inclui subsídio e delivery)
+            const usedTotalDeliveryPrice =
+                provider === 'takeat' && raw?.session?.total_delivery_price;
+
+            // Se NÃO usou total_delivery_price, precisa somar subsídio e delivery
+            if (!usedTotalDeliveryPrice) {
+                subtotal += totalSubsidy + deliveryFee;
+            }
 
             const netTotal =
                 subtotal -

@@ -51,6 +51,8 @@ interface Store {
     display_name: string;
     external_store_id: string;
     active: boolean;
+    token_expired?: boolean;
+    token_expiring_soon?: boolean;
 }
 
 export function NineNineFoodDrawer({
@@ -286,35 +288,39 @@ export function NineNineFoodDrawer({
                                     {stores.map((store) => (
                                         <li
                                             key={store.id}
-                                            className={`flex items-center justify-between rounded-md border bg-card px-3 py-2 ${!store.active ? 'border-red-500' : ''}`}
+                                            className={`flex items-center justify-between rounded-md border px-3 py-2 ${
+                                                store.token_expired
+                                                    ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/20'
+                                                    : !store.active
+                                                        ? 'border-red-500 bg-card'
+                                                        : 'bg-card'
+                                            }`}
                                         >
                                             <div>
                                                 <h3 className="flex items-center gap-2 text-sm font-medium">
+                                                    {(store.token_expired ||
+                                                        !store.active) && (
+                                                        <AlertCircle className="h-4 w-4 text-red-600" />
+                                                    )}
                                                     <span
                                                         className={`${!store.active ? 'text-muted-foreground' : ''}`}
                                                     >
                                                         {store.display_name}
                                                     </span>
-
-                                                    {!store.active && (
-                                                        <Tooltip>
-                                                            <TooltipTrigger
-                                                                asChild
-                                                            >
-                                                                <AlertCircle
-                                                                    size={14}
-                                                                    className="text-red-500"
-                                                                />
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                                <p>
-                                                                    Necessita
-                                                                    integração
-                                                                </p>
-                                                            </TooltipContent>
-                                                        </Tooltip>
-                                                    )}
                                                 </h3>
+                                                {store.token_expired && (
+                                                    <p className="text-xs text-red-700 dark:text-red-400">
+                                                        Token expirado -
+                                                        Credenciais inválidas
+                                                    </p>
+                                                )}
+                                                {!store.active &&
+                                                    !store.token_expired &&
+                                                    !store.token_expiring_soon && (
+                                                        <p className="text-xs text-red-700">
+                                                            Necessita integração
+                                                        </p>
+                                                    )}
                                                 <p
                                                     className={`text-xs text-muted-foreground`}
                                                 >

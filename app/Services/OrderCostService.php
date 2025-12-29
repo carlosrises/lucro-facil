@@ -84,43 +84,53 @@ class OrderCostService
 
         // Processar cada taxa
         foreach ($costCommissions as $tax) {
-            $calculatedValue = $this->calculateTaxValue($tax, $order, $revenueBase, $taxBase);
-
-            // Pular taxas que não se aplicam (valor zero)
-            if ($calculatedValue <= 0) {
-                continue;
-            }
-
-            $taxData = [
-                'id' => $tax->id,
-                'name' => $tax->name,
-                'type' => $tax->type,
-                'value' => $tax->value,
-                'calculated_value' => $calculatedValue,
-                'category' => $tax->category,
-            ];
-
-            // Separar entre custos, comissões, impostos e métodos de pagamento baseado na category
-            if ($tax->category === 'commission') {
-                $commissions[] = $taxData;
-                $totalCommissions += $calculatedValue;
-            } elseif ($tax->category === 'tax') {
-                $taxes[] = $taxData;
-                $totalTaxes += $calculatedValue;
-            } elseif ($tax->category === 'payment_method') {
-                $paymentMethods[] = $taxData;
-                $totalPaymentMethods += $calculatedValue;
+            // Se é taxa de pagamento (payment_method), calcular proporcionalmente por cada pagamento
+            if ($tax->category === 'payment_method') {
+                $paymentFees = $this->calculatePaymentMethodTaxes($tax, $order, $revenueBase, $taxBase);
+                
+                foreach ($paymentFees as $paymentFee) {
+                    if ($paymentFee['calculated_value'] > 0) {
+                        $paymentMethods[] = $paymentFee;
+                        $totalPaymentMethods += $paymentFee['calculated_value'];
+                    }
+                }
             } else {
-                $costs[] = $taxData;
-                $totalCosts += $calculatedValue;
-            }
+                // Para outras taxas (custos, comissões, impostos), manter comportamento atual
+                $calculatedValue = $this->calculateTaxValue($tax, $order, $revenueBase, $taxBase);
 
-            // Ajustar bases para próximas taxas
-            if ($tax->reduces_revenue_base) {
-                $revenueBase -= $calculatedValue;
-            }
-            if ($tax->affects_revenue_base) {
-                $revenueBase -= $calculatedValue;
+                // Pular taxas que não se aplicam (valor zero)
+                if ($calculatedValue <= 0) {
+                    continue;
+                }
+
+                $taxData = [
+                    'id' => $tax->id,
+                    'name' => $tax->name,
+                    'type' => $tax->type,
+                    'value' => $tax->value,
+                    'calculated_value' => $calculatedValue,
+                    'category' => $tax->category,
+                ];
+
+                // Separar entre custos, comissões e impostos baseado na category
+                if ($tax->category === 'commission') {
+                    $commissions[] = $taxData;
+                    $totalCommissions += $calculatedValue;
+                } elseif ($tax->category === 'tax') {
+                    $taxes[] = $taxData;
+                    $totalTaxes += $calculatedValue;
+                } else {
+                    $costs[] = $taxData;
+                    $totalCosts += $calculatedValue;
+                }
+
+                // Ajustar bases para próximas taxas
+                if ($tax->reduces_revenue_base) {
+                    $revenueBase -= $calculatedValue;
+                }
+                if ($tax->affects_revenue_base) {
+                    $revenueBase -= $calculatedValue;
+                }
             }
         }
 
@@ -172,6 +182,185 @@ class OrderCostService
         }
 
         return array_unique($providers);
+    }
+
+    /**
+     * Calcular taxas de pagamento proporcionalmente para cada forma de pagamento
+     */
+    private function calculatePaymentMethodTaxes(
+        CostCommission $tax,
+        Order $order,
+        float $revenueBase,
+        float $taxBase
+    ): array {
+        $result = [];
+
+        // Obter pagamentos do pedido
+        $payments = $this->getOrderPayments($order);
+        
+        if (empty($payments)) {
+            return $result;
+        }
+
+        // Para cada pagamento, verificar se a taxa se aplica e calcular
+        foreach ($payments as $payment) {
+            $paymentMethod = $payment['method'] ?? null;
+            $paymentValue = $payment['value'] ?? 0;
+            $paymentName = $payment['name'] ?? 'Pagamento';
+
+            // Pular pagamentos sem valor
+            if ($paymentValue <= 0) {
+                continue;
+            }
+
+            // Verificar se a taxa se aplica a este método de pagamento
+            if (!$this->shouldApplyTaxToPayment($tax, $payment, $order)) {
+                continue;
+            }
+
+            // Calcular taxa sobre o valor específico do pagamento
+            $calculatedValue = 0;
+            $baseForCalculation = $tax->enters_tax_base ? $taxBase : $paymentValue;
+
+            if ($tax->type === 'percentage') {
+                // Para percentual, aplicar sobre o valor do pagamento
+                $calculatedValue = ($paymentValue * $tax->value) / 100;
+            } else {
+                // Para valor fixo, dividir proporcionalmente pelo número de pagamentos aplicáveis
+                // Ou aplicar o valor fixo por pagamento (decisão de negócio)
+                $calculatedValue = (float) $tax->value;
+            }
+
+            if ($calculatedValue > 0) {
+                $result[] = [
+                    'id' => $tax->id,
+                    'name' => "{$tax->name} ({$paymentName})",
+                    'type' => $tax->type,
+                    'value' => $tax->value,
+                    'calculated_value' => round($calculatedValue, 2),
+                    'category' => $tax->category,
+                    'payment_method' => $paymentMethod,
+                    'payment_value' => $paymentValue,
+                ];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Obter lista de pagamentos do pedido com valores
+     */
+    private function getOrderPayments(Order $order): array
+    {
+        $payments = [];
+
+        // Para pedidos Takeat
+        if ($order->provider === 'takeat') {
+            $rawPayments = $order->raw['session']['payments'] ?? [];
+            
+            foreach ($rawPayments as $payment) {
+                $method = $payment['payment_method']['method'] ?? $payment['payment_method']['keyword'] ?? null;
+                $name = $payment['payment_method']['name'] ?? 'Pagamento';
+                $keyword = $payment['payment_method']['keyword'] ?? '';
+                $value = (float) ($payment['payment_value'] ?? 0);
+
+                // Pular subsídios e cupons (não aplicar taxas sobre eles)
+                $lowerName = strtolower($name);
+                $lowerKeyword = strtolower($keyword);
+                
+                $isSubsidy = str_contains($lowerName, 'subsid') 
+                    || str_contains($lowerName, 'cupom') 
+                    || str_contains($lowerName, 'desconto')
+                    || str_contains($lowerKeyword, 'subsid')
+                    || str_contains($lowerKeyword, 'cupom')
+                    || str_contains($lowerKeyword, 'desconto');
+                
+                if ($isSubsidy) {
+                    continue;
+                }
+
+                // Identificar método se for genérico "others"
+                if ($method === 'others' || empty($method) || $method === 'N/A') {
+                    if (str_contains($lowerName, 'pix')) {
+                        $method = 'PIX';
+                    } elseif (str_contains($lowerName, 'crédito') || str_contains($lowerName, 'credit')) {
+                        $method = 'CREDIT_CARD';
+                    } elseif (str_contains($lowerName, 'débito') || str_contains($lowerName, 'debit')) {
+                        $method = 'DEBIT_CARD';
+                    } elseif (str_contains($lowerName, 'dinheiro') || str_contains($lowerName, 'cash') || str_contains($lowerName, 'money')) {
+                        $method = 'MONEY';
+                    } elseif (str_contains($lowerName, 'vale') || str_contains($lowerName, 'voucher')) {
+                        $method = 'VOUCHER';
+                    }
+                }
+
+                if ($method && $method !== 'N/A' && $value > 0) {
+                    $payments[] = [
+                        'method' => $method,
+                        'name' => $name,
+                        'keyword' => $keyword,
+                        'value' => $value,
+                    ];
+                }
+            }
+        }
+
+        // Para iFood direto
+        if ($order->provider === 'ifood' && isset($order->raw['payments']['methods'])) {
+            foreach ($order->raw['payments']['methods'] as $payment) {
+                $method = $payment['method'] ?? null;
+                $value = (float) ($payment['value'] ?? 0);
+                
+                if ($method && $value > 0) {
+                    $payments[] = [
+                        'method' => $method,
+                        'name' => $method,
+                        'keyword' => $method,
+                        'value' => $value,
+                    ];
+                }
+            }
+        }
+
+        return $payments;
+    }
+
+    /**
+     * Verificar se uma taxa deve ser aplicada a um pagamento específico
+     */
+    private function shouldApplyTaxToPayment(CostCommission $tax, array $payment, Order $order): bool
+    {
+        $method = $payment['method'] ?? null;
+        $keyword = $payment['keyword'] ?? '';
+        
+        if (!$method) {
+            return false;
+        }
+
+        // Se tem payment_type definido (online/offline), verificar
+        if (isset($tax->payment_type)) {
+            // Verificar primeiro pelo keyword (mais específico para Takeat)
+            $checkMethod = !empty($keyword) ? $keyword : $method;
+            $isOnline = is_online_payment_method($checkMethod);
+            
+            // Se a taxa é para online mas o pagamento é offline (ou vice-versa), não aplicar
+            if ($tax->payment_type === 'online' && !$isOnline) {
+                return false;
+            }
+            if ($tax->payment_type === 'offline' && $isOnline) {
+                return false;
+            }
+        }
+
+        // Se condition_values está vazio, aplica a TODOS os métodos do tipo especificado
+        $conditionValues = $tax->condition_values ?? [];
+        if (empty($conditionValues)) {
+            return true;
+        }
+
+        // Verificar se o método está na lista de condition_values
+        return in_array($method, $conditionValues);
     }
 
     /**

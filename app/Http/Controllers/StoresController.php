@@ -23,6 +23,13 @@ class StoresController extends Controller
 
         $stores = $query->paginate($perPage)->withQueryString();
 
+        // Adicionar informações de token expirado
+        $stores->getCollection()->transform(function ($store) {
+            $store->token_expired = $store->hasExpiredToken();
+            $store->token_expiring_soon = $store->hasTokenExpiringSoon();
+            return $store;
+        });
+
         $storesWithError = Store::where('tenant_id', $request->user()->tenant_id)
             ->where('provider', 'ifood')
             ->where('active', false)

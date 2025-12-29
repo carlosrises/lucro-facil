@@ -79,9 +79,24 @@ const marketplaces = [
 ];
 
 export default function Integration() {
-    // Espera prop storesWithError do backend
-    const { storesWithError = [] } = usePage<{
+    // Espera props do backend
+    const {
+        storesWithError = [],
+        storesWithExpiredToken = [],
+        storesWithTokenExpiringSoon = [],
+    } = usePage<{
         storesWithError?: import('@/components/stores/columns').Store[];
+        storesWithExpiredToken?: Array<{
+            id: number;
+            display_name: string;
+            provider: string;
+        }>;
+        storesWithTokenExpiringSoon?: Array<{
+            id: number;
+            display_name: string;
+            provider: string;
+            expires_at: string;
+        }>;
     }>().props;
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -92,6 +107,36 @@ export default function Integration() {
                         title="Integrações"
                         description="Integre seus marketplaces de delivery."
                     />
+
+                    {/* Alerta de tokens expirados */}
+                    {storesWithExpiredToken.length > 0 && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                            <div className="flex items-start gap-3">
+                                <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+                                <div className="flex-1">
+                                    <h3 className="font-semibold text-red-900">
+                                        Tokens de autenticação expirados
+                                    </h3>
+                                    <p className="mt-1 text-sm text-red-700">
+                                        As seguintes lojas precisam ser
+                                        reconectadas (credenciais inválidas):
+                                    </p>
+                                    <ul className="mt-2 space-y-1">
+                                        {storesWithExpiredToken.map((store) => (
+                                            <li
+                                                key={store.id}
+                                                className="text-sm text-red-700"
+                                            >
+                                                • {store.display_name} (
+                                                {store.provider})
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {marketplaces.map((market) => {
                             const showAlert =
