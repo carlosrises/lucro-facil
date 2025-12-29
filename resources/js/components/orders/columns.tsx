@@ -478,12 +478,12 @@ export const columns: ColumnDef<Order>[] = [
     },
     {
         accessorKey: 'tax',
-        header: 'Imposto',
+        header: 'Impostos',
         cell: ({ row }) => {
             const items = row.original.items || [];
 
-            // Calcular impostos baseado nas categorias fiscais dos produtos
-            const totalTax = items.reduce((sum, item) => {
+            // Calcular impostos dos produtos
+            const productTax = items.reduce((sum, item) => {
                 if (
                     item.internal_product?.tax_category?.total_tax_rate !==
                         undefined &&
@@ -498,6 +498,17 @@ export const columns: ColumnDef<Order>[] = [
                 }
                 return sum;
             }, 0);
+
+            // Impostos adicionais (da categoria 'tax' em calculated_costs)
+            const calculatedCosts = row.original.calculated_costs;
+            const additionalTaxes = calculatedCosts?.taxes || [];
+            const totalAdditionalTax = additionalTaxes.reduce(
+                (sum: number, tax: any) => sum + (tax.calculated_value || 0),
+                0,
+            );
+
+            // Total de impostos = impostos dos produtos + impostos adicionais
+            const totalTax = productTax + totalAdditionalTax;
 
             const isCancelled = row.original.status === 'CANCELLED';
 
@@ -519,7 +530,10 @@ export const columns: ColumnDef<Order>[] = [
     },
     {
         accessorKey: 'total_costs',
-        header: 'Custos',
+        header: () => <div className="text-right">Custos</div>,
+        meta: {
+            label: 'Custos',
+        },
         cell: ({ row }) => {
             const totalCosts = row.original.total_costs;
             const isCancelled = row.original.status === 'CANCELLED';
@@ -534,22 +548,29 @@ export const columns: ColumnDef<Order>[] = [
                     : totalCosts;
 
             return (
-                <span
-                    className={`text-sm ${
-                        isCancelled ? 'text-muted-foreground line-through' : ''
-                    }`}
-                >
-                    {new Intl.NumberFormat('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                    }).format(value)}
-                </span>
+                <div className="text-right">
+                    <span
+                        className={`text-sm ${
+                            isCancelled
+                                ? 'text-muted-foreground line-through'
+                                : ''
+                        }`}
+                    >
+                        {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                        }).format(value)}
+                    </span>
+                </div>
             );
         },
     },
     {
         accessorKey: 'total_commissions',
-        header: 'Comissões',
+        header: () => <div className="text-right">Comissões</div>,
+        meta: {
+            label: 'Comissões',
+        },
         cell: ({ row }) => {
             const totalCommissions = row.original.total_commissions;
             const isCancelled = row.original.status === 'CANCELLED';
@@ -564,6 +585,37 @@ export const columns: ColumnDef<Order>[] = [
                     : totalCommissions;
 
             return (
+                <div className="text-right">
+                    <span
+                        className={`text-sm ${
+                            isCancelled
+                                ? 'text-muted-foreground line-through'
+                                : ''
+                        }`}
+                    >
+                        {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                        }).format(value)}
+                    </span>
+                </div>
+            );
+        },
+    },
+    {
+        accessorKey: 'payment_fees',
+        header: 'Taxa Pgto',
+        cell: ({ row }) => {
+            const calculatedCosts = row.original.calculated_costs;
+            const paymentMethodFees = calculatedCosts?.payment_methods || [];
+            const totalPaymentFee = paymentMethodFees.reduce(
+                (sum: number, fee: any) => sum + (fee.calculated_value || 0),
+                0,
+            );
+
+            const isCancelled = row.original.status === 'CANCELLED';
+
+            return totalPaymentFee > 0 ? (
                 <span
                     className={`text-sm ${
                         isCancelled ? 'text-muted-foreground line-through' : ''
@@ -572,8 +624,10 @@ export const columns: ColumnDef<Order>[] = [
                     {new Intl.NumberFormat('pt-BR', {
                         style: 'currency',
                         currency: 'BRL',
-                    }).format(value)}
+                    }).format(totalPaymentFee)}
                 </span>
+            ) : (
+                <span className="text-muted-foreground">--</span>
             );
         },
     },

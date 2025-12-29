@@ -106,6 +106,17 @@ class OrdersController extends Controller
                         ->orWhere('order_uuid', 'like', "%{$search}%");
                 });
             })
+            ->when($request->input('payment_method'), function ($q, $paymentMethod) {
+                // Filtrar por meio de pagamento (suporta múltiplos valores separados por vírgula)
+                $methods = is_array($paymentMethod) ? $paymentMethod : explode(',', $paymentMethod);
+                $q->where(function ($query) use ($methods) {
+                    foreach ($methods as $method) {
+                        $method = trim(strtoupper($method));
+                        // Para Takeat: verificar session.payments[].payment_method.method
+                        $query->orWhereRaw("JSON_SEARCH(JSON_EXTRACT(raw, '$.session.payments[*].payment_method.method'), 'one', ?) IS NOT NULL", [$method]);
+                    }
+                });
+            })
             ->orderByDesc('placed_at')
             ->orderByDesc('id');
 

@@ -85,6 +85,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { Link, router } from '@inertiajs/react';
 import { DateRange } from 'react-day-picker';
 import {
@@ -254,16 +255,47 @@ export function DataTable({
 
     const [columnFilters, setColumnFilters] =
         React.useState<ColumnFiltersState>([]);
+
+    // Carregar columnVisibility do localStorage ou usar padrão
     const [columnVisibility, setColumnVisibility] =
-        React.useState<VisibilityState>({
-            margin: true,
-            net_total: true,
-            total: true,
-            cost: true,
-            tax: true,
-            extra_cost: true,
-            code: true,
+        React.useState<VisibilityState>(() => {
+            const stored = localStorage.getItem('orders-column-visibility');
+            if (stored) {
+                try {
+                    return JSON.parse(stored);
+                } catch {
+                    // Se houver erro ao parsear, usar padrão
+                }
+            }
+            return {
+                margin: true,
+                net_total: true,
+                total: true,
+                cost: true,
+                tax: true,
+                extra_cost: true,
+                code: true,
+            };
         });
+
+    // Salvar columnVisibility no localStorage quando mudar
+    React.useEffect(() => {
+        localStorage.setItem(
+            'orders-column-visibility',
+            JSON.stringify(columnVisibility),
+        );
+    }, [columnVisibility]);
+
+    // Estado local para payment_method (multiselect)
+    const [localPaymentMethods, setLocalPaymentMethods] = React.useState<string[]>(
+        () => filters?.payment_method ? filters.payment_method.split(',') : []
+    );
+
+    // Sincronizar estado local com filtros do servidor
+    React.useEffect(() => {
+        const serverMethods = filters?.payment_method ? filters.payment_method.split(',') : [];
+        setLocalPaymentMethods(serverMethods);
+    }, [filters?.payment_method]);
 
     // Atualiza filtros mantendo per_page
     const updateFilters = (newFilters: Partial<Filters>, resetPage = true) => {
@@ -592,6 +624,28 @@ export function DataTable({
                         }
                     />
 
+                    {/* Filtro por meio de pagamento */}
+                    <MultiSelect
+                        options={[
+                            { value: 'CASH', label: 'Dinheiro' },
+                            { value: 'CREDIT', label: 'Crédito' },
+                            { value: 'DEBIT', label: 'Débito' },
+                            { value: 'PIX', label: 'PIX' },
+                            { value: 'VOUCHER', label: 'Voucher' },
+                            { value: 'ONLINE', label: 'Online' },
+                        ]}
+                        placeholder="Meio de pagamento"
+                        values={localPaymentMethods}
+                        onChange={(values) => {
+                            setLocalPaymentMethods(values);
+                            updateFilters({
+                                payment_method: values.length > 0 ? values.join(',') : undefined,
+                            });
+                        }}
+                        searchPlaceholder="Buscar método..."
+                        className="w-[200px]"
+                    />
+
                     {/* Filtro por tipo de pedido */}
                     <Combobox
                         options={[
@@ -655,9 +709,11 @@ export function DataTable({
                                         column.toggleVisibility(!!value)
                                     }
                                 >
-                                    {typeof column.columnDef.header === 'string'
-                                        ? column.columnDef.header
-                                        : column.id}
+                                    {column.columnDef.meta?.label ||
+                                        (typeof column.columnDef.header ===
+                                        'string'
+                                            ? column.columnDef.header
+                                            : column.id)}
                                 </DropdownMenuCheckboxItem>
                             ))}
                     </DropdownMenuContent>
@@ -1249,63 +1305,63 @@ export function DataTable({
                                                                                                 .options
                                                                                                 .length ===
                                                                                                 0) && (
-                                                                                        <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
-                                                                                            {item.add_ons.map(
-                                                                                                (
-                                                                                                    addon: any,
-                                                                                                    idx: number,
-                                                                                                ) => (
-                                                                                                    <li
-                                                                                                        key={
-                                                                                                            idx
-                                                                                                        }
-                                                                                                        className="flex flex-wrap items-center gap-2 py-2 text-muted-foreground"
-                                                                                                    >
-                                                                                                        <span className="text-start md:min-w-[32px]">
-                                                                                                            {
-                                                                                                                addon.quantity
+                                                                                            <ul className="m-0 flex w-full basis-full list-none flex-col gap-0 pt-0 pl-0">
+                                                                                                {item.add_ons.map(
+                                                                                                    (
+                                                                                                        addon: any,
+                                                                                                        idx: number,
+                                                                                                    ) => (
+                                                                                                        <li
+                                                                                                            key={
+                                                                                                                idx
                                                                                                             }
+                                                                                                            className="flex flex-wrap items-center gap-2 py-2 text-muted-foreground"
+                                                                                                        >
+                                                                                                            <span className="text-start md:min-w-[32px]">
+                                                                                                                {
+                                                                                                                    addon.quantity
+                                                                                                                }
 
-                                                                                                            x
-                                                                                                        </span>
-                                                                                                        <span className="grow">
-                                                                                                            {
-                                                                                                                addon.name
-                                                                                                            }
-                                                                                                        </span>
-                                                                                                        <span className="hidden justify-end text-end md:flex md:min-w-[120px]">
-                                                                                                            {new Intl.NumberFormat(
-                                                                                                                'pt-BR',
+                                                                                                                x
+                                                                                                            </span>
+                                                                                                            <span className="grow">
                                                                                                                 {
-                                                                                                                    style: 'currency',
-                                                                                                                    currency:
-                                                                                                                        'BRL',
-                                                                                                                },
-                                                                                                            ).format(
-                                                                                                                addon.price ??
-                                                                                                                    0,
-                                                                                                            )}
-                                                                                                        </span>
-                                                                                                        <span className="text-end md:min-w-[120px]">
-                                                                                                            {new Intl.NumberFormat(
-                                                                                                                'pt-BR',
-                                                                                                                {
-                                                                                                                    style: 'currency',
-                                                                                                                    currency:
-                                                                                                                        'BRL',
-                                                                                                                },
-                                                                                                            ).format(
-                                                                                                                (addon.price ??
-                                                                                                                    0) *
-                                                                                                                    (addon.quantity ??
-                                                                                                                        1),
-                                                                                                            )}
-                                                                                                        </span>
-                                                                                                    </li>
-                                                                                                ),
-                                                                                            )}
-                                                                                        </ul>
-                                                                                    )}
+                                                                                                                    addon.name
+                                                                                                                }
+                                                                                                            </span>
+                                                                                                            <span className="hidden justify-end text-end md:flex md:min-w-[120px]">
+                                                                                                                {new Intl.NumberFormat(
+                                                                                                                    'pt-BR',
+                                                                                                                    {
+                                                                                                                        style: 'currency',
+                                                                                                                        currency:
+                                                                                                                            'BRL',
+                                                                                                                    },
+                                                                                                                ).format(
+                                                                                                                    addon.price ??
+                                                                                                                        0,
+                                                                                                                )}
+                                                                                                            </span>
+                                                                                                            <span className="text-end md:min-w-[120px]">
+                                                                                                                {new Intl.NumberFormat(
+                                                                                                                    'pt-BR',
+                                                                                                                    {
+                                                                                                                        style: 'currency',
+                                                                                                                        currency:
+                                                                                                                            'BRL',
+                                                                                                                    },
+                                                                                                                ).format(
+                                                                                                                    (addon.price ??
+                                                                                                                        0) *
+                                                                                                                        (addon.quantity ??
+                                                                                                                            1),
+                                                                                                                )}
+                                                                                                            </span>
+                                                                                                        </li>
+                                                                                                    ),
+                                                                                                )}
+                                                                                            </ul>
+                                                                                        )}
                                                                                 </li>
                                                                             ),
                                                                         );
