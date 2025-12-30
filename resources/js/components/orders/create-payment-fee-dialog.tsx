@@ -1,3 +1,4 @@
+import { startRecalculateMonitoring } from '@/components/global-recalculate-progress';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -17,9 +18,9 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { useForm } from '@inertiajs/react';
+import { useForm, usePage } from '@inertiajs/react';
 import { Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 interface CreatePaymentFeeDialogProps {
@@ -88,20 +89,16 @@ export function CreatePaymentFeeDialog({
     );
     const detectedPaymentType = detectPaymentType(paymentMethodName);
 
-    // Determinar o provider correto
-    // Para marketplaces integrados (ifood, 99food, neemo, keeta): usar "takeat-{origin}"
-    // Para outros (balcony, totem, pdv, takeat próprio): usar apenas "takeat"
+    // Para Takeat, salvar apenas "takeat" no provider
+    // O origin já está no próprio pedido
     const getProvider = () => {
-        if (provider !== 'takeat' || !origin) {
+        // Para providers não-Takeat (ifood direto, rappi, etc), manter o provider original
+        if (provider !== 'takeat') {
             return provider;
         }
 
-        const integratedMarketplaces = ['ifood', '99food', 'neemo', 'keeta'];
-        if (integratedMarketplaces.includes(origin)) {
-            return `takeat-${origin}`;
-        }
-
-        return 'takeat'; // Para balcony, totem, pdv, etc - usar apenas "takeat"
+        // Para Takeat, sempre usar "takeat" independente do origin
+        return 'takeat';
     };
 
     const { data, setData, post, processing, reset } = useForm({
@@ -119,25 +116,34 @@ export function CreatePaymentFeeDialog({
         apply_to_existing_orders: true, // Por padrão, aplicar aos pedidos existentes
     });
 
+    // Monitorar recalculate_cache_key retornado do backend
+    const { props } = usePage<{ recalculate_cache_key?: string }>();
+    useEffect(() => {
+        if (props.recalculate_cache_key) {
+            startRecalculateMonitoring(props.recalculate_cache_key);
+        }
+    }, [props.recalculate_cache_key]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
         post('/cost-commissions', {
-            onSuccess: () => {
-                toast.success('Taxa de pagamento criada com sucesso!');
+            preserveScroll: true,
+            onSuccess: (page) => {
+                toast.success(
+                    'Taxa de pagamento criada com sucesso! Recalculando custos dos pedidos...',
+                );
 
-                // Recalcular custos do pedido
-                post(`/orders/${orderId}/recalculate-costs`, {
-                    preserveScroll: true,
-                    onSuccess: () => {
-                        toast.success('Custos recalculados!');
-                        reset();
-                        onOpenChange(false);
-                    },
-                    onError: () => {
-                        toast.error('Erro ao recalcular custos');
-                    },
-                });
+                // Extrair o cache key do flash message retornado
+                const cacheKey = page.props.recalculate_cache_key as
+                    | string
+                    | undefined;
+                if (cacheKey) {
+                    startRecalculateMonitoring(cacheKey);
+                }
+
+                reset();
+                onOpenChange(false);
             },
             onError: (errors) => {
                 const errorMessage = Object.values(errors).flat().join(', ');

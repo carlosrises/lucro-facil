@@ -10,7 +10,14 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { router } from '@inertiajs/react';
-import { Check, Link2, PackageX, Settings, Store } from 'lucide-react';
+import {
+    Check,
+    Link2,
+    PackageX,
+    RefreshCw,
+    Settings,
+    Store,
+} from 'lucide-react';
 import React from 'react';
 import { toast } from 'sonner';
 
@@ -58,8 +65,26 @@ export function QuickAssociateDialog({
     const [selectedProducts, setSelectedProducts] = React.useState<
         Record<number, number>
     >({});
+    const [isRefreshing, setIsRefreshing] = React.useState(false);
 
     const unmappedItems = items.filter((item) => !item.internal_product);
+
+    const handleRefresh = () => {
+        setIsRefreshing(true);
+        router.reload({
+            only: ['internalProducts'],
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                toast.success('Lista de produtos atualizada!');
+                setIsRefreshing(false);
+            },
+            onError: () => {
+                toast.error('Erro ao atualizar lista de produtos');
+                setIsRefreshing(false);
+            },
+        });
+    };
 
     const handleAssociate = (
         itemId: number,
@@ -115,14 +140,33 @@ export function QuickAssociateDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-h-[90vh] max-w-2xl overflow-hidden">
                 <DialogHeader>
-                    <DialogTitle>Associar Produtos do Pedido</DialogTitle>
-                    <DialogDescription>
-                        Pedido: <strong>{orderCode}</strong> •{' '}
-                        {unmappedItems.length} produto(s) não associado(s)
-                    </DialogDescription>
+                    <div className="flex items-start justify-between gap-4 pt-4">
+                        <div className="flex-1">
+                            <DialogTitle>
+                                Associar Produtos do Pedido
+                            </DialogTitle>
+                            <DialogDescription>
+                                Pedido: <strong>{orderCode}</strong> •{' '}
+                                {unmappedItems.length} produto(s) não
+                                associado(s)
+                            </DialogDescription>
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={handleRefresh}
+                            disabled={isRefreshing}
+                            title="Atualizar lista de produtos internos"
+                        >
+                            <RefreshCw
+                                className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                            />
+                        </Button>
+                    </div>
                 </DialogHeader>
 
-                <ScrollArea className="max-h-[calc(90vh-120px)] pr-4">
+                <ScrollArea className="max-h-[calc(90vh-120px)]">
                     <div className="space-y-4">
                         {items.map((item) => (
                             <div

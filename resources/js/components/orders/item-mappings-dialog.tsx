@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { router } from '@inertiajs/react';
-import { Check, Link2, PackageX, X } from 'lucide-react';
+import { Check, Link2, PackageX, RefreshCw, X } from 'lucide-react';
 import React from 'react';
 import { toast } from 'sonner';
 
@@ -87,6 +87,8 @@ export function ItemMappingsDialog({
     internalProducts,
     provider,
 }: ItemMappingsDialogProps) {
+    const [isRefreshing, setIsRefreshing] = React.useState(false);
+
     // Estado para item principal
     const [mainProductId, setMainProductId] = React.useState<number | null>(
         null,
@@ -112,6 +114,23 @@ export function ItemMappingsDialog({
     >({});
 
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+    const handleRefresh = () => {
+        setIsRefreshing(true);
+        router.reload({
+            only: ['internalProducts'],
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                toast.success('Lista de produtos atualizada!');
+                setIsRefreshing(false);
+            },
+            onError: () => {
+                toast.error('Erro ao atualizar lista de produtos');
+                setIsRefreshing(false);
+            },
+        });
+    };
 
     // Inicializar quando o item mudar
     React.useEffect(() => {
@@ -278,16 +297,35 @@ export function ItemMappingsDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-h-[90vh] max-w-3xl overflow-hidden">
                 <DialogHeader>
-                    <DialogTitle>Associar Produtos Internos</DialogTitle>
-                    <DialogDescription>
-                        Configure múltiplas associações, frações e complementos
-                    </DialogDescription>
+                    <div className="flex items-start justify-between gap-4 pt-4">
+                        <div className="flex-1">
+                            <DialogTitle>
+                                Associar Produtos Internos
+                            </DialogTitle>
+                            <DialogDescription>
+                                Configure múltiplas associações, frações e
+                                complementos
+                            </DialogDescription>
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            className="shrink-0 pr-4"
+                            onClick={handleRefresh}
+                            disabled={isRefreshing}
+                            title="Atualizar lista de produtos internos"
+                        >
+                            <RefreshCw
+                                className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                            />
+                        </Button>
+                    </div>
                 </DialogHeader>
 
                 <ScrollArea className="max-h-[calc(90vh-180px)] pr-4">
                     <div className="space-y-6">
                         {/* Informações do Item */}
-                        <div className="rounded-lg border bg-muted/50 p-4">
+                        <div className="rounded-lg border bg-muted/50">
                             <div className="flex items-start justify-between">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">

@@ -8,6 +8,7 @@ import { CostCommission } from '@/components/cost-commissions/columns';
 import { DataTable } from '@/components/cost-commissions/data-table';
 import { CostCommissionFormDialog } from '@/components/cost-commissions/form-drawer';
 import { RecalculateProgress } from '@/components/cost-commissions/recalculate-progress';
+import { startRecalculateMonitoring } from '@/components/global-recalculate-progress';
 import {
     AlertDialog,
     AlertDialogCancel,
@@ -69,6 +70,8 @@ export default function CostCommissions() {
     React.useEffect(() => {
         if (recalculateCacheKey) {
             setCurrentCacheKey(recalculateCacheKey);
+            // Iniciar monitoramento global
+            startRecalculateMonitoring(recalculateCacheKey);
         }
     }, [recalculateCacheKey]);
 

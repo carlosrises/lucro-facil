@@ -409,30 +409,27 @@ export const columns: ColumnDef<Order>[] = [
 
             // iFood: usar raw.total.orderAmount
             if (raw?.total?.orderAmount) {
-                amount = parseFloat(String(raw.total.orderAmount));
+                amount = parseFloat(String(raw.total.orderAmount)) || 0;
             }
-            // Takeat: priorizar total_delivery_price
+            // Takeat: priorizar old_total_price (valor antes do desconto)
             else if (row.original.provider === 'takeat') {
-                if (raw?.session?.total_delivery_price) {
-                    amount = parseFloat(
-                        String(raw.session.total_delivery_price),
-                    );
-                } else if (raw?.session?.old_total_price) {
-                    amount = parseFloat(String(raw.session.old_total_price));
+                if (raw?.session?.old_total_price) {
+                    amount =
+                        parseFloat(String(raw.session.old_total_price)) || 0;
                 } else if (raw?.session?.total_price) {
-                    amount = parseFloat(String(raw.session.total_price));
+                    amount = parseFloat(String(raw.session.total_price)) || 0;
                 } else {
-                    amount = parseFloat(row.original.gross_total || '0');
+                    amount = parseFloat(row.original.gross_total || '0') || 0;
                 }
             }
             // Fallback: usar gross_total do banco
             else {
-                amount = parseFloat(row.original.gross_total || '0');
+                amount = parseFloat(row.original.gross_total || '0') || 0;
             }
 
             const isCancelled = row.original.status === 'CANCELLED';
 
-            return amount > 0 ? (
+            return !isNaN(amount) && amount > 0 ? (
                 <span
                     className={`${isCancelled ? 'text-muted-foreground line-through' : ''}`}
                 >
@@ -442,7 +439,9 @@ export const columns: ColumnDef<Order>[] = [
                     }).format(amount)}
                 </span>
             ) : (
-                <span className="text-muted-foreground">--</span>
+                <div className="text-right">
+                    <span className="text-muted-foreground">--</span>
+                </div>
             );
         },
     },
@@ -472,7 +471,9 @@ export const columns: ColumnDef<Order>[] = [
                     }).format(totalCost)}
                 </span>
             ) : (
-                <span className="text-muted-foreground">--</span>
+                <div className="text-right">
+                    <span className="text-muted-foreground">--</span>
+                </div>
             );
         },
     },
@@ -524,7 +525,9 @@ export const columns: ColumnDef<Order>[] = [
                     }).format(totalTax)}
                 </span>
             ) : (
-                <span className="text-muted-foreground">--</span>
+                <div className="text-right">
+                    <span className="text-muted-foreground">--</span>
+                </div>
             );
         },
     },
@@ -539,7 +542,11 @@ export const columns: ColumnDef<Order>[] = [
             const isCancelled = row.original.status === 'CANCELLED';
 
             if (totalCosts === null || totalCosts === undefined) {
-                return <span className="text-muted-foreground">--</span>;
+                return (
+                    <div className="text-right">
+                        <span className="text-muted-foreground">--</span>
+                    </div>
+                );
             }
 
             const value =
@@ -547,7 +554,7 @@ export const columns: ColumnDef<Order>[] = [
                     ? parseFloat(totalCosts)
                     : totalCosts;
 
-            return (
+            return value > 0 ? (
                 <div className="text-right">
                     <span
                         className={`text-sm ${
@@ -561,6 +568,10 @@ export const columns: ColumnDef<Order>[] = [
                             currency: 'BRL',
                         }).format(value)}
                     </span>
+                </div>
+            ) : (
+                <div className="text-right">
+                    <span className="text-muted-foreground">--</span>
                 </div>
             );
         },
@@ -576,7 +587,11 @@ export const columns: ColumnDef<Order>[] = [
             const isCancelled = row.original.status === 'CANCELLED';
 
             if (totalCommissions === null || totalCommissions === undefined) {
-                return <span className="text-muted-foreground">--</span>;
+                return (
+                    <div className="text-right">
+                        <span className="text-muted-foreground">--</span>
+                    </div>
+                );
             }
 
             const value =
@@ -584,7 +599,7 @@ export const columns: ColumnDef<Order>[] = [
                     ? parseFloat(totalCommissions)
                     : totalCommissions;
 
-            return (
+            return value > 0 ? (
                 <div className="text-right">
                     <span
                         className={`text-sm ${
@@ -598,6 +613,10 @@ export const columns: ColumnDef<Order>[] = [
                             currency: 'BRL',
                         }).format(value)}
                     </span>
+                </div>
+            ) : (
+                <div className="text-right">
+                    <span className="text-muted-foreground">--</span>
                 </div>
             );
         },
@@ -634,7 +653,9 @@ export const columns: ColumnDef<Order>[] = [
                     </span>
                 </div>
             ) : (
-                <span className="text-muted-foreground">--</span>
+                <div className="text-right">
+                    <span className="text-muted-foreground">--</span>
+                </div>
             );
         },
     },
@@ -776,7 +797,9 @@ export const columns: ColumnDef<Order>[] = [
                         }).format(netTotal)}
                     </span>
                 ) : (
-                    <span className="text-muted-foreground">--</span>
+                    <div className="text-right">
+                        <span className="text-muted-foreground">--</span>
+                    </div>
                 );
             }
 
@@ -833,7 +856,9 @@ export const columns: ColumnDef<Order>[] = [
                     }).format(netTotal)}
                 </span>
             ) : (
-                <span className="text-muted-foreground">--</span>
+                <div className="text-right">
+                    <span className="text-muted-foreground">--</span>
+                </div>
             );
         },
     },
@@ -890,7 +915,11 @@ export const columns: ColumnDef<Order>[] = [
             }
 
             if (!orderTotal || orderTotal <= 0)
-                return <span className="text-muted-foreground">--</span>;
+                return (
+                    <div className="text-right">
+                        <span className="text-muted-foreground">--</span>
+                    </div>
+                );
 
             // Calcular custo total dos produtos
             const totalCost = items.reduce((sum, item) => {

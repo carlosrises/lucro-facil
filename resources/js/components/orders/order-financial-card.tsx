@@ -84,33 +84,36 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
         // Para Takeat:
         // - orderTotal (Pedido) = old_total_price OU total_price (valor dos itens)
         // - grossTotal = total_delivery_price (usado para cálculo de subtotal)
-        let orderTotal = parseFloat(String(order?.gross_total || '0')); // Valor do pedido (itens)
-        let grossTotal = parseFloat(String(order?.gross_total || '0')); // Usado para subtotal
+        let orderTotal = parseFloat(String(order?.gross_total || '0')) || 0; // Valor do pedido (itens)
+        let grossTotal = parseFloat(String(order?.gross_total || '0')) || 0; // Usado para subtotal
 
         if (order?.provider === 'takeat') {
             // orderTotal = valor dos itens ANTES do desconto (para exibição)
             if (order?.raw?.session?.old_total_price) {
-                orderTotal = parseFloat(
-                    String(order.raw.session.old_total_price),
-                );
+                orderTotal =
+                    parseFloat(String(order.raw.session.old_total_price)) || 0;
             } else if (order?.raw?.session?.total_price) {
-                orderTotal = parseFloat(String(order.raw.session.total_price));
+                orderTotal =
+                    parseFloat(String(order.raw.session.total_price)) || 0;
             }
 
             // grossTotal = valor APÓS desconto (usado no cálculo de subtotal/receita)
             // Prioridade: total_delivery_price > total_price
             if (order?.raw?.session?.total_delivery_price) {
-                grossTotal = parseFloat(
-                    String(order.raw.session.total_delivery_price),
-                );
+                grossTotal =
+                    parseFloat(
+                        String(order.raw.session.total_delivery_price),
+                    ) || 0;
             } else if (order?.raw?.session?.total_price) {
-                grossTotal = parseFloat(String(order.raw.session.total_price));
+                grossTotal =
+                    parseFloat(String(order.raw.session.total_price)) || 0;
             }
         }
 
-        const discountTotal = parseFloat(String(order?.discount_total || '0'));
-        const deliveryFee = parseFloat(String(order?.delivery_fee || '0'));
-        const netTotal = parseFloat(String(order?.net_total || '0'));
+        const discountTotal =
+            parseFloat(String(order?.discount_total || '0')) || 0;
+        const deliveryFee = parseFloat(String(order?.delivery_fee || '0')) || 0;
+        const netTotal = parseFloat(String(order?.net_total || '0')) || 0;
 
         // Subsídio e métodos de pagamento (dos pagamentos da sessão)
         const sessionPayments = order?.raw?.session?.payments || [];
@@ -151,7 +154,8 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
         const totalSubsidy = subsidyPayments.reduce(
             (sum: number, payment: unknown) => {
                 const p = payment as { payment_value?: string | number };
-                return sum + parseFloat(String(p.payment_value || '0'));
+                const value = parseFloat(String(p.payment_value || '0')) || 0;
+                return sum + value;
             },
             0,
         );
@@ -163,7 +167,8 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
         let paidByClient = realPayments.reduce(
             (sum: number, payment: unknown) => {
                 const p = payment as { payment_value?: string | number };
-                return sum + parseFloat(String(p.payment_value || '0'));
+                const value = parseFloat(String(p.payment_value || '0')) || 0;
+                return sum + value;
             },
             0,
         );
@@ -174,18 +179,17 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                 order?.provider === 'takeat' &&
                 order?.raw?.session?.old_total_price
             ) {
-                paidByClient = parseFloat(
-                    String(order.raw.session.old_total_price),
-                );
+                paidByClient =
+                    parseFloat(String(order.raw.session.old_total_price)) || 0;
             } else if (
                 order?.provider === 'takeat' &&
                 order?.raw?.session?.total_price
             ) {
-                paidByClient = parseFloat(
-                    String(order.raw.session.total_price),
-                );
+                paidByClient =
+                    parseFloat(String(order.raw.session.total_price)) || 0;
             } else {
-                paidByClient = parseFloat(String(order?.gross_total || '0'));
+                paidByClient =
+                    parseFloat(String(order?.gross_total || '0')) || 0;
             }
         }
 
@@ -217,8 +221,10 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                 const quantity = item.qty || item.quantity || 0;
                 const unitPrice = item.unit_price || item.price || 0;
                 const taxRate =
-                    item.internal_product.tax_category.total_tax_rate;
-                return sum + (quantity * unitPrice * taxRate) / 100;
+                    item.internal_product.tax_category.total_tax_rate || 0;
+                const taxValue = (quantity * unitPrice * taxRate) / 100;
+                // Proteção contra NaN
+                return sum + (isNaN(taxValue) ? 0 : taxValue);
             }
             return sum;
         }, 0);
@@ -294,15 +300,29 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
         const channel = session.sales_channel || order.origin.toUpperCase();
 
         // Helper para formatar valores
-        const formatCurrency = (value: number) =>
-            new Intl.NumberFormat('pt-BR', {
+        const formatCurrency = (value: number) => {
+            // Proteção contra NaN
+            if (isNaN(value) || !isFinite(value)) {
+                return 'R$ 0,00';
+            }
+            return new Intl.NumberFormat('pt-BR', {
                 style: 'currency',
                 currency: 'BRL',
             }).format(value);
+        };
 
         // Helper para formatar porcentagem
         const formatPercentage = (value: number, total: number) => {
-            if (total === 0) return '0,0%';
+            // Proteção contra valores inválidos
+            if (
+                isNaN(value) ||
+                isNaN(total) ||
+                !isFinite(value) ||
+                !isFinite(total) ||
+                total === 0
+            ) {
+                return '0,0%';
+            }
             return `${((value / total) * 100).toFixed(1).replace('.', ',')}%`;
         };
 
@@ -977,7 +997,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                 ) : (
                                     /* Se não houver taxas, mostrar meios de pagamento para vincular */
                                     financials.realPayments.length > 0 && (
-                                        <ul className="flex w-full flex-col items-center justify-between gap-2 pt-2 pl-0">
+                                        <ul className="flex w-full flex-col items-center justify-between pt-2 pl-0">
                                             {financials.realPayments.map(
                                                 (
                                                     payment: unknown,
@@ -1007,7 +1027,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                     return (
                                                         <li
                                                             key={idx}
-                                                            className="flex w-full flex-row items-center justify-between gap-2 rounded px-3 py-1 hover:bg-muted/50"
+                                                            className="flex w-full flex-row items-center justify-between gap-2 px-3 py-1 hover:bg-muted/50"
                                                         >
                                                             <div className="flex flex-1 flex-col gap-0.5">
                                                                 <span className="text-xs leading-4 font-normal text-muted-foreground">
