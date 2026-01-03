@@ -295,7 +295,21 @@ class OrderCostService
                     }
                 }
 
-                if ($method && $method !== 'N/A' && $value > 0) {
+                // Normalizar métodos do Takeat para o padrão esperado
+                if ($method === 'DEBIT') {
+                    $method = 'DEBIT_CARD';
+                } elseif ($method === 'CREDIT') {
+                    $method = 'CREDIT_CARD';
+                } elseif ($method === 'CASH') {
+                    $method = 'MONEY';
+                }
+
+                // Se ainda estiver vazio ou N/A, usar keyword como fallback ou 'others'
+                if (empty($method) || $method === 'N/A') {
+                    $method = !empty($keyword) ? strtoupper($keyword) : 'others';
+                }
+
+                if ($method && $value > 0) {
                     $payments[] = [
                         'method' => $method,
                         'name' => $name,
@@ -580,7 +594,22 @@ class OrderCostService
                     }
                 }
 
-                if ($method && $method !== 'N/A') {
+                // Normalizar métodos do Takeat para o padrão esperado
+                if ($method === 'DEBIT') {
+                    $method = 'DEBIT_CARD';
+                } elseif ($method === 'CREDIT') {
+                    $method = 'CREDIT_CARD';
+                } elseif ($method === 'CASH') {
+                    $method = 'MONEY';
+                }
+
+                // Se ainda estiver vazio ou N/A, usar keyword como fallback ou 'others'
+                if (empty($method) || $method === 'N/A') {
+                    $keyword = $payment['payment_method']['keyword'] ?? '';
+                    $method = !empty($keyword) ? strtoupper($keyword) : 'others';
+                }
+
+                if ($method) {
                     $methods[] = $method;
                 }
             }

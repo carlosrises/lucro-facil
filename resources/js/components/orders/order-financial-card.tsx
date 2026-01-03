@@ -963,11 +963,11 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                     </span>
                                 </div>
 
-                                {/* Se houver taxas aplicadas, mostrar apenas as taxas */}
+                                {/* Mostrar taxas aplicadas se houver */}
                                 {financials.paymentMethodFees.filter(
                                     (fee: CostCommissionItem) =>
                                         fee.calculated_value > 0,
-                                ).length > 0 ? (
+                                ).length > 0 && (
                                     <ul className="flex w-full flex-col items-center justify-between gap-1 pt-2 pl-0">
                                         {financials.paymentMethodFees
                                             .filter(
@@ -994,9 +994,15 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                 </li>
                                             ))}
                                     </ul>
-                                ) : (
-                                    /* Se não houver taxas, mostrar meios de pagamento para vincular */
-                                    financials.realPayments.length > 0 && (
+                                )}
+
+                                {/* Mostrar apenas meios de pagamento sem taxa vinculada */}
+                                {financials.realPayments.length > 0 &&
+                                    financials.paymentMethodFees.filter(
+                                        (fee: CostCommissionItem) =>
+                                            fee.calculated_value > 0,
+                                    ).length <
+                                        financials.realPayments.length && (
                                         <ul className="flex w-full flex-col items-center justify-between pt-2 pl-0">
                                             {financials.realPayments.map(
                                                 (
@@ -1023,6 +1029,24 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                         '';
                                                     const paymentValue =
                                                         p.payment_value || 0;
+
+                                                    // Verificar se já existe taxa para este método
+                                                    const hasFee =
+                                                        financials.paymentMethodFees.some(
+                                                            (
+                                                                fee: CostCommissionItem,
+                                                            ) =>
+                                                                fee.calculated_value >
+                                                                    0 &&
+                                                                fee.name
+                                                                    .toLowerCase()
+                                                                    .includes(
+                                                                        paymentName.toLowerCase(),
+                                                                    ),
+                                                        );
+
+                                                    // Não mostrar se já tem taxa
+                                                    if (hasFee) return null;
 
                                                     return (
                                                         <li
@@ -1068,8 +1092,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                 },
                                             )}
                                         </ul>
-                                    )
-                                )}
+                                    )}
                             </li>
 
                             {/* Receita líquida */}

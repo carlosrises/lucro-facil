@@ -13,6 +13,14 @@ class TakeatIntegrationController extends Controller
      */
     public function login(Request $request)
     {
+        // Log inicial antes de qualquer processamento
+        logger()->info('🚀 Takeat: Requisição de login recebida', [
+            'tenant_id' => auth()->user()->tenant_id ?? 'N/A',
+            'user_id' => auth()->id() ?? 'N/A',
+            'email' => $request->input('email'),
+            'has_password' => !empty($request->input('password')),
+        ]);
+
         $validated = $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
@@ -84,12 +92,28 @@ class TakeatIntegrationController extends Controller
                 'restaurant' => $authData['restaurant'],
             ]);
         } catch (\Throwable $e) {
-            logger()->error('❌ Takeat: Erro no login', [
-                'tenant_id' => auth()->user()->tenant_id,
+            // Log detalhado do erro
+            $errorData = [
+                'tenant_id' => auth()->user()->tenant_id ?? 'N/A',
                 'email' => $request->email,
-                'error' => $e->getMessage(),
+                'error_class' => get_class($e),
+                'error_message' => $e->getMessage(),
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
-            ]);
+            ];
+
+            // Se for RequestException, adicionar resposta HTTP
+            if ($e instanceof \Illuminate\Http\Client\RequestException) {
+                $errorData['http_status'] = $e->response?->status();
+                $errorData['http_body'] = $e->response?->body();
+            }
+
+            logger()->error('❌ Takeat: Erro no login', $errorData);
+
+            // Também grava em arquivo separado para garantir
+            \Illuminate\Support\Facades\Log::channel('single')->error('❌ Takeat Login Error', $errorData);
 
             return response()->json([
                 'success' => false,

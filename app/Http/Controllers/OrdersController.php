@@ -99,11 +99,11 @@ class OrdersController extends Controller
                 });
             })
             ->when($request->input('search'), function ($q, $search) {
-                // Buscar por código do pedido, short_reference ou order_uuid
+                // Buscar por ID, código do pedido ou short_reference
                 $q->where(function ($query) use ($search) {
-                    $query->where('code', 'like', "%{$search}%")
-                        ->orWhere('short_reference', 'like', "%{$search}%")
-                        ->orWhere('order_uuid', 'like', "%{$search}%");
+                    $query->where('id', 'like', "%{$search}%")
+                        ->orWhere('code', 'like', "%{$search}%")
+                        ->orWhere('short_reference', 'like', "%{$search}%");
                 });
             })
             ->when($request->input('payment_method'), function ($q, $paymentMethod) {

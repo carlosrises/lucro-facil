@@ -61,10 +61,24 @@ class TakeatClient
 
             return $data;
         } catch (RequestException $e) {
-            logger()->error('❌ Takeat: Falha na autenticação', [
+            $errorDetails = [
                 'status' => $e->response?->status(),
                 'body' => $e->response?->body(),
                 'error' => $e->getMessage(),
+                'url' => $baseUrl.'/public/api/sessions',
+            ];
+
+            logger()->error('❌ Takeat: Falha na autenticação', $errorDetails);
+
+            // Log adicional em canal separado
+            \Illuminate\Support\Facades\Log::channel('single')->error('❌ Takeat Auth Failed', $errorDetails);
+
+            throw $e;
+        } catch (\Throwable $e) {
+            logger()->error('❌ Takeat: Erro inesperado na autenticação', [
+                'error_class' => get_class($e),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
 
             throw $e;

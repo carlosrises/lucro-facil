@@ -138,8 +138,15 @@ export function CreatePaymentFeeDialog({
                 const cacheKey = page.props.recalculate_cache_key as
                     | string
                     | undefined;
+                    
+                console.log('Cache key recebido:', cacheKey);
+                console.log('Props da página:', page.props);
+                
                 if (cacheKey) {
+                    console.log('Iniciando monitoramento para:', cacheKey);
                     startRecalculateMonitoring(cacheKey);
+                } else {
+                    console.warn('Cache key não encontrado nas props');
                 }
 
                 reset();

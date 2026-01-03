@@ -2067,11 +2067,13 @@ export function DataTable({
                                             // Total do pedido
                                             let amount = 0;
                                             if (raw?.total?.orderAmount) {
-                                                amount = parseFloat(
-                                                    String(
-                                                        raw.total.orderAmount,
-                                                    ),
-                                                ) || 0;
+                                                amount =
+                                                    parseFloat(
+                                                        String(
+                                                            raw.total
+                                                                .orderAmount,
+                                                        ),
+                                                    ) || 0;
                                             } else if (
                                                 order.provider === 'takeat'
                                             ) {
@@ -2079,31 +2081,36 @@ export function DataTable({
                                                     raw?.session
                                                         ?.old_total_price
                                                 ) {
-                                                    amount = parseFloat(
-                                                        String(
-                                                            raw.session
-                                                                .old_total_price,
-                                                        ),
-                                                    ) || 0;
+                                                    amount =
+                                                        parseFloat(
+                                                            String(
+                                                                raw.session
+                                                                    .old_total_price,
+                                                            ),
+                                                        ) || 0;
                                                 } else if (
                                                     raw?.session?.total_price
                                                 ) {
-                                                    amount = parseFloat(
-                                                        String(
-                                                            raw.session
-                                                                .total_price,
-                                                        ),
-                                                    ) || 0;
+                                                    amount =
+                                                        parseFloat(
+                                                            String(
+                                                                raw.session
+                                                                    .total_price,
+                                                            ),
+                                                        ) || 0;
                                                 } else {
-                                                    amount = parseFloat(
+                                                    amount =
+                                                        parseFloat(
+                                                            order.gross_total ||
+                                                                '0',
+                                                        ) || 0;
+                                                }
+                                            } else {
+                                                amount =
+                                                    parseFloat(
                                                         order.gross_total ||
                                                             '0',
                                                     ) || 0;
-                                                }
-                                            } else {
-                                                amount = parseFloat(
-                                                    order.gross_total || '0',
-                                                ) || 0;
                                             }
                                             return sum + amount;
                                         }
@@ -2197,9 +2204,14 @@ export function DataTable({
                                                 const value =
                                                     typeof totalCosts ===
                                                     'string'
-                                                        ? (parseFloat(totalCosts) || 0)
+                                                        ? parseFloat(
+                                                              totalCosts,
+                                                          ) || 0
                                                         : totalCosts;
-                                                return sum + (isNaN(value) ? 0 : value);
+                                                return (
+                                                    sum +
+                                                    (isNaN(value) ? 0 : value)
+                                                );
                                             }
                                             return sum;
                                         }
@@ -2215,11 +2227,14 @@ export function DataTable({
                                                 const value =
                                                     typeof totalCommissions ===
                                                     'string'
-                                                        ? (parseFloat(
+                                                        ? parseFloat(
                                                               totalCommissions,
-                                                          ) || 0)
+                                                          ) || 0
                                                         : totalCommissions;
-                                                return sum + (isNaN(value) ? 0 : value);
+                                                return (
+                                                    sum +
+                                                    (isNaN(value) ? 0 : value)
+                                                );
                                             }
                                             return sum;
                                         }
@@ -2249,11 +2264,13 @@ export function DataTable({
                                             // Total líquido (mesma lógica da coluna)
                                             let orderTotal = 0;
                                             if (raw?.total?.orderAmount) {
-                                                orderTotal = parseFloat(
-                                                    String(
-                                                        raw.total.orderAmount,
-                                                    ),
-                                                ) || 0;
+                                                orderTotal =
+                                                    parseFloat(
+                                                        String(
+                                                            raw.total
+                                                                .orderAmount,
+                                                        ),
+                                                    ) || 0;
                                             } else if (
                                                 order.provider === 'takeat'
                                             ) {
@@ -2261,31 +2278,36 @@ export function DataTable({
                                                     raw?.session
                                                         ?.old_total_price
                                                 ) {
-                                                    orderTotal = parseFloat(
-                                                        String(
-                                                            raw.session
-                                                                .old_total_price,
-                                                        ),
-                                                    ) || 0;
+                                                    orderTotal =
+                                                        parseFloat(
+                                                            String(
+                                                                raw.session
+                                                                    .old_total_price,
+                                                            ),
+                                                        ) || 0;
                                                 } else if (
                                                     raw?.session?.total_price
                                                 ) {
-                                                    orderTotal = parseFloat(
-                                                        String(
-                                                            raw.session
-                                                                .total_price,
-                                                        ),
-                                                    ) || 0;
+                                                    orderTotal =
+                                                        parseFloat(
+                                                            String(
+                                                                raw.session
+                                                                    .total_price,
+                                                            ),
+                                                        ) || 0;
                                                 } else {
-                                                    orderTotal = parseFloat(
+                                                    orderTotal =
+                                                        parseFloat(
+                                                            order.gross_total ||
+                                                                '0',
+                                                        ) || 0;
+                                                }
+                                            } else {
+                                                orderTotal =
+                                                    parseFloat(
                                                         order.gross_total ||
                                                             '0',
                                                     ) || 0;
-                                                }
-                                            } else {
-                                                orderTotal = parseFloat(
-                                                    order.gross_total || '0',
-                                                ) || 0;
                                             }
 
                                             const totalCost = items.reduce(
@@ -2359,16 +2381,16 @@ export function DataTable({
                                             const extraCosts =
                                                 typeof order.total_costs ===
                                                 'string'
-                                                    ? (parseFloat(
+                                                    ? parseFloat(
                                                           order.total_costs,
-                                                      ) || 0)
+                                                      ) || 0
                                                     : (order.total_costs ?? 0);
                                             const commissions =
                                                 typeof order.total_commissions ===
                                                 'string'
-                                                    ? (parseFloat(
+                                                    ? parseFloat(
                                                           order.total_commissions,
-                                                      ) || 0)
+                                                      ) || 0
                                                     : (order.total_commissions ??
                                                       0);
 
@@ -2393,9 +2415,9 @@ export function DataTable({
                                                 deliveryFee =
                                                     typeof order.delivery_fee ===
                                                     'string'
-                                                        ? (parseFloat(
+                                                        ? parseFloat(
                                                               order.delivery_fee,
-                                                          ) || 0)
+                                                          ) || 0
                                                         : (order.delivery_fee ??
                                                           0);
 
