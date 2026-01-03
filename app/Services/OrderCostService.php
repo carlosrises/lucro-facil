@@ -185,6 +185,9 @@ class OrderCostService
             return $result;
         }
 
+        // Obter subtotal para cálculo correto das taxas
+        $subtotal = $this->getOrderSubtotal($order);
+
         // Para cada pagamento, verificar se a taxa se aplica e calcular
         foreach ($payments as $payment) {
             $paymentMethod = $payment['method'] ?? null;
@@ -201,16 +204,16 @@ class OrderCostService
                 continue;
             }
 
-            // Calcular taxa sobre o valor específico do pagamento
+            // Calcular taxa sobre o SUBTOTAL (não sobre payment_value)
+            // Para pagamentos online, payment_value exclui subsídio, mas a taxa deve ser sobre o valor total
             $calculatedValue = 0;
-            $baseForCalculation = $tax->enters_tax_base ? $taxBase : $paymentValue;
+            $baseForCalculation = $tax->enters_tax_base ? $taxBase : $subtotal;
 
             if ($tax->type === 'percentage') {
-                // Para percentual, aplicar sobre o valor do pagamento
-                $calculatedValue = ($paymentValue * $tax->value) / 100;
+                // Para percentual, aplicar sobre o subtotal
+                $calculatedValue = ($baseForCalculation * $tax->value) / 100;
             } else {
-                // Para valor fixo, dividir proporcionalmente pelo número de pagamentos aplicáveis
-                // Ou aplicar o valor fixo por pagamento (decisão de negócio)
+                // Para valor fixo
                 $calculatedValue = (float) $tax->value;
             }
 
