@@ -188,47 +188,45 @@ class OrderCostService
         // Obter subtotal para cálculo correto das taxas
         $subtotal = $this->getOrderSubtotal($order);
 
-        // Para cada pagamento, verificar se a taxa se aplica e calcular
+        // Verificar se ALGUM pagamento atende à condição (aplicar taxa UMA VEZ)
+        $matchedPayment = null;
         foreach ($payments as $payment) {
-            $paymentMethod = $payment['method'] ?? null;
-            $paymentValue = $payment['value'] ?? 0;
-            $paymentName = $payment['name'] ?? 'Pagamento';
-
-            // Pular pagamentos sem valor
-            if ($paymentValue <= 0) {
-                continue;
+            if ($this->shouldApplyTaxToPayment($tax, $payment, $order)) {
+                $matchedPayment = $payment;
+                break; // Encontrou um match, não precisa continuar
             }
+        }
 
-            // Verificar se a taxa se aplica a este método de pagamento
-            if (! $this->shouldApplyTaxToPayment($tax, $payment, $order)) {
-                continue;
-            }
+        // Se nenhum pagamento match, não aplicar taxa
+        if (!$matchedPayment) {
+            return $result;
+        }
 
-            // Calcular taxa sobre o SUBTOTAL (não sobre payment_value)
-            // Para pagamentos online, payment_value exclui subsídio, mas a taxa deve ser sobre o valor total
-            $calculatedValue = 0;
-            $baseForCalculation = $tax->enters_tax_base ? $taxBase : $subtotal;
+        // Aplicar taxa UMA VEZ sobre o subtotal
+        $paymentMethod = $matchedPayment['method'] ?? null;
+        $paymentName = $matchedPayment['name'] ?? 'Pagamento';
+        
+        $calculatedValue = 0;
+        $baseForCalculation = $tax->enters_tax_base ? $taxBase : $subtotal;
 
-            if ($tax->type === 'percentage') {
-                // Para percentual, aplicar sobre o subtotal
-                $calculatedValue = ($baseForCalculation * $tax->value) / 100;
-            } else {
-                // Para valor fixo
-                $calculatedValue = (float) $tax->value;
-            }
+        if ($tax->type === 'percentage') {
+            // Para percentual, aplicar sobre o subtotal
+            $calculatedValue = ($baseForCalculation * $tax->value) / 100;
+        } else {
+            // Para valor fixo
+            $calculatedValue = (float) $tax->value;
+        }
 
-            if ($calculatedValue > 0) {
-                $result[] = [
-                    'id' => $tax->id,
-                    'name' => "{$tax->name} ({$paymentName})",
-                    'type' => $tax->type,
-                    'value' => $tax->value,
-                    'calculated_value' => round($calculatedValue, 2),
-                    'category' => $tax->category,
-                    'payment_method' => $paymentMethod,
-                    'payment_value' => $paymentValue,
-                ];
-            }
+        if ($calculatedValue > 0) {
+            $result[] = [
+                'id' => $tax->id,
+                'name' => "{$tax->name} ({$paymentName})",
+                'type' => $tax->type,
+                'value' => $tax->value,
+                'calculated_value' => round($calculatedValue, 2),
+                'category' => $tax->category,
+                'payment_method' => $paymentMethod,
+            ];
         }
 
         return $result;
