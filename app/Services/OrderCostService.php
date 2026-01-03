@@ -198,14 +198,14 @@ class OrderCostService
         }
 
         // Se nenhum pagamento match, não aplicar taxa
-        if (!$matchedPayment) {
+        if (! $matchedPayment) {
             return $result;
         }
 
         // Aplicar taxa UMA VEZ sobre o subtotal
         $paymentMethod = $matchedPayment['method'] ?? null;
         $paymentName = $matchedPayment['name'] ?? 'Pagamento';
-        
+
         $calculatedValue = 0;
         $baseForCalculation = $tax->enters_tax_base ? $taxBase : $subtotal;
 
@@ -662,27 +662,48 @@ class OrderCostService
     /**
      * Calcula o subtotal do pedido (base para cálculos de custos, comissões e taxas)
      *
-     * Para Takeat: usa old_total_price (valor ANTES de subsídios/descontos)
-     * pois custos e comissões devem ser calculados sobre o valor real de venda
+     * Para Takeat: usa total_delivery_price (valor APÓS descontos mas ANTES de taxas)
+     * pois custos e comissões devem ser calculados sobre o valor efetivamente vendido
      *
      * Para iFood: usa orderAmount
      */
     private function getOrderSubtotal(Order $order): float
     {
         if ($order->provider === 'takeat') {
-            // Preferir old_total_price (antes de subsídios) se disponível
-            if (isset($order->raw['session']['old_total_price'])) {
-                return (float) $order->raw['session']['old_total_price'];
+            // Verificar se há subsídio (discount_total > 0)
+            $hasSubsidy = isset($order->raw['session']['discount_total']) &&
+                         (float) $order->raw['session']['discount_total'] > 0;
+
+            // Se há subsídio, somar: pago pelo cliente + subsídio do marketplace
+            if ($hasSubsidy) {
+                $totalPaid = 0;
+                $payments = $order->raw['session']['payments'] ?? [];
+
+                foreach ($payments as $payment) {
+                    $value = (float) ($payment['payment_value'] ?? 0);
+                    $totalPaid += $value;
+                }
+
+                // Total pago = cliente + subsídio = subtotal correto
+                if ($totalPaid > 0) {
+                    return $totalPaid;
+                }
             }
 
-            // Fallback para total_delivery_price (após descontos mas antes de taxas)
+            // Usar total_delivery_price (após descontos mas antes de taxas)
+            // Este é o valor efetivamente vendido (cliente + subsídio)
             if (isset($order->raw['session']['total_delivery_price'])) {
                 return (float) $order->raw['session']['total_delivery_price'];
             }
 
-            // Último fallback: total_price
+            // Fallback para total_price
             if (isset($order->raw['session']['total_price'])) {
                 return (float) $order->raw['session']['total_price'];
+            }
+
+            // Fallback para old_total_price (antes de descontos)
+            if (isset($order->raw['session']['old_total_price'])) {
+                return (float) $order->raw['session']['old_total_price'];
             }
         }
 
