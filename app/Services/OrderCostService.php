@@ -50,26 +50,9 @@ class OrderCostService
             }
         }
 
-        // Calcular base de cálculo para taxas
-        // Para Takeat: usar total_delivery_price (subtotal que inclui produtos + entrega, já com descontos aplicados)
-        // Para iFood: usar orderAmount do raw
-        // Caso contrário: usar net_total + delivery_fee
-        $baseValue = 0;
-
-        if ($order->provider === 'takeat' && isset($order->raw['session']['total_delivery_price'])) {
-            // Takeat: usar subtotal (após descontos, mas antes de taxas)
-            $baseValue = (float) $order->raw['session']['total_delivery_price'];
-        } elseif (isset($order->raw['total']['orderAmount'])) {
-            // iFood: usar orderAmount
-            $baseValue = (float) $order->raw['total']['orderAmount'];
-        } else {
-            // Fallback: net_total + delivery_fee
-            $baseValue = (float) $order->net_total;
-            if ($order->delivery_fee > 0) {
-                $baseValue += (float) $order->delivery_fee;
-            }
-        }
-
+        // Calcular subtotal (base para todos os cálculos)
+        // Usa old_total_price para Takeat (antes de subsídios) pois custos são sobre valor real de venda
+        $baseValue = $this->getOrderSubtotal($order);
         $revenueBase = $baseValue;
         $taxBase = $baseValue;
 
@@ -306,7 +289,7 @@ class OrderCostService
 
                 // Se ainda estiver vazio ou N/A, usar keyword como fallback ou 'others'
                 if (empty($method) || $method === 'N/A') {
-                    $method = !empty($keyword) ? strtoupper($keyword) : 'others';
+                    $method = ! empty($keyword) ? strtoupper($keyword) : 'others';
                 }
 
                 if ($method && $value > 0) {
@@ -606,7 +589,7 @@ class OrderCostService
                 // Se ainda estiver vazio ou N/A, usar keyword como fallback ou 'others'
                 if (empty($method) || $method === 'N/A') {
                     $keyword = $payment['payment_method']['keyword'] ?? '';
-                    $method = !empty($keyword) ? strtoupper($keyword) : 'others';
+                    $method = ! empty($keyword) ? strtoupper($keyword) : 'others';
                 }
 
                 if ($method) {
@@ -673,5 +656,46 @@ class OrderCostService
         }
 
         return $count;
+    }
+
+    /**
+     * Calcula o subtotal do pedido (base para cálculos de custos, comissões e taxas)
+     *
+     * Para Takeat: usa old_total_price (valor ANTES de subsídios/descontos)
+     * pois custos e comissões devem ser calculados sobre o valor real de venda
+     *
+     * Para iFood: usa orderAmount
+     */
+    private function getOrderSubtotal(Order $order): float
+    {
+        if ($order->provider === 'takeat') {
+            // Preferir old_total_price (antes de subsídios) se disponível
+            if (isset($order->raw['session']['old_total_price'])) {
+                return (float) $order->raw['session']['old_total_price'];
+            }
+
+            // Fallback para total_delivery_price (após descontos mas antes de taxas)
+            if (isset($order->raw['session']['total_delivery_price'])) {
+                return (float) $order->raw['session']['total_delivery_price'];
+            }
+
+            // Último fallback: total_price
+            if (isset($order->raw['session']['total_price'])) {
+                return (float) $order->raw['session']['total_price'];
+            }
+        }
+
+        // iFood direto: usar orderAmount
+        if (isset($order->raw['total']['orderAmount'])) {
+            return (float) $order->raw['total']['orderAmount'];
+        }
+
+        // Fallback genérico: net_total + delivery_fee
+        $subtotal = (float) $order->net_total;
+        if ($order->delivery_fee > 0) {
+            $subtotal += (float) $order->delivery_fee;
+        }
+
+        return $subtotal;
     }
 }
