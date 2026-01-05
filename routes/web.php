@@ -112,7 +112,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Item Triage (Triagem de Itens)
     Route::get('item-triage', [ItemTriageController::class, 'index'])->name('item-triage.index');
-    Route::get('api/item-triage/{sku}', [ItemTriageController::class, 'getItemDetails'])->name('item-triage.details');
+    Route::get('api/item-triage/{sku}', [ItemTriageController::class, 'getItemDetails'])->where('sku', '.*')->name('item-triage.details');
     Route::post('item-triage/classify', [ItemTriageController::class, 'classify'])->name('item-triage.classify');
 
     // Order Item Mappings (múltiplas associações por item)

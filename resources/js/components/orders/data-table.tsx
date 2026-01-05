@@ -35,7 +35,6 @@ import {
     IconChevronsRight,
     IconLayoutColumns,
 } from '@tabler/icons-react';
-import { Link2, Pencil } from 'lucide-react';
 import { OrderActionsCell } from './order-actions-cell';
 
 /**
@@ -213,7 +212,8 @@ export function DataTable({
                         return (
                             <div className="flex items-center gap-1">
                                 {/* Botão de associar produtos */}
-                                {unmappedCount > 0 && (
+                                {/* Temporariamente escondido - usar Triagem de Itens */}
+                                {/* {unmappedCount > 0 && (
                                     <Button
                                         variant="outline"
                                         size="icon"
@@ -229,7 +229,7 @@ export function DataTable({
                                             {unmappedCount}
                                         </span>
                                     </Button>
-                                )}
+                                )} */}
 
                                 {/* Ações do pedido (confirmar, despachar, etc) */}
                                 <OrderActionsCell
@@ -1119,7 +1119,8 @@ export function DataTable({
                                                                                                     item.name
                                                                                                 }
                                                                                             </span>
-                                                                                            <Button
+                                                                                            {/* Botão Pencil temporariamente escondido - usar Triagem de Itens */}
+                                                                                            {/* <Button
                                                                                                 size="icon"
                                                                                                 variant="ghost"
                                                                                                 className="h-6 w-6"
@@ -1134,7 +1135,7 @@ export function DataTable({
                                                                                                 title="Editar associações"
                                                                                             >
                                                                                                 <Pencil className="h-3 w-3" />
-                                                                                            </Button>
+                                                                                            </Button> */}
                                                                                         </div>
                                                                                         {(item.internal_product ||
                                                                                             (item.mappings &&
@@ -1730,6 +1731,9 @@ export function DataTable({
                                                                     .sale
                                                             }
                                                             order={row.original}
+                                                            internalProducts={
+                                                                internalProducts
+                                                            }
                                                         />
 
                                                         {/* Card: Pagamento (abaixo do detalhamento) */}

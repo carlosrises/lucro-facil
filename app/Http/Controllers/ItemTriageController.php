@@ -238,6 +238,7 @@ class ItemTriageController extends Controller
                 ->get();
 
             $matchingOrders = collect();
+            $orderIds = collect();
 
             foreach ($orderItemsWithAddOn as $orderItem) {
                 $addOns = $orderItem->add_ons;
@@ -247,54 +248,98 @@ class ItemTriageController extends Controller
                         $addOnSku = 'addon_' . md5($addOnName);
 
                         if ($addOnSku === $sku) {
-                            $order = Order::where('id', $orderItem->order_id)->first();
-                            if ($order) {
-                                $matchingOrders->push([
-                                    'id' => $order->id,
-                                    'code' => $order->code,
-                                    'short_reference' => $order->short_reference,
-                                    'placed_at' => $order->placed_at,
-                                    'gross_total' => $order->gross_total,
-                                    'qty' => $addOn['quantity'] ?? 1,
-                                    'unit_price' => 0,
-                                    'total' => 0,
-                                ]);
-                            }
+                            $orderIds->push($orderItem->order_id);
                         }
                     }
                 }
             }
 
-            $recentOrders = $matchingOrders
+            $orderIds = $orderIds->unique()->take(10);
+
+            $recentOrders = Order::whereIn('id', $orderIds)
+                ->where('tenant_id', $tenantId)
+                ->with(['items'])
+                ->orderByDesc('placed_at')
+                ->get()
+                ->map(function($order) {
+                    return [
+                        'id' => $order->id,
+                        'code' => $order->code,
+                        'short_reference' => $order->short_reference,
+                        'placed_at' => $order->placed_at,
+                        'gross_total' => $order->gross_total,
+                        'items' => $order->items->map(function($item) {
+                            return [
+                                'id' => $item->id,
+                                'name' => $item->name,
+                                'sku' => $item->sku,
+                                'qty' => $item->qty ?? $item->quantity ?? 1,
+                                'unit_price' => $item->unit_price,
+                                'total' => $item->total,
+                                'add_ons' => $item->add_ons ?? [],
+                            ];
+                        })->toArray(),
+                    ];
+                })
                 ->sortByDesc('placed_at')
-                ->take(10)
                 ->values();
 
             return response()->json([
                 'recent_orders' => $recentOrders,
+                'total_orders' => $orderIds->count(),
             ]);
         }
 
-        // Buscar pedidos recentes com este item (item principal)
-        $recentOrders = Order::where('orders.tenant_id', $tenantId)
+        // Buscar total de pedidos com este item
+        $totalOrders = Order::where('orders.tenant_id', $tenantId)
             ->join('order_items', 'orders.id', '=', 'order_items.order_id')
             ->where('order_items.sku', $sku)
-            ->select(
-                'orders.id',
-                'orders.code',
-                'orders.short_reference',
-                'orders.placed_at',
-                'orders.gross_total',
-                'order_items.qty',
-                'order_items.unit_price',
-                'order_items.total'
-            )
+            ->distinct()
+            ->count('orders.id');
+
+        // Buscar pedidos recentes com este item (agrupar por pedido)
+        $orderIds = Order::where('orders.tenant_id', $tenantId)
+            ->join('order_items', 'orders.id', '=', 'order_items.order_id')
+            ->where('order_items.sku', $sku)
+            ->select('orders.id', 'orders.placed_at')
+            ->distinct()
             ->orderByDesc('orders.placed_at')
             ->limit(10)
-            ->get();
+            ->pluck('orders.id');
+
+        \Log::info('Order IDs found:', ['sku' => $sku, 'count' => $orderIds->count(), 'ids' => $orderIds->toArray()]);
+
+        $recentOrders = Order::where('tenant_id', $tenantId)
+            ->whereIn('id', $orderIds)
+            ->with(['items'])
+            ->orderByDesc('placed_at')
+            ->get()
+            ->map(function($order) {
+                return [
+                    'id' => $order->id,
+                    'code' => $order->code,
+                    'short_reference' => $order->short_reference,
+                    'placed_at' => $order->placed_at,
+                    'gross_total' => $order->gross_total,
+                    'items' => $order->items->map(function($item) {
+                        return [
+                            'id' => $item->id,
+                            'name' => $item->name,
+                            'sku' => $item->sku,
+                            'qty' => $item->qty ?? $item->quantity ?? 1,
+                            'unit_price' => $item->unit_price,
+                            'total' => $item->total,
+                            'add_ons' => $item->add_ons ?? [],
+                        ];
+                    })->toArray(),
+                ];
+            })
+            ->sortByDesc('placed_at')
+            ->values();
 
         return response()->json([
             'recent_orders' => $recentOrders,
+            'total_orders' => $totalOrders,
         ]);
     }
 
@@ -303,7 +348,7 @@ class ItemTriageController extends Controller
         $validated = $request->validate([
             'sku' => 'required|string',
             'name' => 'required|string',
-            'item_type' => 'required|in:flavor,beverage,complement,parent_product,additional,combo',
+            'item_type' => 'required|in:flavor,beverage,complement,parent_product,optional,combo,side,dessert',
             'internal_product_id' => 'nullable|exists:internal_products,id',
         ]);
 

@@ -468,9 +468,33 @@ export const columns: ColumnDef<Order>[] = [
         cell: ({ row }) => {
             const items = row.original.items || [];
 
-            // Calcular soma dos custos dos produtos associados
+            // Calcular soma dos custos dos produtos associados + add-ons
             const totalCost = items.reduce((sum, item) => {
-                return sum + calculateItemCost(item);
+                // Custo do item principal
+                let itemCost = calculateItemCost(item);
+
+                // Somar custo dos add-ons vinculados
+                if (
+                    item.add_ons_enriched &&
+                    Array.isArray(item.add_ons_enriched)
+                ) {
+                    const addOnsCost = item.add_ons_enriched.reduce(
+                        (addOnSum: number, addOn: any) => {
+                            const addonCost = addOn.product_mapping
+                                ?.internal_product?.unit_cost
+                                ? parseFloat(
+                                      addOn.product_mapping.internal_product
+                                          .unit_cost,
+                                  )
+                                : 0;
+                            return addOnSum + addonCost;
+                        },
+                        0,
+                    );
+                    itemCost += addOnsCost;
+                }
+
+                return sum + itemCost;
             }, 0);
 
             const isCancelled = row.original.status === 'CANCELLED';

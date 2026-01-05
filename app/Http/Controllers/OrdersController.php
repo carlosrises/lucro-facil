@@ -139,15 +139,22 @@ class OrdersController extends Controller
                         // Buscar ProductMapping do add-on
                         $mapping = \App\Models\ProductMapping::where('external_item_id', $addOnSku)
                             ->where('tenant_id', tenant_id())
+                            ->with('internalProduct:id,name,unit_cost')
                             ->first();
 
                         $addOnsWithMappings[] = [
                             'name' => $addOnName,
                             'sku' => $addOnSku,
+                            'external_code' => $addOnSku,
                             'product_mapping' => $mapping ? [
                                 'id' => $mapping->id,
                                 'item_type' => $mapping->item_type,
                                 'internal_product_id' => $mapping->internal_product_id,
+                                'internal_product' => $mapping->internalProduct ? [
+                                    'id' => $mapping->internalProduct->id,
+                                    'name' => $mapping->internalProduct->name,
+                                    'unit_cost' => $mapping->internalProduct->unit_cost,
+                                ] : null,
                             ] : null,
                         ];
                     }

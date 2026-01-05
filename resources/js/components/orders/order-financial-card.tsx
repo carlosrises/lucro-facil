@@ -21,14 +21,17 @@ import {
     Check,
     CupSoda,
     DollarSign,
+    IceCream2,
     Layers,
     Package,
     Pizza,
     Plus,
     Plus as PlusIcon,
+    UtensilsCrossed,
 } from 'lucide-react';
 import { useState } from 'react';
 import { CreatePaymentFeeDialog } from './create-payment-fee-dialog';
+import { QuickLinkDialog } from './quick-link-dialog';
 
 /**
  * Calcula o custo de um item considerando múltiplas associações
@@ -91,12 +94,24 @@ type OrderFinancialCardProps = {
     order?: Order;
 };
 
-export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
+export function OrderFinancialCard({
+    sale,
+    order,
+    internalProducts = [],
+}: OrderFinancialCardProps) {
     // Estado para controlar o dialog de criação de taxa
     const [isCreateFeeDialogOpen, setIsCreateFeeDialogOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState<{
         method: string;
         name: string;
+    } | null>(null);
+
+    // Estado para controlar o dialog de vinculação rápida
+    const [isQuickLinkDialogOpen, setIsQuickLinkDialogOpen] = useState(false);
+    const [selectedItemToLink, setSelectedItemToLink] = useState<{
+        sku?: string;
+        name: string;
+        occurrences?: number;
     } | null>(null);
 
     // Função helper para calcular todos os valores financeiros
@@ -228,12 +243,32 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
             subtotal += totalSubsidy + deliveryFee;
         }
 
-        // CMV (custo dos produtos)
+        // CMV (custo dos produtos + add-ons)
         const items = order?.items || [];
-        const cmv = items.reduce(
-            (sum: number, item: OrderItem) => sum + calculateItemCost(item),
-            0,
-        );
+        const cmv = items.reduce((sum: number, item: OrderItem) => {
+            // Custo do item principal
+            let itemTotal = calculateItemCost(item);
+
+            // Somar custo dos add-ons vinculados
+            if (item.add_ons_enriched && Array.isArray(item.add_ons_enriched)) {
+                const addOnsCost = item.add_ons_enriched.reduce(
+                    (addOnSum: number, addOn: any) => {
+                        const addonCost = addOn.product_mapping
+                            ?.internal_product?.unit_cost
+                            ? parseFloat(
+                                  addOn.product_mapping.internal_product
+                                      .unit_cost,
+                              )
+                            : 0;
+                        return addOnSum + addonCost;
+                    },
+                    0,
+                );
+                itemTotal += addOnsCost;
+            }
+
+            return sum + itemTotal;
+        }, 0);
 
         // Impostos dos produtos
         const productTax = items.reduce((sum: number, item: OrderItem) => {
@@ -583,8 +618,10 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                         {/* Detalhamento dos custos por produto */}
                                         <ul className="flex w-full flex-col items-center justify-between pl-0">
                                             {items.map((item: OrderItem) => {
+                                                // Custo apenas do item principal (add-ons são listados separadamente abaixo)
                                                 const itemTotalCost =
                                                     calculateItemCost(item);
+
                                                 const quantity =
                                                     item.qty ||
                                                     item.quantity ||
@@ -640,7 +677,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                                 className:
                                                                     'text-orange-500',
                                                             };
-                                                        case 'additional':
+                                                        case 'optional':
                                                             return {
                                                                 Icon: Layers,
                                                                 className:
@@ -651,6 +688,18 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                                 Icon: Box,
                                                                 className:
                                                                     'text-pink-500',
+                                                            };
+                                                        case 'side':
+                                                            return {
+                                                                Icon: UtensilsCrossed,
+                                                                className:
+                                                                    'text-teal-500',
+                                                            };
+                                                        case 'dessert':
+                                                            return {
+                                                                Icon: IceCream2,
+                                                                className:
+                                                                    'text-rose-500',
                                                             };
                                                         default:
                                                             return {
@@ -746,6 +795,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                                                 {
                                                                                     quantity
                                                                                 }
+
                                                                                 x{' '}
                                                                                 {
                                                                                     item.name
@@ -768,8 +818,33 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                                         )}
                                                                     </Tooltip>
                                                                 </TooltipProvider>
-                                                                {hasAnyMapping && (
+                                                                {hasAnyMapping ? (
                                                                     <Check className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                                                                ) : (
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        className="h-5 w-5 p-0 hover:bg-green-100"
+                                                                        onClick={(
+                                                                            e,
+                                                                        ) => {
+                                                                            e.stopPropagation();
+                                                                            setSelectedItemToLink(
+                                                                                {
+                                                                                    sku:
+                                                                                        item.sku ||
+                                                                                        item.external_code,
+                                                                                    name: item.name,
+                                                                                    occurrences: 1,
+                                                                                },
+                                                                            );
+                                                                            setIsQuickLinkDialogOpen(
+                                                                                true,
+                                                                            );
+                                                                        }}
+                                                                    >
+                                                                        <Check className="h-3.5 w-3.5 text-muted-foreground hover:text-green-600" />
+                                                                    </Button>
                                                                 )}
                                                             </div>
                                                             <span className="text-xs leading-4 font-medium whitespace-nowrap text-muted-foreground">
@@ -840,7 +915,7 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                                                             className:
                                                                                                 'text-orange-500',
                                                                                         };
-                                                                                    case 'additional':
+                                                                                    case 'optional':
                                                                                         return {
                                                                                             Icon: Layers,
                                                                                             className:
@@ -851,6 +926,18 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                                                             Icon: Box,
                                                                                             className:
                                                                                                 'text-pink-500',
+                                                                                        };
+                                                                                    case 'side':
+                                                                                        return {
+                                                                                            Icon: UtensilsCrossed,
+                                                                                            className:
+                                                                                                'text-teal-500',
+                                                                                        };
+                                                                                    case 'dessert':
+                                                                                        return {
+                                                                                            Icon: IceCream2,
+                                                                                            className:
+                                                                                                'text-rose-500',
                                                                                         };
                                                                                     default:
                                                                                         return {
@@ -869,6 +956,20 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                                             getAddonIcon();
                                                                         const hasMapping =
                                                                             !!addOn.product_mapping;
+
+                                                                        // Calcular custo do add-on
+                                                                        const addonCost =
+                                                                            addOn
+                                                                                .product_mapping
+                                                                                ?.internal_product
+                                                                                ?.unit_cost
+                                                                                ? parseFloat(
+                                                                                      addOn
+                                                                                          .product_mapping
+                                                                                          .internal_product
+                                                                                          .unit_cost,
+                                                                                  )
+                                                                                : 0;
 
                                                                         return (
                                                                             <li
@@ -891,13 +992,38 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                                                                             addOn.name
                                                                                         }
                                                                                     </span>
-                                                                                    {hasMapping && (
+                                                                                    {hasMapping ? (
                                                                                         <Check className="h-3 w-3 shrink-0 text-green-600" />
+                                                                                    ) : (
+                                                                                        <Button
+                                                                                            variant="ghost"
+                                                                                            size="sm"
+                                                                                            className="h-4 w-4 p-0 hover:bg-green-100"
+                                                                                            onClick={(
+                                                                                                e,
+                                                                                            ) => {
+                                                                                                e.stopPropagation();
+                                                                                                setSelectedItemToLink(
+                                                                                                    {
+                                                                                                        sku:
+                                                                                                            addOn.sku ||
+                                                                                                            addOn.external_code,
+                                                                                                        name: addOn.name,
+                                                                                                        occurrences: 1,
+                                                                                                    },
+                                                                                                );
+                                                                                                setIsQuickLinkDialogOpen(
+                                                                                                    true,
+                                                                                                );
+                                                                                            }}
+                                                                                        >
+                                                                                            <Check className="h-3 w-3 text-muted-foreground hover:text-green-600" />
+                                                                                        </Button>
                                                                                     )}
                                                                                 </div>
                                                                                 <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground/70">
                                                                                     {formatCurrency(
-                                                                                        0,
+                                                                                        addonCost,
                                                                                     )}
                                                                                 </span>
                                                                             </li>
@@ -1355,6 +1481,14 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                         origin={order.origin}
                     />
                 )}
+
+                {/* Dialog de vinculação rápida */}
+                <QuickLinkDialog
+                    open={isQuickLinkDialogOpen}
+                    onOpenChange={setIsQuickLinkDialogOpen}
+                    item={selectedItemToLink}
+                    internalProducts={internalProducts}
+                />
             </>
         );
     }

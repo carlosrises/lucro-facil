@@ -14,12 +14,16 @@ import type { BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
 import {
     Box,
-    Coffee,
+    ChevronDown,
+    ChevronUp,
+    CupSoda,
+    IceCream2,
     Layers,
     Package,
     Pizza,
     Plus,
     Search,
+    UtensilsCrossed,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -54,9 +58,18 @@ interface RecentOrder {
     short_reference: string;
     placed_at: string;
     gross_total: number;
-    qty: number;
-    unit_price: number;
-    total: number;
+    items: Array<{
+        id: number;
+        name: string;
+        sku: string;
+        qty: number;
+        unit_price: number;
+        total: number;
+        add_ons: Array<{
+            name: string;
+            quantity?: number;
+        }>;
+    }>;
 }
 
 interface ItemTriageProps {
@@ -85,7 +98,7 @@ const itemTypes = [
     {
         value: 'beverage',
         label: 'Bebida',
-        icon: Coffee,
+        icon: CupSoda,
         color: 'bg-blue-100 text-blue-900',
     },
     {
@@ -101,8 +114,8 @@ const itemTypes = [
         color: 'bg-orange-100 text-orange-900',
     },
     {
-        value: 'additional',
-        label: 'Adicional',
+        value: 'optional',
+        label: 'Opcional',
         icon: Layers,
         color: 'bg-yellow-100 text-yellow-900',
     },
@@ -111,6 +124,18 @@ const itemTypes = [
         label: 'Combo',
         icon: Box,
         color: 'bg-pink-100 text-pink-900',
+    },
+    {
+        value: 'side',
+        label: 'Acompanhamento',
+        icon: UtensilsCrossed,
+        color: 'bg-teal-100 text-teal-900',
+    },
+    {
+        value: 'dessert',
+        label: 'Sobremesa',
+        icon: IceCream2,
+        color: 'bg-rose-100 text-rose-900',
     },
 ];
 
@@ -128,6 +153,10 @@ export default function ItemTriage({
     const [status, setStatus] = useState(filters.status);
     const [itemType, setItemType] = useState(filters.item_type);
     const [linkStatus, setLinkStatus] = useState(filters.link_status);
+    const [isOrdersExpanded, setIsOrdersExpanded] = useState(true);
+    const [expandedOrderIds, setExpandedOrderIds] = useState<Set<number>>(
+        new Set(),
+    );
     const [lastClassifiedType, setLastClassifiedType] = useState<string>('');
     const classifyButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -194,11 +223,23 @@ export default function ItemTriage({
         setSelectedProduct(item.mapping?.internal_product_id?.toString() || '');
 
         try {
-            const response = await fetch(`/api/item-triage/${item.sku}`);
+            const response = await fetch(
+                `/api/item-triage/${encodeURIComponent(item.sku)}`,
+            );
+
+            if (!response.ok) {
+                const text = await response.text();
+                console.error('Response error:', response.status, text);
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
             const data = await response.json();
-            setRecentOrders(data.recent_orders);
+            console.log('Response data:', data);
+            console.log('Recent orders:', data.recent_orders);
+            setRecentOrders(data.recent_orders || []);
         } catch (error) {
             console.error('Erro ao buscar pedidos:', error);
+            setRecentOrders([]);
         }
     };
 
@@ -657,42 +698,197 @@ export default function ItemTriage({
                                             <div className="flex flex-col gap-6">
                                                 {/* Pedidos recentes */}
                                                 <div>
-                                                    <h3 className="mb-2 text-sm font-medium">
-                                                        Pedidos recentes (
-                                                        {recentOrders.length})
-                                                    </h3>
-                                                    <div className="space-y-2">
-                                                        {recentOrders.map(
-                                                            (order) => (
-                                                                <div
-                                                                    key={
-                                                                        order.id
-                                                                    }
-                                                                    className="flex items-center justify-between rounded-md border p-2 text-sm"
-                                                                >
-                                                                    <div>
-                                                                        <div className="font-medium">
-                                                                            #
-                                                                            {
-                                                                                order.short_reference
+                                                    <button
+                                                        onClick={() =>
+                                                            setIsOrdersExpanded(
+                                                                !isOrdersExpanded,
+                                                            )
+                                                        }
+                                                        className="mb-2 flex w-full items-center justify-between text-sm font-medium hover:opacity-70"
+                                                    >
+                                                        <span>
+                                                            Pedidos recentes (
+                                                            {
+                                                                recentOrders.length
+                                                            }
+                                                            )
+                                                        </span>
+                                                        {isOrdersExpanded ? (
+                                                            <ChevronUp className="h-4 w-4" />
+                                                        ) : (
+                                                            <ChevronDown className="h-4 w-4" />
+                                                        )}
+                                                    </button>
+                                                    {isOrdersExpanded && (
+                                                        <div className="space-y-2">
+                                                            {recentOrders.map(
+                                                                (order) => {
+                                                                    const isExpanded =
+                                                                        expandedOrderIds.has(
+                                                                            order.id,
+                                                                        );
+                                                                    const totalItems =
+                                                                        order.items.reduce(
+                                                                            (
+                                                                                sum,
+                                                                                item,
+                                                                            ) =>
+                                                                                sum +
+                                                                                item.qty,
+                                                                            0,
+                                                                        );
+                                                                    return (
+                                                                        <div
+                                                                            key={
+                                                                                order.id
                                                                             }
-                                                                        </div>
-                                                                        <div className="text-xs text-muted-foreground">
-                                                                            {formatDate(
-                                                                                order.placed_at,
+                                                                            className="rounded-md border"
+                                                                        >
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    const newSet =
+                                                                                        new Set(
+                                                                                            expandedOrderIds,
+                                                                                        );
+                                                                                    if (
+                                                                                        isExpanded
+                                                                                    ) {
+                                                                                        newSet.delete(
+                                                                                            order.id,
+                                                                                        );
+                                                                                    } else {
+                                                                                        newSet.add(
+                                                                                            order.id,
+                                                                                        );
+                                                                                    }
+                                                                                    setExpandedOrderIds(
+                                                                                        newSet,
+                                                                                    );
+                                                                                }}
+                                                                                className="flex w-full items-center justify-between p-2 text-sm hover:bg-accent"
+                                                                            >
+                                                                                <div className="flex items-center gap-2">
+                                                                                    {isExpanded ? (
+                                                                                        <ChevronUp className="h-3.5 w-3.5" />
+                                                                                    ) : (
+                                                                                        <ChevronDown className="h-3.5 w-3.5" />
+                                                                                    )}
+                                                                                    <div>
+                                                                                        <div className="font-medium">
+                                                                                            #
+                                                                                            {
+                                                                                                order.short_reference
+                                                                                            }
+                                                                                        </div>
+                                                                                        <div className="text-xs text-muted-foreground">
+                                                                                            {formatDate(
+                                                                                                order.placed_at,
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <Badge variant="outline">
+                                                                                        {
+                                                                                            totalItems
+                                                                                        }{' '}
+                                                                                        {totalItems ===
+                                                                                        1
+                                                                                            ? 'item'
+                                                                                            : 'itens'}
+                                                                                    </Badge>
+                                                                                    <span className="text-xs text-muted-foreground">
+                                                                                        {new Intl.NumberFormat(
+                                                                                            'pt-BR',
+                                                                                            {
+                                                                                                style: 'currency',
+                                                                                                currency:
+                                                                                                    'BRL',
+                                                                                            },
+                                                                                        ).format(
+                                                                                            order.gross_total,
+                                                                                        )}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </button>
+                                                                            {isExpanded && (
+                                                                                <div className="border-t bg-muted/30 p-3">
+                                                                                    <div className="space-y-2">
+                                                                                        {order.items.map(
+                                                                                            (
+                                                                                                item,
+                                                                                            ) => (
+                                                                                                <div
+                                                                                                    key={
+                                                                                                        item.id
+                                                                                                    }
+                                                                                                    className="text-xs"
+                                                                                                >
+                                                                                                    <div className="flex items-start gap-1">
+                                                                                                        <span className="font-medium text-muted-foreground">
+                                                                                                            {
+                                                                                                                item.qty
+                                                                                                            }
+                                                                                                            x
+                                                                                                        </span>
+                                                                                                        <span className="flex-1">
+                                                                                                            {
+                                                                                                                item.name
+                                                                                                            }
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    {item.add_ons &&
+                                                                                                        item
+                                                                                                            .add_ons
+                                                                                                            .length >
+                                                                                                            0 && (
+                                                                                                            <div className="mt-1 ml-4 space-y-0.5">
+                                                                                                                {item.add_ons.map(
+                                                                                                                    (
+                                                                                                                        addon,
+                                                                                                                        addonIdx,
+                                                                                                                    ) => {
+                                                                                                                        const isLast =
+                                                                                                                            addonIdx ===
+                                                                                                                            item
+                                                                                                                                .add_ons
+                                                                                                                                .length -
+                                                                                                                                1;
+                                                                                                                        return (
+                                                                                                                            <div
+                                                                                                                                key={
+                                                                                                                                    addonIdx
+                                                                                                                                }
+                                                                                                                                className="flex items-start gap-1 text-muted-foreground"
+                                                                                                                            >
+                                                                                                                                <span className="font-mono">
+                                                                                                                                    {isLast
+                                                                                                                                        ? '└'
+                                                                                                                                        : '├'}
+                                                                                                                                </span>
+                                                                                                                                <span>
+                                                                                                                                    {
+                                                                                                                                        addon.name
+                                                                                                                                    }
+                                                                                                                                </span>
+                                                                                                                            </div>
+                                                                                                                        );
+                                                                                                                    },
+                                                                                                                )}
+                                                                                                            </div>
+                                                                                                        )}
+                                                                                                </div>
+                                                                                            ),
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
                                                                             )}
                                                                         </div>
-                                                                    </div>
-                                                                    <Badge variant="outline">
-                                                                        {
-                                                                            order.qty
-                                                                        }
-                                                                        x
-                                                                    </Badge>
-                                                                </div>
-                                                            ),
-                                                        )}
-                                                    </div>
+                                                                    );
+                                                                },
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 {/* Classificar como */}
