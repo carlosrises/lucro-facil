@@ -53,6 +53,11 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
         href: orders(),
         icon: ChartBarBig,
     },
+    {
+        title: 'Triagem de Itens',
+        href: '/item-triage',
+        icon: ClipboardList,
+    },
     // {
     //     title: 'Vendas',
     //     href: sales(),
