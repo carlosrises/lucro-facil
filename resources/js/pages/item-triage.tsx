@@ -79,6 +79,7 @@ interface ItemTriageProps {
         total_items: number;
         pending_items: number;
         classified_items: number;
+        classified_without_product: number;
     };
     filters: {
         search: string;
@@ -204,6 +205,29 @@ export default function ItemTriage({
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [selectedItem, selectedType, selectedProduct]);
 
+    // Busca automática com debounce
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (search !== filters.search) {
+                router.get(
+                    '/item-triage',
+                    {
+                        search,
+                        status,
+                        item_type: itemType,
+                        link_status: linkStatus,
+                    },
+                    {
+                        preserveState: true,
+                        preserveScroll: true,
+                    },
+                );
+            }
+        }, 500); // 500ms de delay
+
+        return () => clearTimeout(timer);
+    }, [search]);
+
     // Buscar detalhes do item ao selecionar
     const handleSelectItem = async (item: Item) => {
         setSelectedItem(item);
@@ -313,14 +337,6 @@ export default function ItemTriage({
     };
 
     // Aplicar filtros
-    const handleFilter = () => {
-        router.get(
-            '/item-triage',
-            { search, status, item_type: itemType, link_status: linkStatus },
-            { preserveState: true, preserveScroll: true },
-        );
-    };
-
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('pt-BR', {
             style: 'currency',
@@ -358,7 +374,7 @@ export default function ItemTriage({
                                 </div>
 
                                 {/* Estatísticas */}
-                                <div className="grid gap-4 md:grid-cols-3">
+                                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
                                     <Card>
                                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                             <CardTitle className="text-sm font-medium">
@@ -395,6 +411,42 @@ export default function ItemTriage({
                                             </div>
                                         </CardContent>
                                     </Card>
+                                    <Card
+                                        className="cursor-pointer transition-colors hover:border-blue-500"
+                                        onClick={() => {
+                                            router.get(
+                                                '/item-triage',
+                                                {
+                                                    ...filters,
+                                                    link_status:
+                                                        linkStatus ===
+                                                        'no_product'
+                                                            ? ''
+                                                            : 'no_product',
+                                                },
+                                                {
+                                                    preserveState: true,
+                                                    preserveScroll: true,
+                                                },
+                                            );
+                                        }}
+                                    >
+                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                            <CardTitle className="text-sm font-medium">
+                                                Sem Produto Vinculado
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <div className="text-2xl font-bold text-blue-600">
+                                                {stats.classified_without_product}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {linkStatus === 'no_product'
+                                                    ? 'Clique para ver todos'
+                                                    : 'Clique para filtrar'}
+                                            </p>
+                                        </CardContent>
+                                    </Card>
                                 </div>
 
                                 {/* Filtros */}
@@ -408,20 +460,9 @@ export default function ItemTriage({
                                                 onChange={(e) =>
                                                     setSearch(e.target.value)
                                                 }
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        handleFilter();
-                                                    }
-                                                }}
                                                 className="pl-8"
                                             />
                                         </div>
-                                        <Button
-                                            onClick={handleFilter}
-                                            variant="secondary"
-                                        >
-                                            Filtrar
-                                        </Button>
                                     </div>
                                     <div className="flex gap-2">
                                         <Select

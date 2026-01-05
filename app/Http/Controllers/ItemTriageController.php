@@ -173,6 +173,12 @@ class ItemTriageController extends Controller
             $allItems = $allItems->filter(fn($item) => ($item['mapping']['internal_product_id'] ?? null) !== null);
         } elseif ($linkStatus === 'unlinked') {
             $allItems = $allItems->filter(fn($item) => ($item['mapping']['internal_product_id'] ?? null) === null);
+        } elseif ($linkStatus === 'no_product') {
+            // Classificados mas sem produto interno vinculado
+            $allItems = $allItems->filter(fn($item) => 
+                $item['mapping'] !== null && 
+                ($item['mapping']['internal_product_id'] ?? null) === null
+            );
         }
 
         // Ordenar por número de pedidos
@@ -201,11 +207,17 @@ class ItemTriageController extends Controller
             ->count();
 
         $totalClassifiedMappings = ProductMapping::where('tenant_id', $tenantId)->count();
+        
+        // Itens classificados mas sem produto interno vinculado
+        $classifiedWithoutProduct = ProductMapping::where('tenant_id', $tenantId)
+            ->whereNull('internal_product_id')
+            ->count();
 
         $stats = [
             'total_items' => $totalMainItems + $allAddOns,
             'pending_items' => ($totalMainItems + $allAddOns) - $totalClassifiedMappings,
             'classified_items' => $totalClassifiedMappings,
+            'classified_without_product' => $classifiedWithoutProduct,
         ];
 
         return Inertia::render('item-triage', [
