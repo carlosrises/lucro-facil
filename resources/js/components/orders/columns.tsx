@@ -74,6 +74,17 @@ export type OrderItem = {
     qty?: number;
     price: number;
     unit_price?: number;
+    total_cost?: number; // Custo total calculado pelo backend
+    add_ons?: any[]; // Add-ons originais
+    add_ons_enriched?: Array<{
+        name: string;
+        sku: string;
+        product_mapping?: {
+            id: number;
+            item_type: string | null;
+            internal_product_id: number | null;
+        } | null;
+    }>; // Add-ons com ProductMapping
     internal_product?: {
         id: number;
         name: string;
@@ -84,6 +95,11 @@ export type OrderItem = {
             name: string;
             total_tax_rate: number;
         };
+    };
+    product_mapping?: {
+        id: number;
+        item_type: string | null;
+        internal_product_id: number | null;
     };
     mappings?: OrderItemMapping[]; // Novo: múltiplas associações
 };

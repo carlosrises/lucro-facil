@@ -39,7 +39,7 @@ class ProductMappingController extends Controller
         // Filtro por status de mapeamento
         $mappingStatus = $request->get('mapping_status', 'all');
 
-        $externalItems = $query->get()->map(function ($item) use ($tenantId, $mappingStatus) {
+        $externalItems = $query->get()->map(function ($item) use ($tenantId) {
             // Buscar mapeamento existente
             $mapping = ProductMapping::where('tenant_id', $tenantId)
                 ->where('external_item_id', $item->sku)
@@ -62,9 +62,9 @@ class ProductMappingController extends Controller
 
         // Aplicar filtro de status de mapeamento
         if ($mappingStatus === 'mapped') {
-            $externalItems = $externalItems->filter(fn($item) => $item['mapped']);
+            $externalItems = $externalItems->filter(fn ($item) => $item['mapped']);
         } elseif ($mappingStatus === 'unmapped') {
-            $externalItems = $externalItems->filter(fn($item) => !$item['mapped']);
+            $externalItems = $externalItems->filter(fn ($item) => ! $item['mapped']);
         }
 
         return Inertia::render('product-mappings', [
@@ -112,7 +112,14 @@ class ProductMappingController extends Controller
         ]);
 
         // Aplicar retroativamente a todos os pedidos históricos
-        $this->applyMappingToHistoricalOrders($mapping, $tenantId);
+        try {
+            $this->applyMappingToHistoricalOrders($mapping, $tenantId);
+        } catch (\Exception $e) {
+            logger()->error('❌ Erro ao aplicar mapeamento histórico', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
 
         return back()->with('success', 'Mapeamento criado e aplicado aos pedidos históricos com sucesso!');
     }
@@ -147,6 +154,26 @@ class ProductMappingController extends Controller
      */
     private function applyMappingToHistoricalOrders(ProductMapping $mapping, int $tenantId): void
     {
+        // Log para debug
+        logger()->info('🔍 Iniciando aplicação de mapeamento histórico', [
+            'tenant_id' => $tenantId,
+            'mapping_id' => $mapping->id,
+            'external_item_id' => $mapping->external_item_id,
+            'external_item_name' => $mapping->external_item_name,
+            'internal_product_id' => $mapping->internal_product_id,
+        ]);
+
+        // Buscar TODOS os OrderItems com este SKU para debug
+        $allItemsWithSku = OrderItem::where('tenant_id', $tenantId)
+            ->where('sku', $mapping->external_item_id)
+            ->get();
+
+        logger()->info('📊 OrderItems encontrados com este SKU', [
+            'sku' => $mapping->external_item_id,
+            'total_items' => $allItemsWithSku->count(),
+            'order_ids' => $allItemsWithSku->pluck('order_id')->unique()->values()->toArray(),
+        ]);
+
         // Buscar todos os OrderItems que têm o SKU mapeado e ainda não têm mapping principal
         $orderItems = OrderItem::where('tenant_id', $tenantId)
             ->where('sku', $mapping->external_item_id)
@@ -154,6 +181,11 @@ class ProductMappingController extends Controller
                 $q->where('mapping_type', 'main');
             })
             ->get();
+
+        logger()->info('📋 OrderItems sem mapeamento principal', [
+            'total_unmapped' => $orderItems->count(),
+            'order_ids' => $orderItems->pluck('order_id')->unique()->values()->toArray(),
+        ]);
 
         $mappedCount = 0;
 
@@ -189,7 +221,7 @@ class ProductMappingController extends Controller
                         ->where('external_reference', (string) $index)
                         ->first();
 
-                    if (!$existingAddonMapping) {
+                    if (! $existingAddonMapping) {
                         // Detectar se é sabor de pizza
                         $isPizzaFlavor = stripos($addOn['name'] ?? '', 'pizza') !== false
                             || stripos($mapping->external_item_name ?? '', 'pizza') !== false;
@@ -217,7 +249,10 @@ class ProductMappingController extends Controller
             'mapping_id' => $mapping->id,
             'external_item_id' => $mapping->external_item_id,
             'internal_product_id' => $mapping->internal_product_id,
+            'total_items_with_sku' => $allItemsWithSku->count(),
+            'items_without_mapping' => $orderItems->count(),
             'order_items_mapped' => $mappedCount,
+            'affected_orders' => $orderItems->pluck('order_id')->unique()->count(),
         ]);
     }
 }

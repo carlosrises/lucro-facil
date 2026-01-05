@@ -42,6 +42,12 @@ import { OrderActionsCell } from './order-actions-cell';
  * Calcula o custo de um item considerando múltiplas associações
  */
 function calculateItemCost(item: any): number {
+    // Prioridade 1: Usar total_cost calculado pelo backend (mais confiável)
+    if (item.total_cost !== undefined && item.total_cost !== null) {
+        return parseFloat(String(item.total_cost));
+    }
+
+    // Prioridade 2: Calcular no frontend (fallback)
     const itemQuantity = item.qty || item.quantity || 0;
 
     // Novo sistema: usar mappings se existir
@@ -1092,11 +1098,10 @@ export function DataTable({
                                                                         return displayItems.map(
                                                                             (
                                                                                 item: any,
+                                                                                index: number,
                                                                             ) => (
                                                                                 <li
-                                                                                    key={
-                                                                                        item.id
-                                                                                    }
+                                                                                    key={`${item.id}-${index}`}
                                                                                     className="flex flex-wrap items-center gap-2 px-3 py-2"
                                                                                 >
                                                                                     {/* Produto principal (1º nível) */}

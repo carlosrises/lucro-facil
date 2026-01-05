@@ -17,6 +17,10 @@ class OrderItem extends Model
         'add_ons' => 'array',
     ];
 
+    protected $appends = [
+        'total_cost', // Adicionar custo calculado aos atributos serializados
+    ];
+
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
@@ -36,6 +40,14 @@ class OrderItem extends Model
             'sku', // Local key on order_items table
             'internal_product_id' // Local key on product_mappings table
         );
+    }
+
+    /**
+     * Relacionamento com ProductMapping para obter item_type
+     */
+    public function productMapping()
+    {
+        return $this->hasOne(ProductMapping::class, 'external_item_id', 'sku');
     }
 
     /**
@@ -67,5 +79,13 @@ class OrderItem extends Model
         }
 
         return $totalCost * $itemQuantity;
+    }
+
+    /**
+     * Accessor para retornar o custo total calculado
+     */
+    public function getTotalCostAttribute(): float
+    {
+        return $this->calculateTotalCost();
     }
 }

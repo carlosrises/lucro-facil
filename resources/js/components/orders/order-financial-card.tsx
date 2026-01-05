@@ -7,11 +7,25 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+    AlertCircle,
     ArrowDownLeft,
     ArrowRightLeft,
     ArrowUpRight,
+    Box,
+    Check,
+    CupSoda,
     DollarSign,
+    Layers,
+    Package,
+    Pizza,
     Plus,
+    Plus as PlusIcon,
 } from 'lucide-react';
 import { useState } from 'react';
 import { CreatePaymentFeeDialog } from './create-payment-fee-dialog';
@@ -20,6 +34,12 @@ import { CreatePaymentFeeDialog } from './create-payment-fee-dialog';
  * Calcula o custo de um item considerando múltiplas associações
  */
 function calculateItemCost(item: OrderItem): number {
+    // Prioridade 1: Usar total_cost calculado pelo backend (mais confiável)
+    if (item.total_cost !== undefined && item.total_cost !== null) {
+        return parseFloat(String(item.total_cost));
+    }
+
+    // Prioridade 2: Calcular no frontend (fallback)
     const itemQuantity = item.qty || item.quantity || 0;
 
     // Novo sistema: usar mappings se existir
@@ -539,14 +559,9 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                             {/* CMV */}
                             {(() => {
                                 const items = order.items || [];
-                                const itemsWithCost = items.filter(
-                                    (item: OrderItem) =>
-                                        item.internal_product?.unit_cost ||
-                                        (item.mappings &&
-                                            item.mappings.length > 0),
-                                );
 
-                                return financials.cmv > 0 ? (
+                                // Sempre mostrar a seção CMV, mesmo sem mapeamentos
+                                return (
                                     <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
                                         <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
                                             <div className="flex items-center justify-center rounded-full bg-orange-100 p-0.5 text-orange-900">
@@ -566,128 +581,337 @@ export function OrderFinancialCard({ sale, order }: OrderFinancialCardProps) {
                                             </span>
                                         </div>
                                         {/* Detalhamento dos custos por produto */}
-                                        {itemsWithCost.length > 0 && (
-                                            <ul className="flex w-full flex-col items-center justify-between pl-0">
-                                                {itemsWithCost.map(
-                                                    (item: OrderItem) => {
-                                                        const itemTotalCost =
-                                                            calculateItemCost(
-                                                                item,
-                                                            );
-                                                        const quantity =
-                                                            item.qty ||
-                                                            item.quantity ||
-                                                            0;
-                                                        const hasMappings =
-                                                            item.mappings &&
+                                        <ul className="flex w-full flex-col items-center justify-between pl-0">
+                                            {items.map((item: OrderItem) => {
+                                                const itemTotalCost =
+                                                    calculateItemCost(item);
+                                                const quantity =
+                                                    item.qty ||
+                                                    item.quantity ||
+                                                    0;
+                                                const hasMappings =
+                                                    item.mappings &&
+                                                    item.mappings.length > 0;
+                                                const hasLegacyProduct =
+                                                    !hasMappings &&
+                                                    item.internal_product
+                                                        ?.unit_cost;
+                                                const hasAnyMapping =
+                                                    hasMappings ||
+                                                    hasLegacyProduct;
+
+                                                // Determinar ícone e cor baseado no tipo de classificação
+                                                const getItemIcon = () => {
+                                                    // Buscar item_type do product_mapping
+                                                    const itemType =
+                                                        item.product_mapping
+                                                            ?.item_type;
+
+                                                    if (!itemType) {
+                                                        return {
+                                                            Icon: AlertCircle,
+                                                            className:
+                                                                'text-muted-foreground',
+                                                        };
+                                                    }
+
+                                                    switch (itemType) {
+                                                        case 'flavor':
+                                                            return {
+                                                                Icon: Pizza,
+                                                                className:
+                                                                    'text-purple-500',
+                                                            };
+                                                        case 'beverage':
+                                                            return {
+                                                                Icon: CupSoda,
+                                                                className:
+                                                                    'text-blue-500',
+                                                            };
+                                                        case 'complement':
+                                                            return {
+                                                                Icon: PlusIcon,
+                                                                className:
+                                                                    'text-green-500',
+                                                            };
+                                                        case 'parent_product':
+                                                            return {
+                                                                Icon: Package,
+                                                                className:
+                                                                    'text-orange-500',
+                                                            };
+                                                        case 'additional':
+                                                            return {
+                                                                Icon: Layers,
+                                                                className:
+                                                                    'text-amber-500',
+                                                            };
+                                                        case 'combo':
+                                                            return {
+                                                                Icon: Box,
+                                                                className:
+                                                                    'text-pink-500',
+                                                            };
+                                                        default:
+                                                            return {
+                                                                Icon: Package,
+                                                                className:
+                                                                    'text-muted-foreground',
+                                                            };
+                                                    }
+                                                };
+
+                                                const { Icon, className } =
+                                                    getItemIcon();
+
+                                                // Processar add-ons enriquecidos
+                                                const addOnsEnriched =
+                                                    item.add_ons_enriched || [];
+
+                                                // Tooltip com produto interno vinculado
+                                                const getMappingTooltip =
+                                                    () => {
+                                                        const parts = [];
+                                                        if (
+                                                            hasMappings &&
                                                             item.mappings
-                                                                .length > 0;
+                                                        ) {
+                                                            item.mappings.forEach(
+                                                                (
+                                                                    m: OrderItemMapping,
+                                                                ) => {
+                                                                    if (
+                                                                        m
+                                                                            .internal_product
+                                                                            ?.name
+                                                                    ) {
+                                                                        const pct =
+                                                                            (
+                                                                                (m.quantity ||
+                                                                                    0) *
+                                                                                100
+                                                                            ).toFixed(
+                                                                                0,
+                                                                            );
+                                                                        const type =
+                                                                            m.mapping_type ===
+                                                                            'main'
+                                                                                ? 'Principal'
+                                                                                : m.mapping_type ===
+                                                                                    'addon'
+                                                                                  ? 'Complemento'
+                                                                                  : 'Opção';
+                                                                        parts.push(
+                                                                            `${m.internal_product.name} (${pct}% - ${type})`,
+                                                                        );
+                                                                    }
+                                                                },
+                                                            );
+                                                        } else if (
+                                                            hasLegacyProduct &&
+                                                            item.internal_product
+                                                        ) {
+                                                            parts.push(
+                                                                `${item.internal_product.name} (100% - Legado)`,
+                                                            );
+                                                        }
+                                                        return parts.length > 0
+                                                            ? parts.join(', ')
+                                                            : null;
+                                                    };
 
-                                                        return (
-                                                            <li
-                                                                key={item.id}
-                                                                className="flex w-full flex-col gap-1"
-                                                            >
-                                                                <div className="flex w-full flex-row items-start justify-between px-3 py-1.5">
-                                                                    <span className="text-xs leading-4 font-medium text-muted-foreground">
-                                                                        {
-                                                                            quantity
-                                                                        }
-                                                                        x{' '}
-                                                                        {
-                                                                            item.name
-                                                                        }
-                                                                    </span>
-                                                                    <span className="text-xs leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                                                        {formatCurrency(
-                                                                            itemTotalCost,
+                                                const tooltipText =
+                                                    getMappingTooltip();
+
+                                                return (
+                                                    <li
+                                                        key={item.id}
+                                                        className="flex w-full flex-col gap-1"
+                                                    >
+                                                        <div className="flex w-full flex-row items-center justify-between gap-2 px-3 py-1.5">
+                                                            <div className="flex min-w-0 flex-1 items-center gap-2">
+                                                                <Icon
+                                                                    className={`h-3.5 w-3.5 shrink-0 ${className}`}
+                                                                />
+                                                                <TooltipProvider
+                                                                    delayDuration={
+                                                                        300
+                                                                    }
+                                                                >
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger
+                                                                            asChild
+                                                                        >
+                                                                            <span className="cursor-help truncate text-xs leading-4 font-medium text-muted-foreground">
+                                                                                {
+                                                                                    quantity
+                                                                                }
+                                                                                x{' '}
+                                                                                {
+                                                                                    item.name
+                                                                                }
+                                                                            </span>
+                                                                        </TooltipTrigger>
+                                                                        {tooltipText && (
+                                                                            <TooltipContent
+                                                                                side="right"
+                                                                                className="max-w-xs"
+                                                                            >
+                                                                                <p className="text-xs">
+                                                                                    Vinculado
+                                                                                    a:{' '}
+                                                                                    {
+                                                                                        tooltipText
+                                                                                    }
+                                                                                </p>
+                                                                            </TooltipContent>
                                                                         )}
-                                                                    </span>
-                                                                </div>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                                {hasAnyMapping && (
+                                                                    <Check className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                                                                )}
+                                                            </div>
+                                                            <span className="text-xs leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                                                {formatCurrency(
+                                                                    itemTotalCost,
+                                                                )}
+                                                            </span>
+                                                        </div>
 
-                                                                {/* Detalhamento dos mappings */}
-                                                                {hasMappings &&
-                                                                    item.mappings && (
-                                                                        <ul className="flex w-full flex-col gap-0.5 pl-3">
-                                                                            {item.mappings.map(
-                                                                                (
-                                                                                    mapping: OrderItemMapping,
-                                                                                    idx: number,
-                                                                                ) => {
-                                                                                    const mappingCost =
-                                                                                        mapping
-                                                                                            .internal_product
-                                                                                            ?.unit_cost
-                                                                                            ? parseFloat(
-                                                                                                  mapping
-                                                                                                      .internal_product
-                                                                                                      .unit_cost,
-                                                                                              ) *
-                                                                                              (mapping.quantity ||
-                                                                                                  1) *
-                                                                                              quantity
-                                                                                            : 0;
-                                                                                    const percentage =
-                                                                                        (
-                                                                                            (mapping.quantity ||
-                                                                                                0) *
-                                                                                            100
-                                                                                        ).toFixed(
-                                                                                            0,
-                                                                                        );
-                                                                                    const mappingType =
-                                                                                        mapping.mapping_type ===
-                                                                                        'main'
-                                                                                            ? 'Principal'
-                                                                                            : mapping.mapping_type ===
-                                                                                                'addon'
-                                                                                              ? 'Complemento'
-                                                                                              : 'Opção';
+                                                        {/* Mostrar todos os add-ons/complementos com ícones */}
+                                                        {addOnsEnriched.length >
+                                                            0 && (
+                                                            <ul className="flex w-full flex-col gap-0.5 pl-3">
+                                                                {addOnsEnriched.map(
+                                                                    (
+                                                                        addOn,
+                                                                        addonIdx: number,
+                                                                    ) => {
+                                                                        const isLast =
+                                                                            addonIdx ===
+                                                                            addOnsEnriched.length -
+                                                                                1;
+                                                                        const treeChar =
+                                                                            isLast
+                                                                                ? '└'
+                                                                                : '├';
 
-                                                                                    return (
-                                                                                        <li
-                                                                                            key={
-                                                                                                idx
-                                                                                            }
-                                                                                            className="flex w-full flex-row items-start justify-between px-3 py-0"
-                                                                                        >
-                                                                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                                                                {mapping
-                                                                                                    .internal_product
-                                                                                                    ?.name ||
-                                                                                                    'Produto'}{' '}
-                                                                                                (
-                                                                                                {
-                                                                                                    percentage
-                                                                                                }
+                                                                        // Determinar ícone do add-on
+                                                                        const getAddonIcon =
+                                                                            () => {
+                                                                                const itemType =
+                                                                                    addOn
+                                                                                        .product_mapping
+                                                                                        ?.item_type;
+                                                                                if (
+                                                                                    !itemType
+                                                                                ) {
+                                                                                    return {
+                                                                                        Icon: AlertCircle,
+                                                                                        className:
+                                                                                            'text-orange-500',
+                                                                                    };
+                                                                                }
+                                                                                switch (
+                                                                                    itemType
+                                                                                ) {
+                                                                                    case 'flavor':
+                                                                                        return {
+                                                                                            Icon: Pizza,
+                                                                                            className:
+                                                                                                'text-purple-500',
+                                                                                        };
+                                                                                    case 'beverage':
+                                                                                        return {
+                                                                                            Icon: CupSoda,
+                                                                                            className:
+                                                                                                'text-blue-500',
+                                                                                        };
+                                                                                    case 'complement':
+                                                                                        return {
+                                                                                            Icon: PlusIcon,
+                                                                                            className:
+                                                                                                'text-green-500',
+                                                                                        };
+                                                                                    case 'parent_product':
+                                                                                        return {
+                                                                                            Icon: Package,
+                                                                                            className:
+                                                                                                'text-orange-500',
+                                                                                        };
+                                                                                    case 'additional':
+                                                                                        return {
+                                                                                            Icon: Layers,
+                                                                                            className:
+                                                                                                'text-amber-500',
+                                                                                        };
+                                                                                    case 'combo':
+                                                                                        return {
+                                                                                            Icon: Box,
+                                                                                            className:
+                                                                                                'text-pink-500',
+                                                                                        };
+                                                                                    default:
+                                                                                        return {
+                                                                                            Icon: Package,
+                                                                                            className:
+                                                                                                'text-muted-foreground',
+                                                                                        };
+                                                                                }
+                                                                            };
 
-                                                                                                %
-                                                                                                -{' '}
-                                                                                                {
-                                                                                                    mappingType
-                                                                                                }
+                                                                        const {
+                                                                            Icon: AddonIcon,
+                                                                            className:
+                                                                                addonClassName,
+                                                                        } =
+                                                                            getAddonIcon();
+                                                                        const hasMapping =
+                                                                            !!addOn.product_mapping;
 
-                                                                                                )
-                                                                                            </span>
-                                                                                            <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
-                                                                                                {formatCurrency(
-                                                                                                    mappingCost,
-                                                                                                )}
-                                                                                            </span>
-                                                                                        </li>
-                                                                                    );
-                                                                                },
-                                                                            )}
-                                                                        </ul>
-                                                                    )}
-                                                            </li>
-                                                        );
-                                                    },
-                                                )}
-                                            </ul>
-                                        )}
+                                                                        return (
+                                                                            <li
+                                                                                key={
+                                                                                    addonIdx
+                                                                                }
+                                                                                className="flex w-full flex-row items-start justify-between px-3 py-0"
+                                                                            >
+                                                                                <div className="flex items-center gap-1.5">
+                                                                                    <span className="font-mono text-xs leading-4 font-normal text-muted-foreground/70">
+                                                                                        {
+                                                                                            treeChar
+                                                                                        }
+                                                                                    </span>
+                                                                                    <AddonIcon
+                                                                                        className={`h-3 w-3 shrink-0 ${addonClassName}`}
+                                                                                    />
+                                                                                    <span className="text-xs leading-4 font-normal text-muted-foreground/70">
+                                                                                        {
+                                                                                            addOn.name
+                                                                                        }
+                                                                                    </span>
+                                                                                    {hasMapping && (
+                                                                                        <Check className="h-3 w-3 shrink-0 text-green-600" />
+                                                                                    )}
+                                                                                </div>
+                                                                                <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground/70">
+                                                                                    {formatCurrency(
+                                                                                        0,
+                                                                                    )}
+                                                                                </span>
+                                                                            </li>
+                                                                        );
+                                                                    },
+                                                                )}
+                                                            </ul>
+                                                        )}
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
                                     </li>
-                                ) : null;
+                                );
                             })()}
 
                             {/* Impostos */}

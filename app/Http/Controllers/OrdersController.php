@@ -25,6 +25,9 @@ class OrdersController extends Controller
             ->with([
                 'items.internalProduct.taxCategory',
                 'items.mappings.internalProduct.taxCategory', // Novo: carregar múltiplas associações
+                'items.productMapping' => function ($query) {
+                    $query->where('product_mappings.tenant_id', tenant_id());
+                }, // Carregar classificação do item
                 'sale'
             ])
             ->where('tenant_id', tenant_id())
@@ -123,6 +126,35 @@ class OrdersController extends Controller
         $perPage = (int) $request->input('per_page', 10);
 
         $orders = $query->paginate($perPage)->withQueryString();
+
+        // Enriquecer add-ons com seus ProductMappings
+        foreach ($orders->items() as $order) {
+            foreach ($order->items as $item) {
+                if (!empty($item->add_ons) && is_array($item->add_ons)) {
+                    $addOnsWithMappings = [];
+                    foreach ($item->add_ons as $addOn) {
+                        $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
+                        $addOnSku = 'addon_' . md5($addOnName);
+
+                        // Buscar ProductMapping do add-on
+                        $mapping = \App\Models\ProductMapping::where('external_item_id', $addOnSku)
+                            ->where('tenant_id', tenant_id())
+                            ->first();
+
+                        $addOnsWithMappings[] = [
+                            'name' => $addOnName,
+                            'sku' => $addOnSku,
+                            'product_mapping' => $mapping ? [
+                                'id' => $mapping->id,
+                                'item_type' => $mapping->item_type,
+                                'internal_product_id' => $mapping->internal_product_id,
+                            ] : null,
+                        ];
+                    }
+                    $item->add_ons_enriched = $addOnsWithMappings;
+                }
+            }
+        }
 
         // Para popular o filtro de lojas dinamicamente
         $stores = Store::query()

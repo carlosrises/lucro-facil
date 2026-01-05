@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { router } from '@inertiajs/react';
 import { Check, Link2, PackageX, RefreshCw, X } from 'lucide-react';
 import React from 'react';
@@ -179,7 +178,7 @@ export function ItemMappingsDialog({
                         );
                         addonMaps[addonIndex] = {
                             productId: m.internal_product_id,
-                            quantity: m.quantity, // Usar valor direto, não multiplicar por 100
+                            quantity: m.quantity * 100, // Converter para porcentagem
                             optionType: (m as any).option_type || 'addon',
                         };
                     });
@@ -221,7 +220,7 @@ export function ItemMappingsDialog({
             if (addonMapping?.productId) {
                 mappings.push({
                     internal_product_id: addonMapping.productId,
-                    quantity: addonMapping.quantity, // Usar valor direto
+                    quantity: addonMapping.quantity / 100, // Converter porcentagem para decimal
                     mapping_type: 'addon',
                     option_type: addonMapping.optionType || 'addon',
                     auto_fraction: addonMapping.optionType === 'pizza_flavor',
@@ -295,9 +294,9 @@ export function ItemMappingsDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[90vh] max-w-3xl overflow-hidden">
+            <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
                 <DialogHeader>
-                    <div className="flex items-start justify-between gap-4 pt-4">
+                    <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
                             <DialogTitle>
                                 Associar Produtos Internos
@@ -310,7 +309,7 @@ export function ItemMappingsDialog({
                         <Button
                             variant="outline"
                             size="icon"
-                            className="shrink-0 pr-4"
+                            className="shrink-0"
                             onClick={handleRefresh}
                             disabled={isRefreshing}
                             title="Atualizar lista de produtos internos"
@@ -322,52 +321,52 @@ export function ItemMappingsDialog({
                     </div>
                 </DialogHeader>
 
-                <ScrollArea className="max-h-[calc(90vh-180px)] pr-4">
-                    <div className="space-y-6">
-                        {/* Informações do Item */}
-                        <div className="rounded-lg border bg-muted/50">
-                            <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-semibold">
-                                            {item.name}
-                                        </span>
-                                        {hasMappings ? (
-                                            <Badge
-                                                variant="outline"
-                                                className="border-emerald-200 bg-emerald-50 text-emerald-700"
-                                            >
-                                                <Check className="mr-1 h-3 w-3" />
-                                                Associado
-                                            </Badge>
-                                        ) : (
-                                            <Badge
-                                                variant="outline"
-                                                className="border-amber-200 bg-amber-50 text-amber-700"
-                                            >
-                                                <PackageX className="mr-1 h-3 w-3" />
-                                                Não associado
-                                            </Badge>
-                                        )}
-                                    </div>
-                                    <div className="mt-1 text-sm text-muted-foreground">
-                                        SKU: {item.sku || 'N/A'} • Qtd:{' '}
-                                        {item.qty || item.quantity || 0}
-                                    </div>
+                <div className="space-y-6">
+                    {/* Informações do Item */}
+                    <div className="rounded-lg border bg-muted/50 p-4">
+                        <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-semibold">
+                                        {item.name}
+                                    </span>
+                                    {hasMappings ? (
+                                        <Badge
+                                            variant="outline"
+                                            className="border-emerald-200 bg-emerald-50 text-emerald-700"
+                                        >
+                                            <Check className="mr-1 h-3 w-3" />
+                                            Associado
+                                        </Badge>
+                                    ) : (
+                                        <Badge
+                                            variant="outline"
+                                            className="border-amber-200 bg-amber-50 text-amber-700"
+                                        >
+                                            <PackageX className="mr-1 h-3 w-3" />
+                                            Não associado
+                                        </Badge>
+                                    )}
+                                </div>
+                                <div className="mt-1 text-sm text-muted-foreground">
+                                    SKU: {item.sku || 'N/A'} • Qtd:{' '}
+                                    {item.qty || item.quantity || 0}
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        {/* Associação do Item Principal */}
-                        <div className="space-y-3">
-                            <Label className="text-base font-semibold">
-                                Item Principal
-                            </Label>
-                            <div className="space-y-3 rounded-lg border p-4">
-                                <div className="space-y-2">
-                                    <Label className="text-sm">
-                                        Produto Interno
-                                    </Label>
+                    {/* Associação do Item Principal */}
+                    <div className="space-y-3">
+                        <Label className="text-base font-semibold">
+                            Item Principal
+                        </Label>
+                        <div className="space-y-3 rounded-lg border p-4">
+                            <div className="space-y-2">
+                                <Label className="text-sm">
+                                    Produto Interno
+                                </Label>
+                                <div className="w-full">
                                     <Combobox
                                         options={[
                                             { value: '', label: '(Nenhum)' },
@@ -389,82 +388,81 @@ export function ItemMappingsDialog({
                                         searchPlaceholder="Buscar..."
                                     />
                                 </div>
-
-                                {mainProductId && (
-                                    <div className="space-y-2">
-                                        <Label className="text-sm">
-                                            Porcentagem
-                                        </Label>
-                                        <Input
-                                            type="number"
-                                            min="1"
-                                            max="100"
-                                            step="25"
-                                            value={mainQuantity}
-                                            onChange={(e) =>
-                                                setMainQuantity(
-                                                    parseFloat(
-                                                        e.target.value,
-                                                    ) || 100,
-                                                )
-                                            }
-                                            placeholder="Ex: 25 para 25%"
-                                        />
-                                        <p className="text-xs text-muted-foreground">
-                                            100% = produto inteiro | 50% =
-                                            metade | 25% = 1/4
-                                        </p>
-                                    </div>
-                                )}
                             </div>
+
+                            {mainProductId && (
+                                <div className="space-y-2">
+                                    <Label className="text-sm">
+                                        Porcentagem
+                                    </Label>
+                                    <Input
+                                        type="number"
+                                        min="1"
+                                        max="100"
+                                        step="25"
+                                        value={mainQuantity}
+                                        onChange={(e) =>
+                                            setMainQuantity(
+                                                parseFloat(e.target.value) ||
+                                                    100,
+                                            )
+                                        }
+                                        placeholder="Ex: 25 para 25%"
+                                        className="w-full"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        100% = produto inteiro | 50% = metade |
+                                        25% = 1/4
+                                    </p>
+                                </div>
+                            )}
                         </div>
+                    </div>
 
-                        {/* Associação de Complementos */}
-                        {item.add_ons && item.add_ons.length > 0 && (
+                    {/* Associação de Complementos */}
+                    {item.add_ons && item.add_ons.length > 0 && (
+                        <div className="space-y-3">
+                            <Label className="text-base font-semibold">
+                                Complementos ({item.add_ons.length})
+                            </Label>
                             <div className="space-y-3">
-                                <Label className="text-base font-semibold">
-                                    Complementos ({item.add_ons.length})
-                                </Label>
-                                <div className="space-y-3">
-                                    {item.add_ons.map((addon, index) => {
-                                        const addonMapping = addonMappings[
-                                            index
-                                        ] || {
-                                            productId: null,
-                                            quantity: 1,
-                                            optionType: 'addon' as const,
-                                            autoFraction: false,
-                                        };
-                                        return (
-                                            <div
-                                                key={index}
-                                                className="space-y-3 rounded-lg border p-4"
-                                            >
-                                                <div className="mb-2 flex items-center gap-2">
-                                                    <Badge variant="secondary">
-                                                        {addon.quantity}x{' '}
-                                                        {addon.name}
-                                                    </Badge>
-                                                    {addon.price > 0 && (
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {new Intl.NumberFormat(
-                                                                'pt-BR',
-                                                                {
-                                                                    style: 'currency',
-                                                                    currency:
-                                                                        'BRL',
-                                                                },
-                                                            ).format(
-                                                                addon.price,
-                                                            )}
-                                                        </span>
-                                                    )}
-                                                </div>
+                                {item.add_ons.map((addon, index) => {
+                                    const addonMapping = addonMappings[
+                                        index
+                                    ] || {
+                                        productId: null,
+                                        quantity: 100, // 100% como padrão
+                                        optionType: 'addon' as const,
+                                        autoFraction: false,
+                                    };
+                                    return (
+                                        <div
+                                            key={index}
+                                            className="space-y-3 rounded-lg border p-4"
+                                        >
+                                            <div className="mb-2 flex items-center gap-2">
+                                                <Badge variant="secondary">
+                                                    {addon.quantity}x{' '}
+                                                    {addon.name}
+                                                </Badge>
+                                                {addon.price > 0 && (
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {new Intl.NumberFormat(
+                                                            'pt-BR',
+                                                            {
+                                                                style: 'currency',
+                                                                currency: 'BRL',
+                                                            },
+                                                        ).format(addon.price)}
+                                                    </span>
+                                                )}
+                                            </div>
 
-                                                <div className="space-y-2">
-                                                    <Label className="text-sm">
-                                                        Produto Interno
-                                                    </Label>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm">
+                                                    Produto Interno
+                                                </Label>
+                                                <div className="w-full">
                                                     <Combobox
                                                         options={[
                                                             {
@@ -501,13 +499,15 @@ export function ItemMappingsDialog({
                                                         searchPlaceholder="Buscar..."
                                                     />
                                                 </div>
+                                            </div>
 
-                                                {addonMapping.productId && (
-                                                    <>
-                                                        <div className="space-y-2">
-                                                            <Label className="text-sm">
-                                                                Tipo de Opção
-                                                            </Label>
+                                            {addonMapping.productId && (
+                                                <>
+                                                    <div className="space-y-2">
+                                                        <Label className="text-sm">
+                                                            Tipo de Opção
+                                                        </Label>
+                                                        <div className="w-full">
                                                             <Combobox
                                                                 options={[
                                                                     {
@@ -554,66 +554,63 @@ export function ItemMappingsDialog({
                                                                 emptyMessage="Nenhum tipo encontrado"
                                                                 searchPlaceholder="Buscar..."
                                                             />
-                                                            <p className="text-xs text-muted-foreground">
-                                                                Defina o tipo
-                                                                para cálculos
-                                                                automáticos
-                                                            </p>
                                                         </div>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Defina o tipo para
+                                                            cálculos automáticos
+                                                        </p>
+                                                    </div>
 
-                                                        <div className="space-y-2">
-                                                            <Label className="text-sm">
-                                                                Porcentagem
-                                                            </Label>
-                                                            <Input
-                                                                type="number"
-                                                                min="1"
-                                                                max="100"
-                                                                step="25"
-                                                                value={
-                                                                    addonMapping.quantity *
-                                                                    100
-                                                                }
-                                                                onChange={(e) =>
-                                                                    setAddonMappings(
-                                                                        {
-                                                                            ...addonMappings,
-                                                                            [index]:
-                                                                                {
-                                                                                    ...addonMapping,
-                                                                                    quantity:
-                                                                                        (parseFloat(
-                                                                                            e
-                                                                                                .target
-                                                                                                .value,
-                                                                                        ) ||
-                                                                                            100) /
-                                                                                        100,
-                                                                                },
-                                                                        },
-                                                                    )
-                                                                }
-                                                                placeholder="Ex: 25 para 25%"
-                                                            />
-                                                            <p className="text-xs text-muted-foreground">
-                                                                100% = inteiro |
-                                                                50% = metade |
-                                                                25% = 1/4
-                                                            </p>
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                                                    <div className="space-y-2">
+                                                        <Label className="text-sm">
+                                                            Porcentagem
+                                                        </Label>
+                                                        <Input
+                                                            type="number"
+                                                            min="1"
+                                                            max="100"
+                                                            step="25"
+                                                            value={
+                                                                addonMapping.quantity
+                                                            }
+                                                            onChange={(e) =>
+                                                                setAddonMappings(
+                                                                    {
+                                                                        ...addonMappings,
+                                                                        [index]:
+                                                                            {
+                                                                                ...addonMapping,
+                                                                                quantity:
+                                                                                    parseFloat(
+                                                                                        e
+                                                                                            .target
+                                                                                            .value,
+                                                                                    ) ||
+                                                                                    100,
+                                                                            },
+                                                                    },
+                                                                )
+                                                            }
+                                                            placeholder="Ex: 25 para 25%"
+                                                            className="w-full"
+                                                        />
+                                                        <p className="text-xs text-muted-foreground">
+                                                            100% = inteiro | 50%
+                                                            = metade | 25% = 1/4
+                                                        </p>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
-                        )}
-                    </div>
-                </ScrollArea>
+                        </div>
+                    )}
+                </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-between gap-3 border-t pt-4">
+                <div className="mt-6 flex items-center justify-between gap-3 border-t pt-4">
                     <div>
                         {hasMappings && (
                             <Button

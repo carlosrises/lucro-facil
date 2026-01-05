@@ -137,6 +137,15 @@ class CostCommissionsController extends Controller
                 'cost_commission'
             );
             $cacheKey = "recalculate_progress_{$validated['tenant_id']}_cost_commission_{$costCommission->id}";
+
+            \Log::info("Taxa de pagamento criada", [
+                'cost_commission_id' => $costCommission->id,
+                'name' => $costCommission->name,
+                'provider' => $costCommission->provider,
+                'payment_type' => $costCommission->payment_type,
+                'condition_values' => $costCommission->condition_values,
+                'cache_key' => $cacheKey,
+            ]);
         }
 
         return back()->with([

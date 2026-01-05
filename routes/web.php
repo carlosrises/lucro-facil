@@ -16,6 +16,7 @@ use App\Http\Controllers\FinanceCategoriesController;
 use App\Http\Controllers\FinanceEntriesController;
 use App\Http\Controllers\FinancialSummaryController;
 use App\Http\Controllers\AbcCurveController;
+use App\Http\Controllers\ItemTriageController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -108,6 +109,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('product-mappings', [ProductMappingController::class, 'store'])->name('product-mappings.store');
     Route::delete('product-mappings/{productMapping}', [ProductMappingController::class, 'destroy'])->name('product-mappings.destroy');
     Route::delete('product-mappings/sku/{sku}', [ProductMappingController::class, 'destroyBySku'])->name('product-mappings.destroyBySku');
+
+    // Item Triage (Triagem de Itens)
+    Route::get('item-triage', [ItemTriageController::class, 'index'])->name('item-triage.index');
+    Route::get('api/item-triage/{sku}', [ItemTriageController::class, 'getItemDetails'])->name('item-triage.details');
+    Route::post('item-triage/classify', [ItemTriageController::class, 'classify'])->name('item-triage.classify');
 
     // Order Item Mappings (múltiplas associações por item)
     Route::post('order-items/{orderItem}/mappings', [OrderItemMappingsController::class, 'store'])->name('order-item-mappings.store');
