@@ -637,15 +637,22 @@ export function OrderFinancialCard({
 
                                                 // Verificar se tem produto interno vinculado (não apenas classificação)
                                                 // Para mappings, o internal_product_id pode ser null quando é apenas classificação
-                                                const hasInternalProduct = hasMappings
-                                                    ? item.mappings.some(
-                                                          (m: OrderItemMapping) =>
-                                                              m.internal_product_id !== null &&
-                                                              m.internal_product !== null &&
-                                                              m.internal_product !== undefined,
-                                                      )
-                                                    : hasLegacyProduct;
-                                                const hasAnyMapping = hasInternalProduct;
+                                                const hasInternalProduct =
+                                                    hasMappings
+                                                        ? item.mappings.some(
+                                                              (
+                                                                  m: OrderItemMapping,
+                                                              ) =>
+                                                                  m.internal_product_id !==
+                                                                      null &&
+                                                                  m.internal_product !==
+                                                                      null &&
+                                                                  m.internal_product !==
+                                                                      undefined,
+                                                          )
+                                                        : hasLegacyProduct;
+                                                const hasAnyMapping =
+                                                    hasInternalProduct;
 
                                                 // Determinar ícone e cor baseado no tipo de classificação
                                                 const getItemIcon = () => {
@@ -967,7 +974,9 @@ export function OrderFinancialCard({
                                                                         // Verificar se tem produto interno vinculado (não apenas classificação)
                                                                         const hasMapping =
                                                                             !!addOn.product_mapping &&
-                                                                            !!addOn.product_mapping.internal_product;
+                                                                            !!addOn
+                                                                                .product_mapping
+                                                                                .internal_product;
 
                                                                         // Calcular custo do add-on
                                                                         const addonCost =

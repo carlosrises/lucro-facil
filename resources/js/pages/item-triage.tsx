@@ -154,7 +154,7 @@ export default function ItemTriage({
     const [status, setStatus] = useState(filters.status);
     const [itemType, setItemType] = useState(filters.item_type);
     const [linkStatus, setLinkStatus] = useState(filters.link_status);
-    const [isOrdersExpanded, setIsOrdersExpanded] = useState(true);
+    const [isOrdersExpanded, setIsOrdersExpanded] = useState(false);
     const [expandedOrderIds, setExpandedOrderIds] = useState<Set<number>>(
         new Set(),
     );
@@ -374,7 +374,7 @@ export default function ItemTriage({
                                 </div>
 
                                 {/* Estatísticas */}
-                                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                                     <Card>
                                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                             <CardTitle className="text-sm font-medium">
@@ -438,9 +438,11 @@ export default function ItemTriage({
                                         </CardHeader>
                                         <CardContent>
                                             <div className="text-2xl font-bold text-blue-600">
-                                                {stats.classified_without_product}
+                                                {
+                                                    stats.classified_without_product
+                                                }
                                             </div>
-                                            <p className="text-xs text-muted-foreground mt-1">
+                                            <p className="mt-1 text-xs text-muted-foreground">
                                                 {linkStatus === 'no_product'
                                                     ? 'Clique para ver todos'
                                                     : 'Clique para filtrar'}
@@ -870,6 +872,7 @@ export default function ItemTriage({
                                                                                                             {
                                                                                                                 item.qty
                                                                                                             }
+
                                                                                                             x
                                                                                                         </span>
                                                                                                         <span className="flex-1">

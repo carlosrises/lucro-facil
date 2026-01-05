@@ -175,8 +175,8 @@ class ItemTriageController extends Controller
             $allItems = $allItems->filter(fn($item) => ($item['mapping']['internal_product_id'] ?? null) === null);
         } elseif ($linkStatus === 'no_product') {
             // Classificados mas sem produto interno vinculado
-            $allItems = $allItems->filter(fn($item) => 
-                $item['mapping'] !== null && 
+            $allItems = $allItems->filter(fn($item) =>
+                $item['mapping'] !== null &&
                 ($item['mapping']['internal_product_id'] ?? null) === null
             );
         }
@@ -207,7 +207,7 @@ class ItemTriageController extends Controller
             ->count();
 
         $totalClassifiedMappings = ProductMapping::where('tenant_id', $tenantId)->count();
-        
+
         // Itens classificados mas sem produto interno vinculado
         $classifiedWithoutProduct = ProductMapping::where('tenant_id', $tenantId)
             ->whereNull('internal_product_id')
