@@ -23,6 +23,7 @@ import {
     DollarSign,
     IceCream2,
     Layers,
+    Link2 as LinkIcon,
     Package,
     Pizza,
     Plus,
@@ -633,9 +634,18 @@ export function OrderFinancialCard({
                                                     !hasMappings &&
                                                     item.internal_product
                                                         ?.unit_cost;
-                                                const hasAnyMapping =
-                                                    hasMappings ||
-                                                    hasLegacyProduct;
+
+                                                // Verificar se tem produto interno vinculado (não apenas classificação)
+                                                // Para mappings, o internal_product_id pode ser null quando é apenas classificação
+                                                const hasInternalProduct = hasMappings
+                                                    ? item.mappings.some(
+                                                          (m: OrderItemMapping) =>
+                                                              m.internal_product_id !== null &&
+                                                              m.internal_product !== null &&
+                                                              m.internal_product !== undefined,
+                                                      )
+                                                    : hasLegacyProduct;
+                                                const hasAnyMapping = hasInternalProduct;
 
                                                 // Determinar ícone e cor baseado no tipo de classificação
                                                 const getItemIcon = () => {
@@ -824,7 +834,7 @@ export function OrderFinancialCard({
                                                                     <Button
                                                                         variant="ghost"
                                                                         size="sm"
-                                                                        className="h-5 w-5 p-0 hover:bg-green-100"
+                                                                        className="h-5 w-5 p-0 hover:bg-blue-100"
                                                                         onClick={(
                                                                             e,
                                                                         ) => {
@@ -843,7 +853,7 @@ export function OrderFinancialCard({
                                                                             );
                                                                         }}
                                                                     >
-                                                                        <Check className="h-3.5 w-3.5 text-muted-foreground hover:text-green-600" />
+                                                                        <LinkIcon className="h-3 w-3 text-muted-foreground hover:text-blue-600" />
                                                                     </Button>
                                                                 )}
                                                             </div>
@@ -954,8 +964,10 @@ export function OrderFinancialCard({
                                                                                 addonClassName,
                                                                         } =
                                                                             getAddonIcon();
+                                                                        // Verificar se tem produto interno vinculado (não apenas classificação)
                                                                         const hasMapping =
-                                                                            !!addOn.product_mapping;
+                                                                            !!addOn.product_mapping &&
+                                                                            !!addOn.product_mapping.internal_product;
 
                                                                         // Calcular custo do add-on
                                                                         const addonCost =
@@ -998,7 +1010,7 @@ export function OrderFinancialCard({
                                                                                         <Button
                                                                                             variant="ghost"
                                                                                             size="sm"
-                                                                                            className="h-4 w-4 p-0 hover:bg-green-100"
+                                                                                            className="h-4 w-4 p-0 hover:bg-blue-100"
                                                                                             onClick={(
                                                                                                 e,
                                                                                             ) => {
@@ -1017,7 +1029,7 @@ export function OrderFinancialCard({
                                                                                                 );
                                                                                             }}
                                                                                         >
-                                                                                            <Check className="h-3 w-3 text-muted-foreground hover:text-green-600" />
+                                                                                            <LinkIcon className="h-2.5 w-2.5 text-muted-foreground hover:text-blue-600" />
                                                                                         </Button>
                                                                                     )}
                                                                                 </div>

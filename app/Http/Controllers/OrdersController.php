@@ -176,7 +176,8 @@ class OrdersController extends Controller
             ->whereNotIn('sku', function ($query) {
                 $query->select('external_item_id')
                     ->from('product_mappings')
-                    ->where('tenant_id', tenant_id());
+                    ->where('tenant_id', tenant_id())
+                    ->whereNotNull('internal_product_id'); // Apenas mappings com produto interno vinculado
             })
             ->distinct('sku')
             ->count('sku');
