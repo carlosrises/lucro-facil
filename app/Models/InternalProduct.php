@@ -20,6 +20,7 @@ class InternalProduct extends Model
         'category',
         'product_category',
         'max_flavors',
+        'size',
         'type',
         'unit',
         'unit_cost',
@@ -27,6 +28,7 @@ class InternalProduct extends Model
         'default_margin_percent',
         'default_margin_value',
         'active',
+        'is_ingredient',
     ];
 
     protected $casts = [
@@ -63,12 +65,20 @@ class InternalProduct extends Model
 
     /**
      * Calcula o CMV (Custo de Mercadoria Vendida) baseado nos ingredientes.
+     *
+     * @param string|null $size Tamanho específico para buscar ficha técnica (broto, media, grande, familia)
      */
-    public function calculateCMV(): float
+    public function calculateCMV(?string $size = null): float
     {
-        return $this->costs()
-            ->join('ingredients', 'ingredients.id', '=', 'product_costs.ingredient_id')
-            ->selectRaw('SUM(product_costs.qty * ingredients.unit_price) as total')
+        $query = $this->costs()
+            ->join('ingredients', 'ingredients.id', '=', 'product_costs.ingredient_id');
+
+        // Se for sabor de pizza e tiver tamanho, filtrar por tamanho
+        if ($this->product_category === 'sabor_pizza' && $size) {
+            $query->where('product_costs.size', $size);
+        }
+
+        return $query->selectRaw('SUM(product_costs.qty * ingredients.unit_price) as total')
             ->value('total') ?? 0;
     }
 

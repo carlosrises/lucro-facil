@@ -15,6 +15,7 @@ class ProductCost extends Model
         'internal_product_id',
         'ingredient_id',
         'qty',
+        'size',
     ];
 
     protected $casts = [
