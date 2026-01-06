@@ -27,8 +27,14 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useForm, usePage } from '@inertiajs/react';
-import { Calculator, Plus, Trash2 } from 'lucide-react';
+import { Calculator, Info, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { type Product } from './columns';
@@ -46,6 +52,7 @@ interface TechnicalSheetItem {
     ingredient_unit: string;
     ingredient_price: number;
     qty: number;
+    size?: string; // Tamanho específico desta ficha (broto, media, grande, familia)
 }
 
 interface ProductFormDialogProps {
@@ -77,11 +84,13 @@ export function ProductFormDialog({
         type: 'product',
         product_category: '',
         max_flavors: 1,
+        size: '',
         unit: 'unit',
         unit_cost: '0',
         sale_price: '',
         tax_category_id: '',
         active: true,
+        is_ingredient: false,
         recipe: [] as TechnicalSheetItem[],
         update_existing_orders: false,
     });
@@ -89,6 +98,7 @@ export function ProductFormDialog({
     const [selectedIngredientId, setSelectedIngredientId] =
         useState<string>('');
     const [ingredientQty, setIngredientQty] = useState<string>('');
+    const [selectedSize, setSelectedSize] = useState<string>('');
     const [loadingProduct, setLoadingProduct] = useState(false);
 
     useEffect(() => {
@@ -113,6 +123,7 @@ export function ProductFormDialog({
                             .product_category || '',
                     max_flavors:
                         (product as { max_flavors?: number }).max_flavors || 1,
+                    size: (product as { size?: string }).size || '',
                     unit: (product as { unit: string }).unit,
                     unit_cost: (product as { unit_cost: string }).unit_cost,
                     sale_price: (product as { sale_price: string }).sale_price,
@@ -121,6 +132,9 @@ export function ProductFormDialog({
                             product as { tax_category_id?: number }
                         ).tax_category_id?.toString() || '',
                     active: (product as { active: boolean }).active,
+                    is_ingredient:
+                        (product as { is_ingredient?: boolean })
+                            .is_ingredient || false,
                     recipe: preloadedRecipe,
                 });
                 setLoadingProduct(false);
@@ -138,6 +152,7 @@ export function ProductFormDialog({
                                 unit_price: string;
                             };
                             qty: string;
+                            size?: string;
                         }
 
                         const recipe: TechnicalSheetItem[] =
@@ -149,6 +164,7 @@ export function ProductFormDialog({
                                     cost.ingredient.unit_price,
                                 ),
                                 qty: parseFloat(cost.qty),
+                                size: cost.size,
                             })) || [];
 
                         setData({
@@ -158,12 +174,14 @@ export function ProductFormDialog({
                             product_category:
                                 productData.product_category || '',
                             max_flavors: productData.max_flavors || 1,
+                            size: productData.size || '',
                             unit: productData.unit,
                             unit_cost: productData.unit_cost,
                             sale_price: productData.sale_price,
                             tax_category_id:
                                 productData.tax_category_id?.toString() || '',
                             active: productData.active,
+                            is_ingredient: productData.is_ingredient || false,
                             recipe,
                         });
                         setLoadingProduct(false);
@@ -194,16 +212,31 @@ export function ProductFormDialog({
             return;
         }
 
+        // Para sabores de pizza, tamanho é obrigatório
+        if (data.product_category === 'sabor_pizza' && !selectedSize) {
+            toast.error('Selecione um tamanho para o insumo');
+            return;
+        }
+
         const ingredient = availableIngredients.find(
             (i) => i.id.toString() === selectedIngredientId,
         );
 
         if (!ingredient) return;
 
-        // Verificar se já existe na receita
-        const existingIndex = data.recipe.findIndex(
-            (item) => item.ingredient_id === ingredient.id,
-        );
+        // Para sabores de pizza, verificar se já existe ficha para este tamanho específico
+        const isSaborPizza = data.product_category === 'sabor_pizza';
+        const existingIndex = data.recipe.findIndex((item) => {
+            if (isSaborPizza && selectedSize) {
+                // Sabor pizza: verificar ingrediente E tamanho
+                return (
+                    item.ingredient_id === ingredient.id &&
+                    item.size === selectedSize
+                );
+            }
+            // Outros produtos: apenas ingrediente
+            return item.ingredient_id === ingredient.id;
+        });
 
         if (existingIndex >= 0) {
             // Atualizar quantidade
@@ -212,26 +245,44 @@ export function ProductFormDialog({
             setData('recipe', newRecipe);
         } else {
             // Adicionar novo
-            setData('recipe', [
-                ...data.recipe,
-                {
-                    ingredient_id: ingredient.id,
-                    ingredient_name: ingredient.name,
-                    ingredient_unit: ingredient.unit,
-                    ingredient_price: parseFloat(ingredient.unit_price),
-                    qty: parseFloat(ingredientQty),
-                },
-            ]);
+            const newItem: TechnicalSheetItem = {
+                ingredient_id: ingredient.id,
+                ingredient_name: ingredient.name,
+                ingredient_unit: ingredient.unit,
+                ingredient_price: parseFloat(ingredient.unit_price),
+                qty: parseFloat(ingredientQty),
+            };
+
+            // Adicionar tamanho se for sabor de pizza
+            if (isSaborPizza && selectedSize) {
+                newItem.size = selectedSize;
+            }
+
+            setData('recipe', [...data.recipe, newItem]);
         }
 
         setSelectedIngredientId('');
         setIngredientQty('');
+        setSelectedSize('');
     };
 
-    const removeIngredientFromRecipe = (ingredientId: number) => {
+    const removeIngredientFromRecipe = (
+        ingredientId: number,
+        size?: string,
+    ) => {
         setData(
             'recipe',
-            data.recipe.filter((item) => item.ingredient_id !== ingredientId),
+            data.recipe.filter((item) => {
+                if (data.product_category === 'sabor_pizza' && size) {
+                    // Sabor pizza: remover apenas a ficha específica do tamanho
+                    return !(
+                        item.ingredient_id === ingredientId &&
+                        item.size === size
+                    );
+                }
+                // Outros produtos: remover todas as ocorrências do ingrediente
+                return item.ingredient_id !== ingredientId;
+            }),
         );
     };
 
@@ -293,7 +344,7 @@ export function ProductFormDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+            <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto sm:max-w-xl">
                 {loadingProduct ? (
                     <div className="flex items-center justify-center p-8">
                         <div className="text-center">
@@ -429,6 +480,9 @@ export function ProductFormDialog({
                                                 <SelectItem value="pizza">
                                                     Pizza
                                                 </SelectItem>
+                                                <SelectItem value="sabor_pizza">
+                                                    Sabor de Pizza
+                                                </SelectItem>
                                                 <SelectItem value="bebida">
                                                     Bebida
                                                 </SelectItem>
@@ -451,40 +505,107 @@ export function ProductFormDialog({
                                     </div>
                                 </div>
 
-                                {/* Quantidade de Sabores (apenas para pizzas) */}
+                                {/* Tamanho e Quantidade de Sabores (apenas para pizzas) */}
                                 {data.product_category === 'pizza' && (
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="max_flavors">
-                                            Quantidade de Sabores
-                                        </Label>
-                                        <Input
-                                            id="max_flavors"
-                                            type="number"
-                                            min="1"
-                                            max="10"
-                                            value={data.max_flavors}
-                                            onChange={(e) =>
-                                                setData(
-                                                    'max_flavors',
-                                                    parseInt(e.target.value) ||
-                                                        1,
-                                                )
-                                            }
-                                        />
-                                        {errors.max_flavors && (
-                                            <p className="text-sm text-red-500">
-                                                {errors.max_flavors}
-                                            </p>
-                                        )}
-                                        <p className="text-xs text-muted-foreground">
-                                            Fração automática: 1/
-                                            {data.max_flavors} ={' '}
-                                            {(
-                                                (1 / data.max_flavors) *
-                                                100
-                                            ).toFixed(1)}
-                                            % por sabor
-                                        </p>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {/* Tamanho */}
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="size">
+                                                Tamanho
+                                            </Label>
+                                            <Select
+                                                value={data.size || 'none'}
+                                                onValueChange={(value) =>
+                                                    setData(
+                                                        'size',
+                                                        value === 'none'
+                                                            ? ''
+                                                            : value,
+                                                    )
+                                                }
+                                            >
+                                                <SelectTrigger
+                                                    id="size"
+                                                    className="w-full"
+                                                >
+                                                    <SelectValue placeholder="Selecione o tamanho" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none">
+                                                        Nenhum
+                                                    </SelectItem>
+                                                    <SelectItem value="broto">
+                                                        Broto
+                                                    </SelectItem>
+                                                    <SelectItem value="media">
+                                                        Média
+                                                    </SelectItem>
+                                                    <SelectItem value="grande">
+                                                        Grande
+                                                    </SelectItem>
+                                                    <SelectItem value="familia">
+                                                        Família
+                                                    </SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            {errors.size && (
+                                                <p className="text-sm text-red-500">
+                                                    {errors.size}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {/* Quantidade de Sabores */}
+                                        <div className="grid gap-2">
+                                            <div className="flex items-center gap-1.5">
+                                                <Label htmlFor="max_flavors">
+                                                    Quantidade de Sabores
+                                                </Label>
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Info className="h-3.5 w-3.5 cursor-help text-muted-foreground" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p>
+                                                                Fração
+                                                                automática: 1/
+                                                                {
+                                                                    data.max_flavors
+                                                                }{' '}
+                                                                ={' '}
+                                                                {(
+                                                                    (1 /
+                                                                        data.max_flavors) *
+                                                                    100
+                                                                ).toFixed(1)}
+                                                                % por sabor
+                                                            </p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                            </div>
+                                            <Input
+                                                id="max_flavors"
+                                                type="number"
+                                                min="1"
+                                                max="10"
+                                                value={data.max_flavors}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'max_flavors',
+                                                        parseInt(
+                                                            e.target.value,
+                                                        ) || 1,
+                                                    )
+                                                }
+                                            />
+                                            {errors.max_flavors && (
+                                                <p className="text-sm text-red-500">
+                                                    {errors.max_flavors}
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
 
@@ -659,6 +780,29 @@ export function ProductFormDialog({
                                         }
                                     />
                                 </div>
+
+                                {/* Usar como Insumo */}
+                                <div className="flex items-center justify-between space-x-2">
+                                    <div className="space-y-0.5">
+                                        <Label
+                                            htmlFor="is_ingredient"
+                                            className="cursor-pointer"
+                                        >
+                                            Usar como Insumo
+                                        </Label>
+                                        <p className="text-sm text-muted-foreground">
+                                            Permite usar este produto na
+                                            composição de outros produtos
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        id="is_ingredient"
+                                        checked={data.is_ingredient}
+                                        onCheckedChange={(checked) =>
+                                            setData('is_ingredient', checked)
+                                        }
+                                    />
+                                </div>
                             </TabsContent>
 
                             <TabsContent value="recipe" className="space-y-4">
@@ -682,6 +826,31 @@ export function ProductFormDialog({
                                             emptyMessage="Nenhum insumo encontrado."
                                             className="flex-1"
                                         />
+                                        {data.product_category ===
+                                            'sabor_pizza' && (
+                                            <Select
+                                                value={selectedSize}
+                                                onValueChange={setSelectedSize}
+                                            >
+                                                <SelectTrigger className="w-32">
+                                                    <SelectValue placeholder="Tamanho" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="broto">
+                                                        Broto
+                                                    </SelectItem>
+                                                    <SelectItem value="media">
+                                                        Média
+                                                    </SelectItem>
+                                                    <SelectItem value="grande">
+                                                        Grande
+                                                    </SelectItem>
+                                                    <SelectItem value="familia">
+                                                        Família
+                                                    </SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        )}
                                         <Input
                                             type="number"
                                             step="0.001"
@@ -690,7 +859,7 @@ export function ProductFormDialog({
                                                 setIngredientQty(e.target.value)
                                             }
                                             placeholder="Qtd"
-                                            className="w-24"
+                                            className=""
                                         />
                                         <Button
                                             type="button"
@@ -704,90 +873,292 @@ export function ProductFormDialog({
 
                                 {/* Lista de Ingredientes */}
                                 {data.recipe.length > 0 ? (
-                                    <div className="rounded-md border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>
-                                                        Insumo
-                                                    </TableHead>
-                                                    <TableHead className="text-right">
-                                                        Quantidade
-                                                    </TableHead>
-                                                    <TableHead className="text-right">
-                                                        Custo Unit.
-                                                    </TableHead>
-                                                    <TableHead className="text-right">
-                                                        Custo Total
-                                                    </TableHead>
-                                                    <TableHead className="w-[50px]"></TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {data.recipe.map((item) => (
-                                                    <TableRow
-                                                        key={item.ingredient_id}
-                                                    >
-                                                        <TableCell>
-                                                            {
-                                                                item.ingredient_name
+                                    data.product_category === 'sabor_pizza' ? (
+                                        // Visualização agrupada por tamanho para sabores de pizza
+                                        <div className="space-y-4">
+                                            {(() => {
+                                                // Agrupar ingredientes por tamanho
+                                                const grouped =
+                                                    data.recipe.reduce(
+                                                        (acc, item) => {
+                                                            const size =
+                                                                item.size ||
+                                                                'Sem tamanho';
+                                                            if (!acc[size]) {
+                                                                acc[size] = [];
                                                             }
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            {item.qty.toFixed(
-                                                                3,
-                                                            )}{' '}
-                                                            {
-                                                                item.ingredient_unit
-                                                            }
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            R${' '}
-                                                            {item.ingredient_price.toFixed(
-                                                                4,
-                                                            )}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-medium">
-                                                            R${' '}
-                                                            {(
-                                                                item.qty *
-                                                                item.ingredient_price
-                                                            ).toFixed(4)}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Button
-                                                                type="button"
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                onClick={() =>
-                                                                    removeIngredientFromRecipe(
-                                                                        item.ingredient_id,
-                                                                    )
-                                                                }
+                                                            acc[size].push(
+                                                                item,
+                                                            );
+                                                            return acc;
+                                                        },
+                                                        {} as Record<
+                                                            string,
+                                                            TechnicalSheetItem[]
+                                                        >,
+                                                    );
+
+                                                const sizeOrder = [
+                                                    'broto',
+                                                    'media',
+                                                    'grande',
+                                                    'familia',
+                                                ];
+                                                const sortedSizes = Object.keys(
+                                                    grouped,
+                                                ).sort(
+                                                    (a, b) =>
+                                                        sizeOrder.indexOf(a) -
+                                                        sizeOrder.indexOf(b),
+                                                );
+
+                                                return sortedSizes.map(
+                                                    (size) => {
+                                                        const items =
+                                                            grouped[size];
+                                                        const subtotal =
+                                                            items.reduce(
+                                                                (sum, item) =>
+                                                                    sum +
+                                                                    item.qty *
+                                                                        item.ingredient_price,
+                                                                0,
+                                                            );
+                                                        const sizeLabel =
+                                                            size
+                                                                .charAt(0)
+                                                                .toUpperCase() +
+                                                            size.slice(1);
+
+                                                        return (
+                                                            <div
+                                                                key={size}
+                                                                className="rounded-md border"
                                                             >
-                                                                <Trash2 className="h-4 w-4 text-red-600" />
-                                                            </Button>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
-                                                <TableRow className="bg-muted/50">
-                                                    <TableCell
-                                                        colSpan={3}
-                                                        className="font-semibold"
-                                                    >
-                                                        CMV Total
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-semibold">
+                                                                <div className="flex items-center gap-2 bg-muted/50 px-4 py-2 font-semibold">
+                                                                    <span className="inline-flex rounded-md bg-purple-100 px-2 py-1 text-xs font-medium text-purple-700">
+                                                                        {
+                                                                            sizeLabel
+                                                                        }
+                                                                    </span>
+                                                                    <span className="text-sm text-muted-foreground">
+                                                                        {
+                                                                            items.length
+                                                                        }{' '}
+                                                                        {items.length ===
+                                                                        1
+                                                                            ? 'insumo'
+                                                                            : 'insumos'}
+                                                                    </span>
+                                                                </div>
+                                                                <Table>
+                                                                    <TableHeader>
+                                                                        <TableRow>
+                                                                            <TableHead>
+                                                                                Insumo
+                                                                            </TableHead>
+                                                                            <TableHead className="text-right">
+                                                                                Quantidade
+                                                                            </TableHead>
+                                                                            <TableHead className="text-right">
+                                                                                Custo
+                                                                                Unit.
+                                                                            </TableHead>
+                                                                            <TableHead className="text-right">
+                                                                                Custo
+                                                                                Total
+                                                                            </TableHead>
+                                                                            <TableHead className="w-[50px]"></TableHead>
+                                                                        </TableRow>
+                                                                    </TableHeader>
+                                                                    <TableBody>
+                                                                        {items.map(
+                                                                            (
+                                                                                item,
+                                                                                idx,
+                                                                            ) => (
+                                                                                <TableRow
+                                                                                    key={`${item.ingredient_id}-${size}-${idx}`}
+                                                                                >
+                                                                                    <TableCell>
+                                                                                        {
+                                                                                            item.ingredient_name
+                                                                                        }
+                                                                                    </TableCell>
+                                                                                    <TableCell className="text-right">
+                                                                                        {item.qty.toFixed(
+                                                                                            3,
+                                                                                        )}{' '}
+                                                                                        {
+                                                                                            item.ingredient_unit
+                                                                                        }
+                                                                                    </TableCell>
+                                                                                    <TableCell className="text-right">
+                                                                                        R${' '}
+                                                                                        {item.ingredient_price.toFixed(
+                                                                                            4,
+                                                                                        )}
+                                                                                    </TableCell>
+                                                                                    <TableCell className="text-right font-medium">
+                                                                                        R${' '}
+                                                                                        {(
+                                                                                            item.qty *
+                                                                                            item.ingredient_price
+                                                                                        ).toFixed(
+                                                                                            4,
+                                                                                        )}
+                                                                                    </TableCell>
+                                                                                    <TableCell>
+                                                                                        <Button
+                                                                                            type="button"
+                                                                                            variant="ghost"
+                                                                                            size="sm"
+                                                                                            onClick={() =>
+                                                                                                removeIngredientFromRecipe(
+                                                                                                    item.ingredient_id,
+                                                                                                    item.size,
+                                                                                                )
+                                                                                            }
+                                                                                        >
+                                                                                            <Trash2 className="h-4 w-4 text-red-600" />
+                                                                                        </Button>
+                                                                                    </TableCell>
+                                                                                </TableRow>
+                                                                            ),
+                                                                        )}
+                                                                        <TableRow className="bg-muted/30">
+                                                                            <TableCell
+                                                                                colSpan={
+                                                                                    3
+                                                                                }
+                                                                                className="text-sm font-semibold"
+                                                                            >
+                                                                                Subtotal{' '}
+                                                                                {
+                                                                                    sizeLabel
+                                                                                }
+                                                                            </TableCell>
+                                                                            <TableCell className="text-right font-semibold">
+                                                                                R${' '}
+                                                                                {subtotal.toFixed(
+                                                                                    4,
+                                                                                )}
+                                                                            </TableCell>
+                                                                            <TableCell></TableCell>
+                                                                        </TableRow>
+                                                                    </TableBody>
+                                                                </Table>
+                                                            </div>
+                                                        );
+                                                    },
+                                                );
+                                            })()}
+                                            <div className="rounded-md border bg-muted/50 px-4 py-3">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="font-semibold">
+                                                        CMV Total (Todos os
+                                                        Tamanhos)
+                                                    </span>
+                                                    <span className="text-lg font-bold">
                                                         R${' '}
                                                         {calculateCMV().toFixed(
                                                             4,
                                                         )}
-                                                    </TableCell>
-                                                    <TableCell></TableCell>
-                                                </TableRow>
-                                            </TableBody>
-                                        </Table>
-                                    </div>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        // Visualização padrão para outros produtos
+                                        <div className="rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>
+                                                            Insumo
+                                                        </TableHead>
+                                                        <TableHead className="text-right">
+                                                            Quantidade
+                                                        </TableHead>
+                                                        <TableHead className="text-right">
+                                                            Custo Unit.
+                                                        </TableHead>
+                                                        <TableHead className="text-right">
+                                                            Custo Total
+                                                        </TableHead>
+                                                        <TableHead className="w-[50px]"></TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {data.recipe.map(
+                                                        (item, idx) => (
+                                                            <TableRow
+                                                                key={`${item.ingredient_id}-${idx}`}
+                                                            >
+                                                                <TableCell>
+                                                                    {
+                                                                        item.ingredient_name
+                                                                    }
+                                                                </TableCell>
+                                                                <TableCell className="text-right">
+                                                                    {item.qty.toFixed(
+                                                                        3,
+                                                                    )}{' '}
+                                                                    {
+                                                                        item.ingredient_unit
+                                                                    }
+                                                                </TableCell>
+                                                                <TableCell className="text-right">
+                                                                    R${' '}
+                                                                    {item.ingredient_price.toFixed(
+                                                                        4,
+                                                                    )}
+                                                                </TableCell>
+                                                                <TableCell className="text-right font-medium">
+                                                                    R${' '}
+                                                                    {(
+                                                                        item.qty *
+                                                                        item.ingredient_price
+                                                                    ).toFixed(
+                                                                        4,
+                                                                    )}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        onClick={() =>
+                                                                            removeIngredientFromRecipe(
+                                                                                item.ingredient_id,
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4 text-red-600" />
+                                                                    </Button>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ),
+                                                    )}
+                                                    <TableRow className="bg-muted/50">
+                                                        <TableCell
+                                                            colSpan={3}
+                                                            className="font-semibold"
+                                                        >
+                                                            CMV Total
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-semibold">
+                                                            R${' '}
+                                                            {calculateCMV().toFixed(
+                                                                4,
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell></TableCell>
+                                                    </TableRow>
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    )
                                 ) : (
                                     <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
                                         Nenhum insumo adicionado ainda.

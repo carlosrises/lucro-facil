@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Combobox } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import {
     Select,
@@ -981,60 +982,26 @@ export default function ItemTriage({
                                                         Vincular produto CMV
                                                         (opcional):
                                                     </h3>
-                                                    <div className="flex gap-2">
-                                                        <Select
-                                                            value={
-                                                                selectedProduct ||
-                                                                undefined
-                                                            }
-                                                            onValueChange={(
-                                                                value,
-                                                            ) => {
-                                                                setSelectedProduct(
-                                                                    value,
-                                                                );
-                                                            }}
-                                                        >
-                                                            <SelectTrigger className="flex-1">
-                                                                <SelectValue placeholder="Nenhum (opcional)" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {internalProducts.map(
-                                                                    (
-                                                                        product,
-                                                                    ) => (
-                                                                        <SelectItem
-                                                                            key={
-                                                                                product.id
-                                                                            }
-                                                                            value={product.id.toString()}
-                                                                        >
-                                                                            {
-                                                                                product.name
-                                                                            }{' '}
-                                                                            -{' '}
-                                                                            {formatCurrency(
-                                                                                product.unit_cost,
-                                                                            )}
-                                                                        </SelectItem>
-                                                                    ),
-                                                                )}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        {selectedProduct && (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="icon"
-                                                                onClick={() =>
-                                                                    setSelectedProduct(
-                                                                        '',
-                                                                    )
-                                                                }
-                                                            >
-                                                                ×
-                                                            </Button>
-                                                        )}
-                                                    </div>
+                                                    <Combobox
+                                                        options={[
+                                                            {
+                                                                value: '',
+                                                                label: 'Nenhum (opcional)',
+                                                            },
+                                                            ...internalProducts.map(
+                                                                (product) => ({
+                                                                    value: product.id.toString(),
+                                                                    label: `${product.name} - ${formatCurrency(product.unit_cost)}`,
+                                                                }),
+                                                            ),
+                                                        ]}
+                                                        value={selectedProduct}
+                                                        onChange={setSelectedProduct}
+                                                        placeholder="Selecione um produto..."
+                                                        searchPlaceholder="Buscar produto..."
+                                                        emptyMessage="Nenhum produto encontrado."
+                                                        className="w-full"
+                                                    />
                                                 </div>
 
                                                 {/* Botão confirmar */}
