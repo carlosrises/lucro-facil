@@ -11,38 +11,11 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { calculateItemCost, calculateOrderCMV } from '@/lib/order-calculations';
 import { IconChevronDown } from '@tabler/icons-react';
 import { ColumnDef } from '@tanstack/react-table';
 import { endOfDay, startOfDay } from 'date-fns';
 import { Badge } from '../ui/badge';
-
-/**
- * Calcula o custo de um item considerando múltiplas associações
- */
-function calculateItemCost(item: OrderItem): number {
-    const itemQuantity = item.qty || item.quantity || 0;
-
-    // Novo sistema: usar mappings se existir
-    if (item.mappings && item.mappings.length > 0) {
-        const mappingsCost = item.mappings.reduce((sum, mapping) => {
-            if (mapping.internal_product?.unit_cost) {
-                const unitCost = parseFloat(mapping.internal_product.unit_cost);
-                const mappingQuantity = mapping.quantity || 1;
-                return sum + unitCost * mappingQuantity;
-            }
-            return sum;
-        }, 0);
-        return mappingsCost * itemQuantity;
-    }
-
-    // Fallback: sistema legado (internal_product direto)
-    if (item.internal_product?.unit_cost) {
-        const unitCost = parseFloat(item.internal_product.unit_cost);
-        return unitCost * itemQuantity;
-    }
-
-    return 0;
-}
 
 // Tipagem vinda do backend
 export type OrderItemMapping = {
@@ -468,34 +441,8 @@ export const columns: ColumnDef<Order>[] = [
         cell: ({ row }) => {
             const items = row.original.items || [];
 
-            // Calcular soma dos custos dos produtos associados + add-ons
-            const totalCost = items.reduce((sum, item) => {
-                // Custo do item principal
-                let itemCost = calculateItemCost(item);
-
-                // Somar custo dos add-ons vinculados
-                if (
-                    item.add_ons_enriched &&
-                    Array.isArray(item.add_ons_enriched)
-                ) {
-                    const addOnsCost = item.add_ons_enriched.reduce(
-                        (addOnSum: number, addOn: any) => {
-                            const addonCost = addOn.product_mapping
-                                ?.internal_product?.unit_cost
-                                ? parseFloat(
-                                      addOn.product_mapping.internal_product
-                                          .unit_cost,
-                                  )
-                                : 0;
-                            return addOnSum + addonCost;
-                        },
-                        0,
-                    );
-                    itemCost += addOnsCost;
-                }
-
-                return sum + itemCost;
-            }, 0);
+            // Calcular CMV usando a função compartilhada
+            const totalCost = calculateOrderCMV(items);
 
             const isCancelled = row.original.status === 'CANCELLED';
 
@@ -724,10 +671,8 @@ export const columns: ColumnDef<Order>[] = [
                     orderTotal = parseFloat(row.original.gross_total || '0');
                 }
 
-                // Calcular custo total dos produtos
-                const totalCost = items.reduce((sum, item) => {
-                    return sum + calculateItemCost(item);
-                }, 0);
+                // Calcular custo total dos produtos (CMV)
+                const totalCost = calculateOrderCMV(items);
 
                 // Calcular impostos totais
                 const totalTax = items.reduce((sum, item) => {
@@ -961,10 +906,8 @@ export const columns: ColumnDef<Order>[] = [
                     </div>
                 );
 
-            // Calcular custo total dos produtos
-            const totalCost = items.reduce((sum, item) => {
-                return sum + calculateItemCost(item);
-            }, 0);
+            // Calcular custo total dos produtos (CMV)
+            const totalCost = calculateOrderCMV(items);
 
             // Calcular impostos dos produtos
             const productTax = items.reduce((sum, item) => {

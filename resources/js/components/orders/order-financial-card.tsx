@@ -12,6 +12,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { calculateOrderCMV } from '@/lib/order-calculations';
 import {
     AlertCircle,
     ArrowDownLeft,
@@ -246,30 +247,7 @@ export function OrderFinancialCard({
 
         // CMV (custo dos produtos + add-ons)
         const items = order?.items || [];
-        const cmv = items.reduce((sum: number, item: OrderItem) => {
-            // Custo do item principal
-            let itemTotal = calculateItemCost(item);
-
-            // Somar custo dos add-ons vinculados
-            if (item.add_ons_enriched && Array.isArray(item.add_ons_enriched)) {
-                const addOnsCost = item.add_ons_enriched.reduce(
-                    (addOnSum: number, addOn: any) => {
-                        const addonCost = addOn.product_mapping
-                            ?.internal_product?.unit_cost
-                            ? parseFloat(
-                                  addOn.product_mapping.internal_product
-                                      .unit_cost,
-                              )
-                            : 0;
-                        return addOnSum + addonCost;
-                    },
-                    0,
-                );
-                itemTotal += addOnsCost;
-            }
-
-            return sum + itemTotal;
-        }, 0);
+        const cmv = calculateOrderCMV(items);
 
         // Impostos dos produtos
         const productTax = items.reduce((sum: number, item: OrderItem) => {
@@ -978,19 +956,127 @@ export function OrderFinancialCard({
                                                                                 .product_mapping
                                                                                 .internal_product;
 
-                                                                        // Calcular custo do add-on
-                                                                        const addonCost =
+                                                                        // Verificar se é sabor de pizza
+                                                                        const isFlavor =
                                                                             addOn
                                                                                 .product_mapping
-                                                                                ?.internal_product
-                                                                                ?.unit_cost
-                                                                                ? parseFloat(
-                                                                                      addOn
-                                                                                          .product_mapping
-                                                                                          .internal_product
-                                                                                          .unit_cost,
+                                                                                ?.item_type ===
+                                                                            'flavor';
+
+                                                                        // Detectar tamanho da pizza do nome do item pai
+                                                                        let pizzaSize:
+                                                                            | string
+                                                                            | null =
+                                                                            null;
+                                                                        if (
+                                                                            isFlavor
+                                                                        ) {
+                                                                            const itemNameLower =
+                                                                                item.name.toLowerCase();
+                                                                            if (
+                                                                                itemNameLower.includes(
+                                                                                    'broto',
+                                                                                )
+                                                                            ) {
+                                                                                pizzaSize =
+                                                                                    'broto';
+                                                                            } else if (
+                                                                                itemNameLower.includes(
+                                                                                    'média',
+                                                                                ) ||
+                                                                                itemNameLower.includes(
+                                                                                    'media',
+                                                                                )
+                                                                            ) {
+                                                                                pizzaSize =
+                                                                                    'media';
+                                                                            } else if (
+                                                                                itemNameLower.includes(
+                                                                                    'grande',
+                                                                                )
+                                                                            ) {
+                                                                                pizzaSize =
+                                                                                    'grande';
+                                                                            } else if (
+                                                                                itemNameLower.includes(
+                                                                                    'família',
+                                                                                ) ||
+                                                                                itemNameLower.includes(
+                                                                                    'familia',
+                                                                                )
+                                                                            ) {
+                                                                                pizzaSize =
+                                                                                    'familia';
+                                                                            }
+                                                                        }
+
+                                                                        // Calcular custo do add-on
+                                                                        let baseAddonCost = 0;
+                                                                        const internalProduct =
+                                                                            addOn
+                                                                                .product_mapping
+                                                                                ?.internal_product;
+
+                                                                        if (
+                                                                            internalProduct
+                                                                        ) {
+                                                                            // Se for sabor de pizza e tiver CMV por tamanho, usar o CMV do tamanho detectado
+                                                                            if (
+                                                                                isFlavor &&
+                                                                                pizzaSize &&
+                                                                                internalProduct.cmv_by_size &&
+                                                                                internalProduct
+                                                                                    .cmv_by_size[
+                                                                                    pizzaSize
+                                                                                ]
+                                                                            ) {
+                                                                                baseAddonCost =
+                                                                                    parseFloat(
+                                                                                        internalProduct
+                                                                                            .cmv_by_size[
+                                                                                            pizzaSize
+                                                                                        ],
+                                                                                    );
+                                                                            } else if (
+                                                                                internalProduct.unit_cost
+                                                                            ) {
+                                                                                baseAddonCost =
+                                                                                    parseFloat(
+                                                                                        internalProduct.unit_cost,
+                                                                                    );
+                                                                            }
+                                                                        }
+
+                                                                        // Contar total de sabores no item para calcular denominador
+                                                                        const totalFlavors =
+                                                                            isFlavor
+                                                                                ? addOnsEnriched.filter(
+                                                                                      (
+                                                                                          a,
+                                                                                      ) =>
+                                                                                          a
+                                                                                              .product_mapping
+                                                                                              ?.item_type ===
+                                                                                          'flavor',
                                                                                   )
+                                                                                      .length
                                                                                 : 0;
+
+                                                                        const fractionText =
+                                                                            isFlavor &&
+                                                                            totalFlavors >
+                                                                                1
+                                                                                ? `1/${totalFlavors}`
+                                                                                : null;
+
+                                                                        // Aplicar fração ao custo se for sabor
+                                                                        const addonCost =
+                                                                            isFlavor &&
+                                                                            totalFlavors >
+                                                                                1
+                                                                                ? baseAddonCost /
+                                                                                  totalFlavors
+                                                                                : baseAddonCost;
 
                                                                         return (
                                                                             <li
@@ -1008,6 +1094,13 @@ export function OrderFinancialCard({
                                                                                     <AddonIcon
                                                                                         className={`h-3 w-3 shrink-0 ${addonClassName}`}
                                                                                     />
+                                                                                    {fractionText && (
+                                                                                        <span className="rounded bg-purple-50 px-1 py-0.5 text-[10px] leading-3 font-medium text-purple-600">
+                                                                                            {
+                                                                                                fractionText
+                                                                                            }
+                                                                                        </span>
+                                                                                    )}
                                                                                     <span className="text-xs leading-4 font-normal text-muted-foreground/70">
                                                                                         {
                                                                                             addOn.name
