@@ -139,7 +139,7 @@ class OrdersController extends Controller
                         // Buscar ProductMapping do add-on
                         $mapping = \App\Models\ProductMapping::where('external_item_id', $addOnSku)
                             ->where('tenant_id', tenant_id())
-                            ->with('internalProduct:id,name,unit_cost')
+                            ->with('internalProduct:id,name,unit_cost,product_category')
                             ->first();
 
                         $addOnsWithMappings[] = [
@@ -154,6 +154,14 @@ class OrdersController extends Controller
                                     'id' => $mapping->internalProduct->id,
                                     'name' => $mapping->internalProduct->name,
                                     'unit_cost' => $mapping->internalProduct->unit_cost,
+                                    'product_category' => $mapping->internalProduct->product_category,
+                                    // Se for sabor de pizza, incluir CMVs por tamanho
+                                    'cmv_by_size' => $mapping->internalProduct->product_category === 'sabor_pizza' ? [
+                                        'broto' => $mapping->internalProduct->calculateCMV('broto'),
+                                        'media' => $mapping->internalProduct->calculateCMV('media'),
+                                        'grande' => $mapping->internalProduct->calculateCMV('grande'),
+                                        'familia' => $mapping->internalProduct->calculateCMV('familia'),
+                                    ] : null,
                                 ] : null,
                             ] : null,
                         ];

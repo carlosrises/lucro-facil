@@ -114,16 +114,19 @@ class ProductsController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'sku' => ['nullable', 'string', 'max:255', 'unique:internal_products,sku,NULL,id,tenant_id,' . tenant_id()],
             'type' => ['required', 'in:product,service'],
-            'product_category' => ['nullable', 'string', 'in:pizza,bebida,sobremesa,entrada,outro'],
+            'product_category' => ['nullable', 'string', 'in:pizza,sabor_pizza,bebida,sobremesa,entrada,outro'],
             'max_flavors' => ['nullable', 'integer', 'min:1', 'max:10'],
+            'size' => ['nullable', 'string', 'in:broto,media,grande,familia'],
             'unit' => ['required', 'in:unit,kg,g,l,ml,hour'],
             'unit_cost' => ['required', 'numeric', 'min:0'],
             'sale_price' => ['required', 'numeric', 'min:0'],
             'tax_category_id' => ['nullable', 'exists:tax_categories,id'],
             'active' => ['boolean'],
+            'is_ingredient' => ['boolean'],
             'recipe' => ['nullable', 'array'],
             'recipe.*.ingredient_id' => ['required', 'exists:ingredients,id'],
             'recipe.*.qty' => ['required', 'numeric', 'min:0'],
+            'recipe.*.size' => ['nullable', 'string', 'in:broto,media,grande,familia'],
         ]);
 
         DB::beginTransaction();
@@ -135,11 +138,13 @@ class ProductsController extends Controller
                 'type' => $validated['type'],
                 'product_category' => $validated['product_category'] ?? null,
                 'max_flavors' => $validated['max_flavors'] ?? null,
+                'size' => $validated['size'] ?? null,
                 'unit' => $validated['unit'],
                 'unit_cost' => $validated['unit_cost'],
                 'sale_price' => $validated['sale_price'],
                 'tax_category_id' => $validated['tax_category_id'] ?? null,
                 'active' => $validated['active'] ?? true,
+                'is_ingredient' => $validated['is_ingredient'] ?? false,
             ]);
 
             // Se tiver receita, adicionar os ingredientes
@@ -150,6 +155,7 @@ class ProductsController extends Controller
                         'internal_product_id' => $product->id,
                         'ingredient_id' => $item['ingredient_id'],
                         'qty' => $item['qty'],
+                        'size' => $item['size'] ?? null,
                     ]);
                 }
 
@@ -174,6 +180,16 @@ class ProductsController extends Controller
         }
 
         $product->load(['costs.ingredient']);
+
+        // Se for sabor de pizza, adicionar CMVs por tamanho
+        if ($product->product_category === 'sabor_pizza') {
+            $product->cmv_by_size = [
+                'broto' => $product->calculateCMV('broto'),
+                'media' => $product->calculateCMV('media'),
+                'grande' => $product->calculateCMV('grande'),
+                'familia' => $product->calculateCMV('familia'),
+            ];
+        }
 
         return response()->json($product);
     }
@@ -215,16 +231,19 @@ class ProductsController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'sku' => ['nullable', 'string', 'max:255', 'unique:internal_products,sku,' . $product->id . ',id,tenant_id,' . tenant_id()],
             'type' => ['required', 'in:product,service'],
-            'product_category' => ['nullable', 'string', 'in:pizza,bebida,sobremesa,entrada,outro'],
+            'product_category' => ['nullable', 'string', 'in:pizza,sabor_pizza,bebida,sobremesa,entrada,outro'],
             'max_flavors' => ['nullable', 'integer', 'min:1', 'max:10'],
+            'size' => ['nullable', 'string', 'in:broto,media,grande,familia'],
             'unit' => ['required', 'in:unit,kg,g,l,ml,hour'],
             'unit_cost' => ['required', 'numeric', 'min:0'],
             'sale_price' => ['required', 'numeric', 'min:0'],
             'tax_category_id' => ['nullable', 'exists:tax_categories,id'],
             'active' => ['boolean'],
+            'is_ingredient' => ['boolean'],
             'recipe' => ['nullable', 'array'],
             'recipe.*.ingredient_id' => ['required_with:recipe', 'exists:ingredients,id'],
             'recipe.*.qty' => ['required_with:recipe', 'numeric', 'min:0'],
+            'recipe.*.size' => ['nullable', 'string', 'in:broto,media,grande,familia'],
             'update_existing_orders' => ['boolean'],
         ]);
 
@@ -240,11 +259,13 @@ class ProductsController extends Controller
                 'type' => $validated['type'],
                 'product_category' => $validated['product_category'] ?? null,
                 'max_flavors' => $validated['max_flavors'] ?? null,
+                'size' => $validated['size'] ?? null,
                 'unit' => $validated['unit'],
                 'unit_cost' => $validated['unit_cost'], // Sempre salva o valor manual
                 'sale_price' => $validated['sale_price'],
                 'tax_category_id' => $validated['tax_category_id'] ?? null,
                 'active' => $validated['active'] ?? true,
+                'is_ingredient' => $validated['is_ingredient'] ?? false,
             ]);
 
             // Se houver recipe, atualizar os custos (ficha técnica)
@@ -264,6 +285,7 @@ class ProductsController extends Controller
                         'internal_product_id' => $product->id,
                         'ingredient_id' => $item['ingredient_id'],
                         'qty' => $item['qty'],
+                        'size' => $item['size'] ?? null,
                     ]);
                 }
 
