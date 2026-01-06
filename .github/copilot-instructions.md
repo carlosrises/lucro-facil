@@ -1,8 +1,23 @@
 # Instruções Copilot para lucro-facil2
 
-## 🚨 REGRA FUNDAMENTAL - GIT
+## 🚨 REGRAS FUNDAMENTAIS
 
+### GIT
 **NUNCA faça commit automaticamente**. Sempre aguarde solicitação explícita do usuário para commitar e fazer push das alterações. O usuário precisa testar antes de enviar para o repositório.
+
+**COMMITS SEPARADOS**: Sempre realize o máximo de commits separados possível, organizando as alterações de forma lógica e atômica. Cada commit deve representar uma unidade de mudança coesa e independente. Exemplo:
+- Commit 1: Migrations e models
+- Commit 2: Controllers e validações
+- Commit 3: Frontend components
+- Commit 4: Cálculos e lógica de negócio
+- Commit 5: Limpeza e refatoração
+
+### ARQUIVOS TEMPORÁRIOS
+**NUNCA crie scripts temporários de debug/test/check na raiz do projeto**. Arquivos como `test-*.php`, `verify_*.php`, `debug_*.php`, `check_*.php`, `fix_*.php`, `analyze_*.php`, `list_*.php`, `compare_*.php` NÃO DEVEM ser criados. Se precisar testar algo, use:
+- Testes unitários em `tests/`
+- Comandos Artisan em `app/Console/Commands/`
+- Tinker: `php artisan tinker`
+- Routes de debug temporárias (mas remova antes do commit)
 
 ## Visão Geral do Projeto
 
