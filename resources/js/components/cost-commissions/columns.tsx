@@ -36,6 +36,7 @@ export type CostCommission = {
         | 'pickup_only'
         | 'payment_method'
         | 'custom';
+    delivery_by?: 'all' | 'store' | 'marketplace';
     payment_type?: 'all' | 'online' | 'offline';
     condition_value: string | null;
     condition_values?: string[] | null;
