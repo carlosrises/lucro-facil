@@ -407,7 +407,7 @@ class OrderCostService
         return match ($tax->applies_to) {
             'payment_method' => $this->checkPaymentMethod($order, $tax->condition_value),
             'order_type' => $this->checkOrderType($order, $tax->condition_value),
-            'delivery_only' => $this->checkIsDelivery($order),
+            'delivery_only' => $this->checkIsDelivery($order, $tax->delivery_by ?? 'all'),
             'store' => $order->store_id == $tax->condition_value,
             'all_orders' => true,
             default => ! empty($tax->condition_value) ? false : true,
@@ -417,17 +417,31 @@ class OrderCostService
     /**
      * Verificar se o pedido é delivery
      */
-    private function checkIsDelivery(Order $order): bool
+    private function checkIsDelivery(Order $order, string $deliveryBy = 'all'): bool
     {
         // Para pedidos Takeat, verificar session.table.table_type e delivery_by
         if ($order->provider === 'takeat') {
             $tableType = $order->raw['session']['table']['table_type'] ?? null;
-            $deliveryBy = $order->raw['session']['delivery_by'] ?? null;
+            $orderDeliveryBy = $order->raw['session']['delivery_by'] ?? null;
 
-            // Se é delivery e (é MERCHANT OU delivery_by está vazio), aplica taxa
-            // Quando delivery_by está vazio, assumimos que é a loja fazendo a entrega
-            if ($tableType === 'delivery' && ($deliveryBy === 'MERCHANT' || empty($deliveryBy))) {
+            // Se não é delivery, retorna false
+            if ($tableType !== 'delivery') {
+                return false;
+            }
+
+            // Se a comissão é para todos os deliveries, aplica
+            if ($deliveryBy === 'all') {
                 return true;
+            }
+
+            // Se a comissão é para delivery da loja (MERCHANT ou vazio)
+            if ($deliveryBy === 'store') {
+                return $orderDeliveryBy === 'MERCHANT' || empty($orderDeliveryBy);
+            }
+
+            // Se a comissão é para delivery do marketplace
+            if ($deliveryBy === 'marketplace') {
+                return ! empty($orderDeliveryBy) && $orderDeliveryBy !== 'MERCHANT';
             }
 
             return false;
@@ -436,7 +450,29 @@ class OrderCostService
         // Para outros providers (iFood, Rappi, etc), verificar orderType
         $orderType = $order->raw['orderType'] ?? $order->origin ?? null;
 
-        return $orderType === 'DELIVERY';
+        if ($orderType !== 'DELIVERY') {
+            return false;
+        }
+
+        // Para iFood e outros, o delivery_by indica quem realiza:
+        // 'store' = entregador próprio da loja
+        // 'marketplace' = entregador do marketplace
+        if ($deliveryBy === 'all') {
+            return true;
+        }
+
+        // Verificar quem faz o delivery no iFood
+        $orderDeliveryBy = $order->raw['delivery']['deliveredBy'] ?? null;
+
+        if ($deliveryBy === 'store') {
+            return $orderDeliveryBy === 'MERCHANT';
+        }
+
+        if ($deliveryBy === 'marketplace') {
+            return $orderDeliveryBy === 'MARKETPLACE';
+        }
+
+        return false;
     }
 
     /**
@@ -643,13 +679,21 @@ class OrderCostService
     /**
      * Recalcular custos de múltiplos pedidos
      */
-    public function recalculateBatch(Collection $orders): int
+    public function recalculateBatch(Collection $orders, ?int $specificCommissionId = null, bool $isDeleting = false): int
     {
         $count = 0;
 
         foreach ($orders as $order) {
             try {
-                $this->applyAndSaveCosts($order);
+                if ($specificCommissionId) {
+                    if ($isDeleting) {
+                        $this->removeSpecificCommission($order, $specificCommissionId);
+                    } else {
+                        $this->recalculateSpecificCommission($order, $specificCommissionId);
+                    }
+                } else {
+                    $this->applyAndSaveCosts($order);
+                }
                 $count++;
             } catch (\Exception $e) {
                 \Log::error("Erro ao calcular custos do pedido {$order->id}: ".$e->getMessage());
@@ -657,6 +701,192 @@ class OrderCostService
         }
 
         return $count;
+    }
+
+    /**
+     * Recalcula apenas uma comissão específica em um pedido
+     */
+    public function recalculateSpecificCommission(Order $order, int $commissionId): void
+    {
+        $commission = CostCommission::find($commissionId);
+
+        if (! $commission) {
+            \Log::warning("Comissão {$commissionId} não encontrada para recálculo");
+
+            return;
+        }
+
+        // Calcular subtotal (base para cálculo)
+        $baseValue = $this->getOrderSubtotal($order);
+        $revenueBase = $baseValue;
+        $taxBase = $baseValue;
+
+        // Aplicar reduções de base se necessário
+        $allCommissions = CostCommission::where('tenant_id', $order->tenant_id)
+            ->active()
+            ->forProvider($order->provider, $order->provider === 'takeat' ? $order->origin : null)
+            ->get();
+
+        foreach ($allCommissions as $tax) {
+            if ($tax->reduces_revenue_base && $tax->id !== $commissionId) {
+                // Calcular valor dessa taxa para reduzir a base
+                $value = $this->calculateTaxValue($tax, $order, $revenueBase, $taxBase);
+                $revenueBase -= $value;
+            }
+        }
+
+        // Calcular o valor da comissão específica
+        $calculatedValue = $this->calculateTaxValue($commission, $order, $revenueBase, $taxBase);
+
+        // Buscar o calculated_costs atual do pedido
+        $calculatedCosts = $order->calculated_costs ?? [];
+
+        // Determinar em qual categoria essa comissão se encaixa
+        $categoryKey = match($commission->category) {
+            'cost' => 'costs',
+            'commission' => 'commissions',
+            'tax' => 'taxes',
+            'payment_method' => 'payment_methods',
+            default => 'costs'
+        };
+
+        // Inicializar a categoria se não existir
+        if (!isset($calculatedCosts[$categoryKey])) {
+            $calculatedCosts[$categoryKey] = [];
+        }
+
+        // Atualizar ou adicionar essa comissão
+        $found = false;
+        foreach ($calculatedCosts[$categoryKey] as &$item) {
+            if (($item['id'] ?? null) === $commissionId) {
+                $item['calculated_value'] = $calculatedValue;
+                $found = true;
+                break;
+            }
+        }
+
+        // Se não encontrou e o valor é maior que zero, adicionar
+        if (!$found && $calculatedValue > 0) {
+            $calculatedCosts[$categoryKey][] = [
+                'id' => $commissionId,
+                'name' => $commission->name,
+                'type' => $commission->type,
+                'value' => $commission->value,
+                'category' => $commission->category,
+                'calculated_value' => $calculatedValue,
+            ];
+        }
+
+        // Se o valor é zero, remover (não aplicável)
+        if ($calculatedValue == 0) {
+            $calculatedCosts[$categoryKey] = array_values(array_filter(
+                $calculatedCosts[$categoryKey],
+                fn($item) => ($item['id'] ?? null) !== $commissionId
+            ));
+        }
+
+        // Recalcular totais
+        $totalCosts = 0;
+        $totalCommissions = 0;
+        $totalTaxes = 0;
+        $totalPaymentMethods = 0;
+
+        foreach (($calculatedCosts['costs'] ?? []) as $cost) {
+            $totalCosts += $cost['calculated_value'] ?? 0;
+        }
+
+        foreach (($calculatedCosts['commissions'] ?? []) as $comm) {
+            $totalCommissions += $comm['calculated_value'] ?? 0;
+        }
+
+        foreach (($calculatedCosts['taxes'] ?? []) as $tax) {
+            $totalTaxes += $tax['calculated_value'] ?? 0;
+        }
+
+        foreach (($calculatedCosts['payment_methods'] ?? []) as $pm) {
+            $totalPaymentMethods += $pm['calculated_value'] ?? 0;
+        }
+
+        // Calcular net_revenue
+        $netRevenue = $baseValue - $totalCosts - $totalCommissions - $totalTaxes - $totalPaymentMethods;
+
+        // Atualizar totais no JSON
+        $calculatedCosts['base_value'] = $baseValue;
+        $calculatedCosts['total_costs'] = $totalCosts;
+        $calculatedCosts['total_commissions'] = $totalCommissions;
+        $calculatedCosts['total_taxes'] = $totalTaxes;
+        $calculatedCosts['total_payment_methods'] = $totalPaymentMethods;
+        $calculatedCosts['net_revenue'] = $netRevenue;
+
+        // Salvar no pedido
+        $order->update([
+            'calculated_costs' => $calculatedCosts,
+            'total_costs' => $totalCosts,
+            'total_commissions' => $totalCommissions,
+            'net_revenue' => $netRevenue,
+            'costs_calculated_at' => now(),
+        ]);
+    }
+
+    /**
+     * Remove uma comissão específica do pedido e recalcula totais
+     * Usado quando uma comissão é excluída
+     */
+    private function removeSpecificCommission(Order $order, int $commissionId): void
+    {
+        $calculatedCosts = $order->calculated_costs ?? [];
+
+        // Remover a comissão de todas as categorias
+        foreach (['costs', 'commissions', 'taxes', 'payment_methods'] as $categoryKey) {
+            if (isset($calculatedCosts[$categoryKey])) {
+                $calculatedCosts[$categoryKey] = array_values(array_filter(
+                    $calculatedCosts[$categoryKey],
+                    fn($item) => ($item['id'] ?? null) !== $commissionId
+                ));
+            }
+        }
+
+        // Recalcular totais agregados
+        $baseValue = $calculatedCosts['base_value'] ?? $this->getOrderSubtotal($order);
+        $totalCosts = 0;
+        $totalCommissions = 0;
+        $totalTaxes = 0;
+        $totalPaymentMethods = 0;
+
+        foreach (($calculatedCosts['costs'] ?? []) as $cost) {
+            $totalCosts += $cost['calculated_value'] ?? 0;
+        }
+
+        foreach (($calculatedCosts['commissions'] ?? []) as $comm) {
+            $totalCommissions += $comm['calculated_value'] ?? 0;
+        }
+
+        foreach (($calculatedCosts['taxes'] ?? []) as $tax) {
+            $totalTaxes += $tax['calculated_value'] ?? 0;
+        }
+
+        foreach (($calculatedCosts['payment_methods'] ?? []) as $pm) {
+            $totalPaymentMethods += $pm['calculated_value'] ?? 0;
+        }
+
+        // Calcular net_revenue
+        $netRevenue = $baseValue - $totalCosts - $totalCommissions - $totalTaxes - $totalPaymentMethods;
+
+        // Atualizar totais no JSON
+        $calculatedCosts['total_costs'] = $totalCosts;
+        $calculatedCosts['total_commissions'] = $totalCommissions;
+        $calculatedCosts['total_taxes'] = $totalTaxes;
+        $calculatedCosts['total_payment_methods'] = $totalPaymentMethods;
+        $calculatedCosts['net_revenue'] = $netRevenue;
+
+        // Salvar no pedido
+        $order->update([
+            'calculated_costs' => $calculatedCosts,
+            'total_costs' => $totalCosts,
+            'total_commissions' => $totalCommissions,
+            'net_revenue' => $netRevenue,
+            'costs_calculated_at' => now(),
+        ]);
     }
 
     /**
