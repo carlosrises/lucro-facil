@@ -139,13 +139,13 @@ class ProductsController extends Controller
                 $ingredientExists = Ingredient::where('tenant_id', tenant_id())
                     ->where('id', $value)
                     ->exists();
-                
+
                 // Aceitar IDs de produtos internos marcados como insumos
                 $productAsIngredientExists = InternalProduct::where('tenant_id', tenant_id())
                     ->where('id', $value)
                     ->where('is_ingredient', true)
                     ->exists();
-                
+
                 if (!$ingredientExists && !$productAsIngredientExists) {
                     $fail('O insumo selecionado é inválido.');
                 }
@@ -204,7 +204,35 @@ class ProductsController extends Controller
             abort(403);
         }
 
-        $product->load(['costs.ingredient']);
+        // Carregar custos sem o relacionamento ingredient
+        $product->load('costs');
+
+        // Para cada custo, buscar o ingrediente ou produto interno
+        foreach ($product->costs as $cost) {
+            // Tentar buscar como ingrediente primeiro
+            $ingredient = Ingredient::where('tenant_id', tenant_id())
+                ->where('id', $cost->ingredient_id)
+                ->first();
+
+            if ($ingredient) {
+                $cost->ingredient = $ingredient;
+            } else {
+                // Se não for ingrediente, buscar como produto interno
+                $productAsIngredient = InternalProduct::where('tenant_id', tenant_id())
+                    ->where('id', $cost->ingredient_id)
+                    ->first();
+
+                if ($productAsIngredient) {
+                    // Converter para formato compatível com ingredient
+                    $cost->ingredient = (object) [
+                        'id' => $productAsIngredient->id,
+                        'name' => $productAsIngredient->name,
+                        'unit' => $productAsIngredient->unit,
+                        'unit_price' => $productAsIngredient->unit_cost,
+                    ];
+                }
+            }
+        }
 
         // Se for sabor de pizza, adicionar CMVs por tamanho
         if ($product->product_category === 'sabor_pizza') {
@@ -281,13 +309,13 @@ class ProductsController extends Controller
                 $ingredientExists = Ingredient::where('tenant_id', tenant_id())
                     ->where('id', $value)
                     ->exists();
-                
+
                 // Aceitar IDs de produtos internos marcados como insumos
                 $productAsIngredientExists = InternalProduct::where('tenant_id', tenant_id())
                     ->where('id', $value)
                     ->where('is_ingredient', true)
                     ->exists();
-                
+
                 if (!$ingredientExists && !$productAsIngredientExists) {
                     $fail('O insumo selecionado é inválido.');
                 }
@@ -325,9 +353,18 @@ class ProductsController extends Controller
 
                 // Adicionar novos custos
                 foreach ($validated['recipe'] as $item) {
-                    $ingredient = Ingredient::findOrFail($item['ingredient_id']);
-                    if ($ingredient->tenant_id !== tenant_id()) {
-                        throw new \Exception('Ingrediente não pertence ao tenant');
+                    // Verificar se é ingrediente ou produto interno
+                    $isIngredient = Ingredient::where('tenant_id', tenant_id())
+                        ->where('id', $item['ingredient_id'])
+                        ->exists();
+
+                    $isProductAsIngredient = InternalProduct::where('tenant_id', tenant_id())
+                        ->where('id', $item['ingredient_id'])
+                        ->where('is_ingredient', true)
+                        ->exists();
+
+                    if (!$isIngredient && !$isProductAsIngredient) {
+                        throw new \Exception('Insumo não encontrado ou não pertence ao tenant');
                     }
 
                     ProductCost::create([
