@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
+use App\Models\Store;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,6 +17,8 @@ class DashboardController extends Controller
         // Filtro de período (mês atual por padrão)
         $startDate = $request->input('start_date', now()->startOfMonth()->format('Y-m-d'));
         $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
+        $storeId = $request->input('store_id');
+        $provider = $request->input('provider');
 
         // Converter datas do horário de Brasília para UTC para filtrar corretamente
         $startDateUtc = Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
@@ -25,6 +28,8 @@ class DashboardController extends Controller
         $orders = Order::where('tenant_id', $tenantId)
             ->with(['items.internalProduct', 'items.mappings.internalProduct'])
             ->whereBetween('placed_at', [$startDateUtc, $endDateUtc])
+            ->when($storeId, fn($q) => $q->where('store_id', $storeId))
+            ->when($provider, fn($q) => $q->where('provider', $provider))
             ->get();
 
         // Inicializar acumuladores
@@ -138,6 +143,7 @@ class DashboardController extends Controller
         $previousOrders = Order::where('tenant_id', $tenantId)
             ->with(['items.internalProduct', 'items.mappings.internalProduct'])
             ->whereBetween('placed_at', [$previousStartDateUtc, $previousEndDateUtc])
+            ->when($storeId, fn($q) => $q->where('store_id', $storeId))
             ->get();
 
         $previousRevenue = 0;
@@ -348,6 +354,39 @@ class DashboardController extends Controller
             $currentDate->addDay();
         }
 
+        // Buscar todas as stores do tenant para o filtro
+        $stores = Store::where('tenant_id', $tenantId)
+            ->orderBy('display_name')
+            ->get(['id', 'display_name', 'provider'])
+            ->map(function ($store) {
+                return [
+                    'id' => $store->id,
+                    'name' => $store->display_name,
+                    'provider' => $store->provider,
+                ];
+            });
+
+        // Buscar providers únicos do tenant
+        $providers = Order::where('tenant_id', $tenantId)
+            ->select('provider')
+            ->distinct()
+            ->orderBy('provider')
+            ->pluck('provider')
+            ->filter()
+            ->map(function ($provider) {
+                return [
+                    'value' => $provider,
+                    'label' => match($provider) {
+                        'ifood' => 'iFood',
+                        'rappi' => 'Rappi',
+                        'takeat' => 'Takeat',
+                        '99food' => '99Food',
+                        default => ucfirst($provider),
+                    },
+                ];
+            })
+            ->values();
+
         return Inertia::render('dashboard', [
             'dashboardData' => [
                 'revenue' => round($totalRevenue, 2),
@@ -369,9 +408,13 @@ class DashboardController extends Controller
                 'orderCount' => $orders->count(),
             ],
             'chartData' => $chartData,
+            'stores' => $stores,
+            'providers' => $providers,
             'filters' => [
                 'start_date' => $startDate,
                 'end_date' => $endDate,
+                'store_id' => $storeId,
+                'provider' => $provider,
             ],
         ]);
     }

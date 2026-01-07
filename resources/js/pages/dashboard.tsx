@@ -1,6 +1,13 @@
 import { DashboardSectionCards } from '@/components/dashboard/section-cards';
 import { DashboardSectionChart } from '@/components/dashboard/section-chart';
 import { DateRangePicker } from '@/components/date-range-picker';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 
 import AppLayout from '@/layouts/app-layout';
 
@@ -18,6 +25,17 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: dashboard().url,
     },
 ];
+
+interface Store {
+    id: number;
+    name: string;
+    provider: string;
+}
+
+interface Provider {
+    value: string;
+    label: string;
+}
 
 interface DashboardData {
     revenue: number;
@@ -52,15 +70,21 @@ interface ChartDataPoint {
 interface DashboardProps {
     dashboardData: DashboardData;
     chartData: ChartDataPoint[];
+    stores: Store[];
+    providers: Provider[];
     filters: {
         start_date: string;
         end_date: string;
+        store_id?: number;
+        provider?: string;
     };
 }
 
 export default function Dashboard({
     dashboardData,
     chartData,
+    stores,
+    providers,
     filters,
 }: DashboardProps) {
     const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
@@ -73,6 +97,14 @@ export default function Dashboard({
         return undefined;
     });
 
+    const [selectedStore, setSelectedStore] = useState<string>(
+        filters.store_id ? String(filters.store_id) : 'all',
+    );
+
+    const [selectedProvider, setSelectedProvider] = useState<string>(
+        filters.provider || 'all',
+    );
+
     const handleDateRangeChange = (range: DateRange | undefined) => {
         setDateRange(range);
         router.get(
@@ -84,6 +116,52 @@ export default function Dashboard({
                 end_date: range?.to
                     ? range.to.toISOString().split('T')[0]
                     : undefined,
+                store_id: selectedStore !== 'all' ? selectedStore : undefined,
+                provider:
+                    selectedProvider !== 'all' ? selectedProvider : undefined,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+            },
+        );
+    };
+
+    const handleStoreChange = (value: string) => {
+        setSelectedStore(value);
+        router.get(
+            '/dashboard',
+            {
+                start_date: dateRange?.from
+                    ? dateRange.from.toISOString().split('T')[0]
+                    : undefined,
+                end_date: dateRange?.to
+                    ? dateRange.to.toISOString().split('T')[0]
+                    : undefined,
+                store_id: value !== 'all' ? value : undefined,
+                provider:
+                    selectedProvider !== 'all' ? selectedProvider : undefined,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+            },
+        );
+    };
+
+    const handleProviderChange = (value: string) => {
+        setSelectedProvider(value);
+        router.get(
+            '/dashboard',
+            {
+                start_date: dateRange?.from
+                    ? dateRange.from.toISOString().split('T')[0]
+                    : undefined,
+                end_date: dateRange?.to
+                    ? dateRange.to.toISOString().split('T')[0]
+                    : undefined,
+                store_id: selectedStore !== 'all' ? selectedStore : undefined,
+                provider: value !== 'all' ? value : undefined,
             },
             {
                 preserveState: true,
@@ -99,12 +177,56 @@ export default function Dashboard({
             <div className="flex flex-1 flex-col">
                 <div className="@container/main flex flex-1 flex-col gap-2">
                     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-                        {/* Filtro de Período */}
-                        <div className="px-4 lg:px-6">
+                        {/* Filtros */}
+                        <div className="flex flex-col gap-4 px-4 sm:flex-row lg:px-6">
                             <DateRangePicker
                                 value={dateRange}
                                 onChange={handleDateRangeChange}
                             />
+
+                            <Select
+                                value={selectedStore}
+                                onValueChange={handleStoreChange}
+                            >
+                                <SelectTrigger className="w-full sm:w-[240px]">
+                                    <SelectValue placeholder="Todas as lojas" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">
+                                        Todas as lojas
+                                    </SelectItem>
+                                    {stores.map((store) => (
+                                        <SelectItem
+                                            key={store.id}
+                                            value={String(store.id)}
+                                        >
+                                            {store.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            <Select
+                                value={selectedProvider}
+                                onValueChange={handleProviderChange}
+                            >
+                                <SelectTrigger className="w-full sm:w-[200px]">
+                                    <SelectValue placeholder="Todos os marketplaces" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">
+                                        Todos os marketplaces
+                                    </SelectItem>
+                                    {providers.map((provider) => (
+                                        <SelectItem
+                                            key={provider.value}
+                                            value={provider.value}
+                                        >
+                                            {provider.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         <DashboardSectionCards data={dashboardData} />
