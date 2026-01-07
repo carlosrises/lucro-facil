@@ -15,11 +15,15 @@ import type { BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
 import {
     Box,
+    CheckCircle2,
     ChevronDown,
     ChevronUp,
+    Clock,
     CupSoda,
     IceCream2,
     Layers,
+    Link2Off,
+    ListChecks,
     Package,
     Pizza,
     Plus,
@@ -376,54 +380,69 @@ export default function ItemTriage({
 
                                 {/* Estatísticas */}
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                                    <Card>
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium">
-                                                Total de Itens
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="text-2xl font-bold">
-                                                {stats.total_items}
+                                    <Card className="border-l-4 border-l-slate-500 p-0">
+                                        <CardContent className="flex items-center gap-4 p-6">
+                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+                                                <ListChecks className="h-6 w-6 text-slate-600" />
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <p className="text-sm font-medium text-muted-foreground">
+                                                    Total de Itens
+                                                </p>
+                                                <p className="text-2xl font-bold">
+                                                    {stats.total_items}
+                                                </p>
                                             </div>
                                         </CardContent>
                                     </Card>
-                                    <Card>
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium">
-                                                Pendentes
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="text-2xl font-bold text-orange-600">
-                                                {stats.pending_items}
+
+                                    <Card className="border-l-4 border-l-orange-500 p-0">
+                                        <CardContent className="flex items-center gap-4 p-6">
+                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-orange-100">
+                                                <Clock className="h-6 w-6 text-orange-600" />
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <p className="text-sm font-medium text-muted-foreground">
+                                                    Pendentes
+                                                </p>
+                                                <p className="text-2xl font-bold text-orange-600">
+                                                    {stats.pending_items}
+                                                </p>
                                             </div>
                                         </CardContent>
                                     </Card>
-                                    <Card>
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium">
-                                                Classificados
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="text-2xl font-bold text-green-600">
-                                                {stats.classified_items}
+
+                                    <Card className="border-l-4 border-l-green-500 p-0">
+                                        <CardContent className="flex items-center gap-4 p-6">
+                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-green-100">
+                                                <CheckCircle2 className="h-6 w-6 text-green-600" />
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <p className="text-sm font-medium text-muted-foreground">
+                                                    Classificados
+                                                </p>
+                                                <p className="text-2xl font-bold text-green-600">
+                                                    {stats.classified_items}
+                                                </p>
                                             </div>
                                         </CardContent>
                                     </Card>
+
                                     <Card
-                                        className="cursor-pointer transition-colors hover:border-blue-500"
+                                        className="cursor-pointer border-l-4 border-l-blue-500 p-0 transition-all hover:shadow-md"
                                         onClick={() => {
+                                            const newLinkStatus =
+                                                linkStatus === 'unlinked'
+                                                    ? ''
+                                                    : 'unlinked';
+                                            setLinkStatus(newLinkStatus);
                                             router.get(
                                                 '/item-triage',
                                                 {
-                                                    ...filters,
-                                                    link_status:
-                                                        linkStatus ===
-                                                        'no_product'
-                                                            ? ''
-                                                            : 'no_product',
+                                                    search,
+                                                    status,
+                                                    item_type: itemType,
+                                                    link_status: newLinkStatus,
                                                 },
                                                 {
                                                     preserveState: true,
@@ -432,182 +451,179 @@ export default function ItemTriage({
                                             );
                                         }}
                                     >
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium">
-                                                Sem Produto Vinculado
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="text-2xl font-bold text-blue-600">
-                                                {
-                                                    stats.classified_without_product
-                                                }
+                                        <CardContent className="flex items-center gap-4 p-6">
+                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-blue-100">
+                                                <Link2Off className="h-6 w-6 text-blue-600" />
                                             </div>
-                                            <p className="mt-1 text-xs text-muted-foreground">
-                                                {linkStatus === 'no_product'
-                                                    ? 'Clique para ver todos'
-                                                    : 'Clique para filtrar'}
-                                            </p>
+                                            <div className="flex flex-col gap-1">
+                                                <p className="text-sm font-medium text-muted-foreground">
+                                                    Sem Produto Vinculado
+                                                </p>
+                                                <p className="text-2xl font-bold text-blue-600">
+                                                    {
+                                                        stats.classified_without_product
+                                                    }
+                                                </p>
+                                                {/* <p className="text-xs text-muted-foreground">
+                                                    {linkStatus === 'unlinked'
+                                                        ? 'Clique para ver todos'
+                                                        : 'Clique para filtrar'}
+                                                </p> */}
+                                            </div>
                                         </CardContent>
                                     </Card>
                                 </div>
 
                                 {/* Filtros */}
-                                <div className="flex flex-col gap-2">
-                                    <div className="flex gap-2">
-                                        <div className="relative flex-1">
-                                            <Search className="absolute top-2.5 left-2 h-4 w-4 text-muted-foreground" />
-                                            <Input
-                                                placeholder="Buscar item..."
-                                                value={search}
-                                                onChange={(e) =>
-                                                    setSearch(e.target.value)
-                                                }
-                                                className="pl-8"
-                                            />
-                                        </div>
+                                <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                                    <div className="relative flex-1">
+                                        <Search className="absolute top-2.5 left-2 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            placeholder="Buscar item..."
+                                            value={search}
+                                            onChange={(e) =>
+                                                setSearch(e.target.value)
+                                            }
+                                            className="pl-8"
+                                        />
                                     </div>
-                                    <div className="flex gap-2">
-                                        <Select
-                                            value={status}
-                                            onValueChange={(value) => {
-                                                setStatus(value);
+
+                                    <Select
+                                        value={status}
+                                        onValueChange={(value) => {
+                                            setStatus(value);
+                                            router.get(
+                                                '/item-triage',
+                                                {
+                                                    search,
+                                                    status: value,
+                                                    item_type: itemType,
+                                                    link_status: linkStatus,
+                                                },
+                                                {
+                                                    preserveState: true,
+                                                    preserveScroll: true,
+                                                },
+                                            );
+                                        }}
+                                    >
+                                        <SelectTrigger className="w-full lg:w-[180px]">
+                                            <SelectValue placeholder="Status" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">
+                                                Todos
+                                            </SelectItem>
+                                            <SelectItem value="pending">
+                                                Não Classificados
+                                            </SelectItem>
+                                            <SelectItem value="classified">
+                                                Classificados
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+
+                                    <Select
+                                        value={itemType || 'all'}
+                                        onValueChange={(value) => {
+                                            const newValue =
+                                                value === 'all' ? '' : value;
+                                            setItemType(newValue);
+                                            router.get(
+                                                '/item-triage',
+                                                {
+                                                    search,
+                                                    status,
+                                                    item_type: newValue,
+                                                    link_status: linkStatus,
+                                                },
+                                                {
+                                                    preserveState: true,
+                                                    preserveScroll: true,
+                                                },
+                                            );
+                                        }}
+                                    >
+                                        <SelectTrigger className="w-full lg:w-[180px]">
+                                            <SelectValue placeholder="Tipo" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">
+                                                Todos os tipos
+                                            </SelectItem>
+                                            {itemTypes.map((type) => (
+                                                <SelectItem
+                                                    key={type.value}
+                                                    value={type.value}
+                                                >
+                                                    {type.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+
+                                    <Select
+                                        value={linkStatus || 'all'}
+                                        onValueChange={(value) => {
+                                            const newValue =
+                                                value === 'all' ? '' : value;
+                                            setLinkStatus(newValue);
+                                            router.get(
+                                                '/item-triage',
+                                                {
+                                                    search,
+                                                    status,
+                                                    item_type: itemType,
+                                                    link_status: newValue,
+                                                },
+                                                {
+                                                    preserveState: true,
+                                                    preserveScroll: true,
+                                                },
+                                            );
+                                        }}
+                                    >
+                                        <SelectTrigger className="w-full lg:w-[180px]">
+                                            <SelectValue placeholder="Vínculo CMV" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">
+                                                Todos
+                                            </SelectItem>
+                                            <SelectItem value="linked">
+                                                Com produto vinculado
+                                            </SelectItem>
+                                            <SelectItem value="unlinked">
+                                                Sem produto vinculado
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+
+                                    {(search ||
+                                        status !== 'pending' ||
+                                        itemType ||
+                                        linkStatus) && (
+                                        <Button
+                                            variant="ghost"
+                                            onClick={() => {
+                                                setSearch('');
+                                                setStatus('pending');
+                                                setItemType('');
+                                                setLinkStatus('');
                                                 router.get(
                                                     '/item-triage',
-                                                    {
-                                                        search,
-                                                        status: value,
-                                                        item_type: itemType,
-                                                        link_status: linkStatus,
-                                                    },
+                                                    {},
                                                     {
                                                         preserveState: true,
                                                         preserveScroll: true,
                                                     },
                                                 );
                                             }}
+                                            className="w-full lg:w-auto"
                                         >
-                                            <SelectTrigger className="w-[180px]">
-                                                <SelectValue placeholder="Status" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="all">
-                                                    Todos
-                                                </SelectItem>
-                                                <SelectItem value="pending">
-                                                    Não Classificados
-                                                </SelectItem>
-                                                <SelectItem value="classified">
-                                                    Classificados
-                                                </SelectItem>
-                                            </SelectContent>
-                                        </Select>
-
-                                        <Select
-                                            value={itemType || 'all'}
-                                            onValueChange={(value) => {
-                                                const newValue =
-                                                    value === 'all'
-                                                        ? ''
-                                                        : value;
-                                                setItemType(newValue);
-                                                router.get(
-                                                    '/item-triage',
-                                                    {
-                                                        search,
-                                                        status,
-                                                        item_type: newValue,
-                                                        link_status: linkStatus,
-                                                    },
-                                                    {
-                                                        preserveState: true,
-                                                        preserveScroll: true,
-                                                    },
-                                                );
-                                            }}
-                                        >
-                                            <SelectTrigger className="w-[180px]">
-                                                <SelectValue placeholder="Tipo" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="all">
-                                                    Todos os tipos
-                                                </SelectItem>
-                                                {itemTypes.map((type) => (
-                                                    <SelectItem
-                                                        key={type.value}
-                                                        value={type.value}
-                                                    >
-                                                        {type.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-
-                                        <Select
-                                            value={linkStatus || 'all'}
-                                            onValueChange={(value) => {
-                                                const newValue =
-                                                    value === 'all'
-                                                        ? ''
-                                                        : value;
-                                                setLinkStatus(newValue);
-                                                router.get(
-                                                    '/item-triage',
-                                                    {
-                                                        search,
-                                                        status,
-                                                        item_type: itemType,
-                                                        link_status: newValue,
-                                                    },
-                                                    {
-                                                        preserveState: true,
-                                                        preserveScroll: true,
-                                                    },
-                                                );
-                                            }}
-                                        >
-                                            <SelectTrigger className="w-[180px]">
-                                                <SelectValue placeholder="Vínculo CMV" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="all">
-                                                    Todos
-                                                </SelectItem>
-                                                <SelectItem value="linked">
-                                                    Com produto vinculado
-                                                </SelectItem>
-                                                <SelectItem value="unlinked">
-                                                    Sem produto vinculado
-                                                </SelectItem>
-                                            </SelectContent>
-                                        </Select>
-
-                                        {(search ||
-                                            status !== 'pending' ||
-                                            itemType ||
-                                            linkStatus) && (
-                                            <Button
-                                                variant="ghost"
-                                                onClick={() => {
-                                                    setSearch('');
-                                                    setStatus('pending');
-                                                    setItemType('');
-                                                    setLinkStatus('');
-                                                    router.get(
-                                                        '/item-triage',
-                                                        {},
-                                                        {
-                                                            preserveState: true,
-                                                            preserveScroll: true,
-                                                        },
-                                                    );
-                                                }}
-                                            >
-                                                Limpar filtros
-                                            </Button>
-                                        )}
-                                    </div>
+                                            Limpar filtros
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
 
@@ -996,7 +1012,9 @@ export default function ItemTriage({
                                                             ),
                                                         ]}
                                                         value={selectedProduct}
-                                                        onChange={setSelectedProduct}
+                                                        onChange={
+                                                            setSelectedProduct
+                                                        }
                                                         placeholder="Selecione um produto..."
                                                         searchPlaceholder="Buscar produto..."
                                                         emptyMessage="Nenhum produto encontrado."
