@@ -759,6 +759,11 @@ class OrderCostService
         $found = false;
         foreach ($calculatedCosts[$categoryKey] as &$item) {
             if (($item['id'] ?? null) === $commissionId) {
+                // Atualizar TODOS os campos, não apenas calculated_value
+                $item['name'] = $commission->name;
+                $item['type'] = $commission->type;
+                $item['value'] = $commission->value;
+                $item['category'] = $commission->category;
                 $item['calculated_value'] = $calculatedValue;
                 $found = true;
                 break;
