@@ -45,10 +45,20 @@ class ProductsController extends Controller
             ->withQueryString();
 
         // Buscar ingredients ativos para o formulário
-        $ingredients = Ingredient::where('tenant_id', tenant_id())
+        $rawIngredients = Ingredient::where('tenant_id', tenant_id())
             ->where('active', true)
             ->orderBy('name')
             ->get(['id', 'name', 'unit', 'unit_price']);
+
+        // Buscar produtos internos que podem ser usados como insumos
+        $productsAsIngredients = InternalProduct::where('tenant_id', tenant_id())
+            ->where('active', true)
+            ->where('is_ingredient', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'unit', 'unit_cost as unit_price']);
+
+        // Combinar ingredientes e produtos como insumos
+        $ingredients = $rawIngredients->concat($productsAsIngredients);
 
         // Buscar categorias fiscais ativas
         $taxCategories = TaxCategory::where('tenant_id', tenant_id())
@@ -124,7 +134,22 @@ class ProductsController extends Controller
             'active' => ['boolean'],
             'is_ingredient' => ['boolean'],
             'recipe' => ['nullable', 'array'],
-            'recipe.*.ingredient_id' => ['required', 'exists:ingredients,id'],
+            'recipe.*.ingredient_id' => ['required', function ($attribute, $value, $fail) {
+                // Aceitar IDs de ingredientes normais
+                $ingredientExists = Ingredient::where('tenant_id', tenant_id())
+                    ->where('id', $value)
+                    ->exists();
+                
+                // Aceitar IDs de produtos internos marcados como insumos
+                $productAsIngredientExists = InternalProduct::where('tenant_id', tenant_id())
+                    ->where('id', $value)
+                    ->where('is_ingredient', true)
+                    ->exists();
+                
+                if (!$ingredientExists && !$productAsIngredientExists) {
+                    $fail('O insumo selecionado é inválido.');
+                }
+            }],
             'recipe.*.qty' => ['required', 'numeric', 'min:0'],
             'recipe.*.size' => ['nullable', 'string', 'in:broto,media,grande,familia'],
         ]);
@@ -202,10 +227,20 @@ class ProductsController extends Controller
 
         $product->load(['costs.ingredient']);
 
-        $ingredients = Ingredient::where('tenant_id', tenant_id())
+        $rawIngredients = Ingredient::where('tenant_id', tenant_id())
             ->where('active', true)
             ->orderBy('name')
             ->get();
+
+        // Buscar produtos internos que podem ser usados como insumos
+        $productsAsIngredients = InternalProduct::where('tenant_id', tenant_id())
+            ->where('active', true)
+            ->where('is_ingredient', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'unit', 'unit_cost as unit_price']);
+
+        // Combinar ingredientes e produtos como insumos
+        $ingredients = $rawIngredients->concat($productsAsIngredients);
 
         $tenant = request()->user()->tenant;
 
@@ -241,7 +276,22 @@ class ProductsController extends Controller
             'active' => ['boolean'],
             'is_ingredient' => ['boolean'],
             'recipe' => ['nullable', 'array'],
-            'recipe.*.ingredient_id' => ['required_with:recipe', 'exists:ingredients,id'],
+            'recipe.*.ingredient_id' => ['required_with:recipe', function ($attribute, $value, $fail) {
+                // Aceitar IDs de ingredientes normais
+                $ingredientExists = Ingredient::where('tenant_id', tenant_id())
+                    ->where('id', $value)
+                    ->exists();
+                
+                // Aceitar IDs de produtos internos marcados como insumos
+                $productAsIngredientExists = InternalProduct::where('tenant_id', tenant_id())
+                    ->where('id', $value)
+                    ->where('is_ingredient', true)
+                    ->exists();
+                
+                if (!$ingredientExists && !$productAsIngredientExists) {
+                    $fail('O insumo selecionado é inválido.');
+                }
+            }],
             'recipe.*.qty' => ['required_with:recipe', 'numeric', 'min:0'],
             'recipe.*.size' => ['nullable', 'string', 'in:broto,media,grande,familia'],
             'update_existing_orders' => ['boolean'],
