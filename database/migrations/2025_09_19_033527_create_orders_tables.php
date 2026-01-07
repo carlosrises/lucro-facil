@@ -32,8 +32,8 @@ return new class extends Migration
             $t->json('raw')->nullable();
             $t->timestamps();
 
-            $t->unique(['tenant_id','provider','order_uuid'], 'orders_unique');
-            $t->index(['tenant_id','placed_at']);
+            $t->unique(['tenant_id', 'provider', 'order_uuid'], 'orders_unique');
+            $t->index(['tenant_id', 'placed_at']);
         });
 
         Schema::create('order_items', function (Blueprint $t) {
@@ -49,7 +49,7 @@ return new class extends Migration
             $t->json('add_ons')->nullable(); // complementos/opcionais do pedido
 
             $t->timestamps();
-            $t->index(['tenant_id','order_id']);
+            $t->index(['tenant_id', 'order_id']);
         });
     }
 

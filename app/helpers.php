@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Auth;
 
-if (!function_exists('tenant_id')) {
+if (! function_exists('tenant_id')) {
     /**
      * Retorna o tenant_id atual.
      */
@@ -12,7 +12,7 @@ if (!function_exists('tenant_id')) {
     }
 }
 
-if (!function_exists('get_payment_methods_by_provider')) {
+if (! function_exists('get_payment_methods_by_provider')) {
     /**
      * Retorna os métodos de pagamento disponíveis por marketplace/provider.
      */
@@ -60,7 +60,7 @@ if (!function_exists('get_payment_methods_by_provider')) {
     }
 }
 
-if (!function_exists('get_all_providers')) {
+if (! function_exists('get_all_providers')) {
     /**
      * Retorna lista de providers/marketplaces disponíveis.
      */
@@ -81,7 +81,7 @@ if (!function_exists('get_all_providers')) {
     }
 }
 
-if (!function_exists('is_online_payment_method')) {
+if (! function_exists('is_online_payment_method')) {
     /**
      * Verifica se um método de pagamento é considerado online.
      */

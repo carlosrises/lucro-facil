@@ -28,13 +28,13 @@ return new class extends Migration
             $t->foreignId('tenant_id')->constrained()->cascadeOnDelete();
             $t->foreignId('plan_id')->constrained('plans')->restrictOnDelete();
 
-            $t->enum('status', ['active','trialing','past_due','canceled'])->default('active');
+            $t->enum('status', ['active', 'trialing', 'past_due', 'canceled'])->default('active');
             $t->date('started_on')->nullable();
             $t->date('ends_on')->nullable();
             $t->json('gateway_payload')->nullable(); // webhook/gateway data
             $t->timestamps();
 
-            $t->index(['tenant_id','status']);
+            $t->index(['tenant_id', 'status']);
         });
 
         Schema::create('tickets', function (Blueprint $t) {
@@ -43,11 +43,11 @@ return new class extends Migration
             $t->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
 
             $t->string('subject');
-            $t->enum('priority', ['low','medium','high'])->default('low');
-            $t->enum('status', ['open','in_progress','closed'])->default('open');
+            $t->enum('priority', ['low', 'medium', 'high'])->default('low');
+            $t->enum('status', ['open', 'in_progress', 'closed'])->default('open');
             $t->timestamps();
 
-            $t->index(['tenant_id','status','priority']);
+            $t->index(['tenant_id', 'status', 'priority']);
         });
 
         Schema::create('ticket_messages', function (Blueprint $t) {

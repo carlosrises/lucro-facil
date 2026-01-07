@@ -2,15 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\InternalProduct;
 use App\Models\Ingredient;
+use App\Models\InternalProduct;
 use App\Models\ProductCost;
-use App\Models\OrderItem;
 use App\Models\ProductMapping;
 use App\Models\TaxCategory;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
 
 class ProductsController extends Controller
 {
@@ -22,20 +21,17 @@ class ProductsController extends Controller
                 'mappings' => function ($query) {
                     $query->select('id', 'internal_product_id', 'external_item_id', 'external_item_name', 'provider');
                 },
-                'taxCategory'
+                'taxCategory',
             ])
             ->withCount('costs')
-            ->when($request->input('search'), fn ($q, $search) =>
-                $q->where(function ($query) use ($search) {
-                    $query->where('name', 'like', "%{$search}%")
-                        ->orWhere('sku', 'like', "%{$search}%");
-                })
+            ->when($request->input('search'), fn ($q, $search) => $q->where(function ($query) use ($search) {
+                $query->where('name', 'like', "%{$search}%")
+                    ->orWhere('sku', 'like', "%{$search}%");
+            })
             )
-            ->when($request->input('type'), fn ($q, $type) =>
-                $q->where('type', $type)
+            ->when($request->input('type'), fn ($q, $type) => $q->where('type', $type)
             )
-            ->when($request->has('active'), fn ($q) =>
-                $q->where('active', $request->boolean('active'))
+            ->when($request->has('active'), fn ($q) => $q->where('active', $request->boolean('active'))
             )
             ->orderBy('name');
 
@@ -122,7 +118,7 @@ class ProductsController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'sku' => ['nullable', 'string', 'max:255', 'unique:internal_products,sku,NULL,id,tenant_id,' . tenant_id()],
+            'sku' => ['nullable', 'string', 'max:255', 'unique:internal_products,sku,NULL,id,tenant_id,'.tenant_id()],
             'type' => ['required', 'in:product,service'],
             'product_category' => ['nullable', 'string', 'in:pizza,sabor_pizza,bebida,sobremesa,entrada,outro'],
             'max_flavors' => ['nullable', 'integer', 'min:1', 'max:10'],
@@ -146,7 +142,7 @@ class ProductsController extends Controller
                     ->where('is_ingredient', true)
                     ->exists();
 
-                if (!$ingredientExists && !$productAsIngredientExists) {
+                if (! $ingredientExists && ! $productAsIngredientExists) {
                     $fail('O insumo selecionado é inválido.');
                 }
             }],
@@ -173,7 +169,7 @@ class ProductsController extends Controller
             ]);
 
             // Se tiver receita, adicionar os ingredientes
-            if (!empty($validated['recipe'])) {
+            if (! empty($validated['recipe'])) {
                 foreach ($validated['recipe'] as $item) {
                     ProductCost::create([
                         'tenant_id' => tenant_id(),
@@ -191,10 +187,12 @@ class ProductsController extends Controller
             // Se não tiver receita, mantém o unit_cost cadastrado manualmente
 
             DB::commit();
+
             return redirect()->back()->with('success', 'Produto criado com sucesso!');
         } catch (\Exception $e) {
             DB::rollBack();
-            return redirect()->back()->withErrors(['error' => 'Erro ao criar produto: ' . $e->getMessage()]);
+
+            return redirect()->back()->withErrors(['error' => 'Erro ao criar produto: '.$e->getMessage()]);
         }
     }
 
@@ -292,7 +290,7 @@ class ProductsController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'sku' => ['nullable', 'string', 'max:255', 'unique:internal_products,sku,' . $product->id . ',id,tenant_id,' . tenant_id()],
+            'sku' => ['nullable', 'string', 'max:255', 'unique:internal_products,sku,'.$product->id.',id,tenant_id,'.tenant_id()],
             'type' => ['required', 'in:product,service'],
             'product_category' => ['nullable', 'string', 'in:pizza,sabor_pizza,bebida,sobremesa,entrada,outro'],
             'max_flavors' => ['nullable', 'integer', 'min:1', 'max:10'],
@@ -316,7 +314,7 @@ class ProductsController extends Controller
                     ->where('is_ingredient', true)
                     ->exists();
 
-                if (!$ingredientExists && !$productAsIngredientExists) {
+                if (! $ingredientExists && ! $productAsIngredientExists) {
                     $fail('O insumo selecionado é inválido.');
                 }
             }],
@@ -363,7 +361,7 @@ class ProductsController extends Controller
                         ->where('is_ingredient', true)
                         ->exists();
 
-                    if (!$isIngredient && !$isProductAsIngredient) {
+                    if (! $isIngredient && ! $isProductAsIngredient) {
                         throw new \Exception('Insumo não encontrado ou não pertence ao tenant');
                     }
 
@@ -473,7 +471,7 @@ class ProductsController extends Controller
             abort(403);
         }
 
-        $product->update(['active' => !$product->active]);
+        $product->update(['active' => ! $product->active]);
 
         return redirect()->back();
     }

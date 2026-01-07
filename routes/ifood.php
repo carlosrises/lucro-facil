@@ -9,8 +9,8 @@ Route::prefix('api/ifood')->middleware('auth')->group(function () {
     /**
      * Authentication
      */
-    Route::prefix('authentication/v1.0')->group(function() {
-        Route::prefix('oauth')->group(function() {
+    Route::prefix('authentication/v1.0')->group(function () {
+        Route::prefix('oauth')->group(function () {
             Route::post('userCode', [IfoodIntegrationController::class, 'userCode']);
             Route::post('token', [IfoodIntegrationController::class, 'token']);
         });
@@ -38,82 +38,80 @@ Route::prefix('api/ifood')->middleware('auth')->group(function () {
         Route::post('sync', [SalesController::class, 'sync'])->name('ifood.sales.sync');
     });
 
-
     /**
      * Merchant
      */
-    Route::prefix('merchant/v1.0')->group(function() {
+    Route::prefix('merchant/v1.0')->group(function () {
         //
     });
 
     /**
      * Events
      */
-    Route::prefix('events/v1.0')->group(function() {
+    Route::prefix('events/v1.0')->group(function () {
         //
     });
 
     /**
      * Order
      */
-    Route::prefix('order/v1.0')->group(function() {
+    Route::prefix('order/v1.0')->group(function () {
         //
     });
 
     /**
      * Logistics
      */
-    Route::prefix('logistics/v1.0')->group(function() {
+    Route::prefix('logistics/v1.0')->group(function () {
         //
     });
 
     /**
      * Shipping
      */
-    Route::prefix('shipping/v1.0')->group(function() {
+    Route::prefix('shipping/v1.0')->group(function () {
         //
     });
 
     /**
      * Catalog
      */
-    Route::prefix('catalog/v2.0')->group(function() {
+    Route::prefix('catalog/v2.0')->group(function () {
         //
     });
 
     /**
      * Financial
      */
-    Route::prefix('financial/v3.0')->group(function() {
+    Route::prefix('financial/v3.0')->group(function () {
         //
     });
 
     /**
      * Review
      */
-    Route::prefix('review/v2.0')->group(function() {
+    Route::prefix('review/v2.0')->group(function () {
         //
     });
 
     /**
      * Picking
      */
-    Route::prefix('picking/v1.0')->group(function() {
+    Route::prefix('picking/v1.0')->group(function () {
         //
     });
 
     /**
      * Promotion
      */
-    Route::prefix('promotion/v1.0')->group(function() {
+    Route::prefix('promotion/v1.0')->group(function () {
         //
     });
 
     /**
      * Item
      */
-    Route::prefix('item/v1.0')->group(function() {
+    Route::prefix('item/v1.0')->group(function () {
         //
     });
 });
-

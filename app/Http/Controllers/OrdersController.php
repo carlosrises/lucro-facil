@@ -28,7 +28,7 @@ class OrdersController extends Controller
                 'items.productMapping' => function ($query) {
                     $query->where('product_mappings.tenant_id', tenant_id());
                 }, // Carregar classificação do item
-                'sale'
+                'sale',
             ])
             ->where('tenant_id', tenant_id())
             ->when($request->input('status'), function ($q, $status) {
@@ -60,8 +60,8 @@ class OrdersController extends Controller
                 $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
 
                 // Converter datas do horário de Brasília para UTC
-                $startDateUtc = \Carbon\Carbon::parse($startDate . ' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
-                $endDateUtc = \Carbon\Carbon::parse($endDate . ' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+                $startDateUtc = \Carbon\Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+                $endDateUtc = \Carbon\Carbon::parse($endDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
 
                 return $q->whereBetween('placed_at', [$startDateUtc, $endDateUtc]);
             })
@@ -81,9 +81,9 @@ class OrdersController extends Controller
                             ->whereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) = 0 OR JSON_EXTRACT(raw, '$.session.payments') IS NULL");
                     })
                     // 2. OU pedidos com método mas sem taxa aplicada (calculated_costs->payment_methods vazio/null)
-                    ->orWhere(function ($q) {
-                        $q->whereRaw("JSON_LENGTH(JSON_EXTRACT(calculated_costs, '$.payment_methods')) = 0 OR JSON_EXTRACT(calculated_costs, '$.payment_methods') IS NULL");
-                    });
+                        ->orWhere(function ($q) {
+                            $q->whereRaw("JSON_LENGTH(JSON_EXTRACT(calculated_costs, '$.payment_methods')) = 0 OR JSON_EXTRACT(calculated_costs, '$.payment_methods') IS NULL");
+                        });
                 });
             })
             ->when($request->input('order_type'), function ($q, $orderType) {
@@ -98,7 +98,7 @@ class OrdersController extends Controller
                             ->whereRaw("UPPER(JSON_UNQUOTE(JSON_EXTRACT(raw, '$.session.table.table_type'))) = ?", [$normalizedType]);
                     })
                     // Para outros providers (iFood, etc): verificar orderType
-                    ->orWhereRaw("UPPER(JSON_UNQUOTE(JSON_EXTRACT(raw, '$.orderType'))) = ?", [$normalizedType]);
+                        ->orWhereRaw("UPPER(JSON_UNQUOTE(JSON_EXTRACT(raw, '$.orderType'))) = ?", [$normalizedType]);
                 });
             })
             ->when($request->input('search'), function ($q, $search) {
@@ -130,11 +130,11 @@ class OrdersController extends Controller
         // Enriquecer add-ons com seus ProductMappings
         foreach ($orders->items() as $order) {
             foreach ($order->items as $item) {
-                if (!empty($item->add_ons) && is_array($item->add_ons)) {
+                if (! empty($item->add_ons) && is_array($item->add_ons)) {
                     $addOnsWithMappings = [];
                     foreach ($item->add_ons as $addOn) {
                         $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
-                        $addOnSku = 'addon_' . md5($addOnName);
+                        $addOnSku = 'addon_'.md5($addOnName);
 
                         // Buscar ProductMapping do add-on
                         $mapping = \App\Models\ProductMapping::where('external_item_id', $addOnSku)
@@ -200,9 +200,9 @@ class OrdersController extends Controller
                         ->whereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) = 0 OR JSON_EXTRACT(raw, '$.session.payments') IS NULL");
                 })
                 // 2. OU com método mas sem taxa aplicada
-                ->orWhere(function ($q) {
-                    $q->whereRaw("JSON_LENGTH(JSON_EXTRACT(calculated_costs, '$.payment_methods')) = 0 OR JSON_EXTRACT(calculated_costs, '$.payment_methods') IS NULL");
-                });
+                    ->orWhere(function ($q) {
+                        $q->whereRaw("JSON_LENGTH(JSON_EXTRACT(calculated_costs, '$.payment_methods')) = 0 OR JSON_EXTRACT(calculated_costs, '$.payment_methods') IS NULL");
+                    });
             })
             ->count();
 
@@ -248,6 +248,7 @@ class OrdersController extends Controller
                 // Se for Takeat com origin diferente de 'takeat', criar combinação
                 if ($order->provider === 'takeat' && $order->origin && $order->origin !== 'takeat') {
                     $originLabel = $originLabels[$order->origin] ?? ucfirst($order->origin);
+
                     return [
                         'value' => "takeat:{$order->origin}",
                         'label' => "{$originLabel} (Takeat)",

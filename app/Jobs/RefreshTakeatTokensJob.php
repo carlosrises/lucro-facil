@@ -3,7 +3,6 @@
 namespace App\Jobs;
 
 use App\Models\OauthToken;
-use App\Models\Store;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Foundation\Queue\Queueable;
@@ -37,6 +36,7 @@ class RefreshTakeatTokensJob implements ShouldQueue
 
             if ($tokens->isEmpty()) {
                 Log::info('✅ Nenhum token Takeat próximo da expiração');
+
                 return;
             }
 
@@ -46,19 +46,21 @@ class RefreshTakeatTokensJob implements ShouldQueue
                 try {
                     $store = $token->store;
 
-                    if (!$store) {
+                    if (! $store) {
                         Log::warning('⚠️ Loja não encontrada para token', ['token_id' => $token->id]);
+
                         continue;
                     }
 
                     // Verificar se possui credenciais salvas para reconexão automática
-                    if (!$token->hasCredentials()) {
+                    if (! $token->hasCredentials()) {
                         Log::warning('⚠️ Token Takeat expirando em breve - RECONEXÃO MANUAL NECESSÁRIA', [
                             'store_id' => $store->id,
                             'store_name' => $store->display_name,
                             'expires_at' => $token->expires_at,
                             'reason' => 'Credenciais não salvas',
                         ]);
+
                         continue;
                     }
 
@@ -74,23 +76,25 @@ class RefreshTakeatTokensJob implements ShouldQueue
                         'password' => $token->getPassword(),
                     ]);
 
-                    if (!$response->successful()) {
+                    if (! $response->successful()) {
                         Log::error('❌ Falha na reconexão automática Takeat', [
                             'store_id' => $store->id,
                             'store_name' => $store->display_name,
                             'status' => $response->status(),
                             'error' => $response->json('message') ?? 'Erro desconhecido',
                         ]);
+
                         continue;
                     }
 
                     $authData = $response->json();
                     $newToken = $authData['token'] ?? null;
 
-                    if (!$newToken) {
+                    if (! $newToken) {
                         Log::error('❌ Token não retornado na reconexão Takeat', [
                             'store_id' => $store->id,
                         ]);
+
                         continue;
                     }
 

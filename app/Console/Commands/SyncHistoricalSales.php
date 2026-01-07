@@ -51,6 +51,7 @@ class SyncHistoricalSales extends Command
 
         if ($stores->isEmpty()) {
             $this->error('❌ Nenhuma loja ativa encontrada');
+
             return Command::FAILURE;
         }
 
@@ -157,7 +158,7 @@ class SyncHistoricalSales extends Command
                         break;
                     }
 
-                    $this->line("    📄 Página {$page}: " . count($sales) . " vendas");
+                    $this->line("    📄 Página {$page}: ".count($sales).' vendas');
 
                     // Processa em transação
                     DB::transaction(function () use ($sales, $store, &$created, &$updated) {
@@ -260,7 +261,7 @@ class SyncHistoricalSales extends Command
 
         // Vincula Sale <-> Order se existir
         $orderUuid = $sale['id'] ?? null;
-        if ($orderUuid && !$saleModel->order_id) {
+        if ($orderUuid && ! $saleModel->order_id) {
             $order = \App\Models\Order::where('tenant_id', $store->tenant_id)
                 ->where('store_id', $store->id)
                 ->where('order_uuid', $orderUuid)

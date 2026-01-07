@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\FinanceEntry;
 use App\Models\FinanceCategory;
+use App\Models\FinanceEntry;
 use App\Services\RecurringEntryService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,27 +20,22 @@ class FinanceEntriesController extends Controller
             ->where('tenant_id', tenant_id())
             ->withoutTemplates() // Excluir templates da listagem
             ->with(['category', 'parent'])
-            ->when($request->input('search'), fn ($q, $search) =>
-                $q->where(function ($query) use ($search) {
-                    $query->where('reference', 'like', "%{$search}%")
-                        ->orWhere('supplier', 'like', "%{$search}%")
-                        ->orWhere('notes', 'like', "%{$search}%");
-                })
+            ->when($request->input('search'), fn ($q, $search) => $q->where(function ($query) use ($search) {
+                $query->where('reference', 'like', "%{$search}%")
+                    ->orWhere('supplier', 'like', "%{$search}%")
+                    ->orWhere('notes', 'like', "%{$search}%");
+            })
             )
-            ->when($request->input('category_id'), fn ($q, $categoryId) =>
-                $q->where('finance_category_id', $categoryId)
+            ->when($request->input('category_id'), fn ($q, $categoryId) => $q->where('finance_category_id', $categoryId)
             )
-            ->when($request->input('type'), fn ($q, $type) =>
-                $q->whereHas('category', function ($query) use ($type) {
-                    $query->where('type', $type);
-                })
+            ->when($request->input('type'), fn ($q, $type) => $q->whereHas('category', function ($query) use ($type) {
+                $query->where('type', $type);
+            })
             )
-            ->when($request->input('status'), fn ($q, $status) =>
-                $q->where('status', $status)
+            ->when($request->input('status'), fn ($q, $status) => $q->where('status', $status)
             )
-            ->when($request->input('month'), fn ($q, $month) =>
-                $q->whereYear('occurred_on', substr($month, 0, 4))
-                  ->whereMonth('occurred_on', substr($month, 5, 2))
+            ->when($request->input('month'), fn ($q, $month) => $q->whereYear('occurred_on', substr($month, 0, 4))
+                ->whereMonth('occurred_on', substr($month, 5, 2))
             )
             ->orderBy('occurred_on', 'desc');
 

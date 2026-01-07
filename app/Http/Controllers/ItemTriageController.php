@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\InternalProduct;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\ProductMapping;
-use App\Models\InternalProduct;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -92,7 +92,7 @@ class ItemTriageController extends Controller
         // Buscar também os add_ons (complementos/sabores/adicionais)
         $addOnsQuery = OrderItem::where('order_items.tenant_id', $tenantId)
             ->whereNotNull('add_ons')
-            ->whereRaw("JSON_LENGTH(add_ons) > 0")
+            ->whereRaw('JSON_LENGTH(add_ons) > 0')
             ->select('id', 'order_id', 'add_ons')
             ->get();
 
@@ -103,10 +103,12 @@ class ItemTriageController extends Controller
             if (is_array($addOns) && count($addOns) > 0) {
                 foreach ($addOns as $index => $addOn) {
                     $addOnName = $addOn['name'] ?? '';
-                    if (!$addOnName) continue;
+                    if (! $addOnName) {
+                        continue;
+                    }
 
                     // Criar um "SKU" único para o add_on baseado no nome
-                    $addOnSku = 'addon_' . md5($addOnName);
+                    $addOnSku = 'addon_'.md5($addOnName);
 
                     $addOnsCollection->push([
                         'sku' => $addOnSku,
@@ -159,30 +161,30 @@ class ItemTriageController extends Controller
 
         // Aplicar filtros de classificação nos add_ons também
         if ($status === 'pending') {
-            $allItems = $allItems->filter(fn($item) => $item['mapping'] === null);
+            $allItems = $allItems->filter(fn ($item) => $item['mapping'] === null);
         } elseif ($status === 'classified') {
-            $allItems = $allItems->filter(fn($item) => $item['mapping'] !== null);
+            $allItems = $allItems->filter(fn ($item) => $item['mapping'] !== null);
         }
 
         if ($request->filled('item_type')) {
             $itemType = $request->get('item_type');
-            $allItems = $allItems->filter(function($item) use ($itemType) {
+            $allItems = $allItems->filter(function ($item) use ($itemType) {
                 // Só filtra se o item tiver mapping (foi classificado)
                 if ($item['mapping'] === null) {
                     return false;
                 }
+
                 return ($item['mapping']['item_type'] ?? null) === $itemType;
             });
         }
 
         if ($linkStatus === 'linked') {
-            $allItems = $allItems->filter(fn($item) => ($item['mapping']['internal_product_id'] ?? null) !== null);
+            $allItems = $allItems->filter(fn ($item) => ($item['mapping']['internal_product_id'] ?? null) !== null);
         } elseif ($linkStatus === 'unlinked') {
-            $allItems = $allItems->filter(fn($item) => ($item['mapping']['internal_product_id'] ?? null) === null);
+            $allItems = $allItems->filter(fn ($item) => ($item['mapping']['internal_product_id'] ?? null) === null);
         } elseif ($linkStatus === 'no_product') {
             // Classificados mas sem produto interno vinculado
-            $allItems = $allItems->filter(fn($item) =>
-                $item['mapping'] !== null &&
+            $allItems = $allItems->filter(fn ($item) => $item['mapping'] !== null &&
                 ($item['mapping']['internal_product_id'] ?? null) === null
             );
         }
@@ -204,7 +206,7 @@ class ItemTriageController extends Controller
         // Contar add-ons únicos
         $allAddOns = OrderItem::where('tenant_id', $tenantId)
             ->whereNotNull('add_ons')
-            ->whereRaw("JSON_LENGTH(add_ons) > 0")
+            ->whereRaw('JSON_LENGTH(add_ons) > 0')
             ->get()
             ->pluck('add_ons')
             ->flatten(1)
@@ -252,7 +254,7 @@ class ItemTriageController extends Controller
             // Buscar todos os order_items com add_ons
             $orderItemsWithAddOn = OrderItem::where('order_items.tenant_id', $tenantId)
                 ->whereNotNull('add_ons')
-                ->whereRaw("JSON_LENGTH(add_ons) > 0")
+                ->whereRaw('JSON_LENGTH(add_ons) > 0')
                 ->get();
 
             $matchingOrders = collect();
@@ -263,7 +265,7 @@ class ItemTriageController extends Controller
                 if (is_array($addOns)) {
                     foreach ($addOns as $addOn) {
                         $addOnName = $addOn['name'] ?? '';
-                        $addOnSku = 'addon_' . md5($addOnName);
+                        $addOnSku = 'addon_'.md5($addOnName);
 
                         if ($addOnSku === $sku) {
                             $orderIds->push($orderItem->order_id);
@@ -286,14 +288,14 @@ class ItemTriageController extends Controller
                 ->with(['items'])
                 ->orderByDesc('placed_at')
                 ->get()
-                ->map(function($order) {
+                ->map(function ($order) {
                     return [
                         'id' => $order->id,
                         'code' => $order->code,
                         'short_reference' => $order->short_reference,
                         'placed_at' => $order->placed_at,
                         'gross_total' => $order->gross_total,
-                        'items' => $order->items->map(function($item) {
+                        'items' => $order->items->map(function ($item) {
                             return [
                                 'id' => $item->id,
                                 'name' => $item->name,
@@ -335,7 +337,7 @@ class ItemTriageController extends Controller
         \Log::info('Order IDs found:', [
             'sku' => $sku,
             'count' => $orderIdsWithDates->count(),
-            'orders' => $orderIdsWithDates->map(fn($o) => ['id' => $o->id, 'placed_at' => $o->placed_at])->toArray()
+            'orders' => $orderIdsWithDates->map(fn ($o) => ['id' => $o->id, 'placed_at' => $o->placed_at])->toArray(),
         ]);
 
         $orderIds = $orderIdsWithDates->pluck('id');
@@ -345,14 +347,14 @@ class ItemTriageController extends Controller
             ->with(['items'])
             ->orderByDesc('placed_at')
             ->get()
-            ->map(function($order) {
+            ->map(function ($order) {
                 return [
                     'id' => $order->id,
                     'code' => $order->code,
                     'short_reference' => $order->short_reference,
                     'placed_at' => $order->placed_at,
                     'gross_total' => $order->gross_total,
-                    'items' => $order->items->map(function($item) {
+                    'items' => $order->items->map(function ($item) {
                         return [
                             'id' => $item->id,
                             'name' => $item->name,
@@ -411,7 +413,7 @@ class ItemTriageController extends Controller
             if ($validated['internal_product_id']) {
                 // Se for sabor de pizza, usar serviço inteligente de fracionamento
                 if ($validated['item_type'] === 'flavor') {
-                    $flavorService = new \App\Services\FlavorMappingService();
+                    $flavorService = new \App\Services\FlavorMappingService;
                     $mappedCount = $flavorService->mapFlavorToAllOccurrences($mapping, $tenantId);
 
                     return back()->with('success', "Sabor classificado e aplicado a {$mappedCount} ocorrências!");

@@ -28,6 +28,7 @@ class SyncIfoodSalesCommand extends Command
     {
         SyncSalesJob::dispatch()->onQueue('ifood-sync');
         $this->info('Job SyncSalesJob enfileirado para sincronizar vendas de todos os tenants/lojas iFood.');
+
         return self::SUCCESS;
     }
 }

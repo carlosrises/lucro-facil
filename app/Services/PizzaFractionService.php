@@ -19,7 +19,6 @@ class PizzaFractionService
     /**
      * Recalcular frações de pizza para um OrderItem
      *
-     * @param OrderItem $orderItem
      * @return array ['updated' => int, 'pizza_flavors' => int, 'fraction' => float]
      */
     public function recalculateFractions(OrderItem $orderItem): array
@@ -28,7 +27,7 @@ class PizzaFractionService
 
         // Contar sabores de pizza com auto_fraction ativado
         $pizzaFlavors = $mappings->where('option_type', OrderItemMapping::OPTION_TYPE_PIZZA_FLAVOR)
-                                  ->where('auto_fraction', true);
+            ->where('auto_fraction', true);
 
         $flavorCount = $pizzaFlavors->count();
 
@@ -65,9 +64,6 @@ class PizzaFractionService
 
     /**
      * Calcular fração esperada com base no número de sabores
-     *
-     * @param int $flavorCount
-     * @return float
      */
     public function calculateFraction(int $flavorCount): float
     {
@@ -81,8 +77,7 @@ class PizzaFractionService
     /**
      * Atualizar fração de todos os sabores ao adicionar/remover um sabor
      *
-     * @param OrderItem $orderItem
-     * @param array $newMappings Array com os novos mappings a serem criados
+     * @param  array  $newMappings  Array com os novos mappings a serem criados
      * @return array Mappings atualizados com frações calculadas
      */
     public function applyAutoFractions(OrderItem $orderItem, array $newMappings): array
@@ -116,9 +111,6 @@ class PizzaFractionService
 
     /**
      * Verificar se um OrderItem tem pizzas com sabores múltiplos
-     *
-     * @param OrderItem $orderItem
-     * @return bool
      */
     public function hasPizzaFlavors(OrderItem $orderItem): bool
     {
@@ -130,7 +122,6 @@ class PizzaFractionService
     /**
      * Obter resumo dos sabores de pizza
      *
-     * @param OrderItem $orderItem
      * @return array ['count' => int, 'fraction' => float, 'flavors' => Collection]
      */
     public function getPizzaFlavorsSummary(OrderItem $orderItem): array

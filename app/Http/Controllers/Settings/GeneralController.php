@@ -18,7 +18,7 @@ class GeneralController extends Controller
                 'margin_good_min' => (float) ($tenant->margin_good_min ?? 30.00),
                 'margin_good_max' => (float) ($tenant->margin_good_max ?? 99.99),
                 'margin_poor' => (float) ($tenant->margin_poor ?? 0.00),
-            ]
+            ],
         ]);
     }
 
@@ -34,19 +34,19 @@ class GeneralController extends Controller
         // Validar que margin_poor < margin_good_min < margin_good_max < margin_excellent
         if ($validated['margin_poor'] >= $validated['margin_good_min']) {
             return back()->withErrors([
-                'margin_poor' => 'A margem ruim deve ser menor que a margem boa mínima.'
+                'margin_poor' => 'A margem ruim deve ser menor que a margem boa mínima.',
             ]);
         }
 
         if ($validated['margin_good_min'] >= $validated['margin_good_max']) {
             return back()->withErrors([
-                'margin_good_min' => 'A margem boa mínima deve ser menor que a margem boa máxima.'
+                'margin_good_min' => 'A margem boa mínima deve ser menor que a margem boa máxima.',
             ]);
         }
 
         if ($validated['margin_good_max'] >= $validated['margin_excellent']) {
             return back()->withErrors([
-                'margin_good_max' => 'A margem boa máxima deve ser menor que a margem excelente.'
+                'margin_good_max' => 'A margem boa máxima deve ser menor que a margem excelente.',
             ]);
         }
 

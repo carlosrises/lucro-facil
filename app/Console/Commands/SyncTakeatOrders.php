@@ -40,7 +40,7 @@ class SyncTakeatOrders extends Command
         $tenantId = $this->option('tenant-id');
         $specificDate = $this->option('date');
 
-        $this->info("🔄 Iniciando sincronização Takeat");
+        $this->info('🔄 Iniciando sincronização Takeat');
 
         // Se data específica foi fornecida, usar dia inteiro (00:00 até 23:59:59)
         if ($specificDate) {
@@ -53,7 +53,8 @@ class SyncTakeatOrders extends Command
                 $this->line("   Período BRT: {$date->copy()->startOfDay()->format('Y-m-d H:i:s')} até {$date->copy()->endOfDay()->format('Y-m-d H:i:s')}");
                 $this->line("   Período UTC: {$startDate->toIso8601String()} até {$endDate->toIso8601String()}");
             } catch (\Exception $e) {
-                $this->error("❌ Data inválida. Use o formato: Y-m-d (ex: 2025-12-08)");
+                $this->error('❌ Data inválida. Use o formato: Y-m-d (ex: 2025-12-08)');
+
                 return 1;
             }
         } else {
@@ -64,7 +65,7 @@ class SyncTakeatOrders extends Command
         }
 
         if ($dryRun) {
-            $this->warn("⚠️  Modo DRY-RUN ativado - nenhum dado será salvo");
+            $this->warn('⚠️  Modo DRY-RUN ativado - nenhum dado será salvo');
         }
 
         // Buscar lojas Takeat ativas
@@ -83,32 +84,35 @@ class SyncTakeatOrders extends Command
         $stores = $query->get();
 
         if ($stores->isEmpty()) {
-            $this->error("❌ Nenhuma loja Takeat ativa encontrada");
+            $this->error('❌ Nenhuma loja Takeat ativa encontrada');
+
             return 1;
         }
 
         $this->info("🏪 Encontradas {$stores->count()} lojas Takeat");
 
         foreach ($stores as $store) {
-            $this->line("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            $this->line('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             $this->info("🏪 Loja: {$store->display_name} (ID: {$store->id})");
 
-            if (!$store->oauthToken || $store->oauthToken->expires_at->isPast()) {
-                $this->error("  ❌ Token expirado ou não encontrado. Faça login novamente.");
+            if (! $store->oauthToken || $store->oauthToken->expires_at->isPast()) {
+                $this->error('  ❌ Token expirado ou não encontrado. Faça login novamente.');
+
                 continue;
             }
 
             $excludedChannels = $store->excluded_channels ?? [];
-            if (!empty($excludedChannels)) {
-                $this->warn("  ⚠️  Canais excluídos: " . implode(', ', $excludedChannels));
+            if (! empty($excludedChannels)) {
+                $this->warn('  ⚠️  Canais excluídos: '.implode(', ', $excludedChannels));
             }
 
             try {
                 $client = new TakeatClient($store->tenant_id, $store->id);
 
                 // As datas já foram calculadas no início do handle()
-                if (!isset($startDate) || !isset($endDate)) {
-                    $this->error("  ❌ Erro ao calcular período de datas");
+                if (! isset($startDate) || ! isset($endDate)) {
+                    $this->error('  ❌ Erro ao calcular período de datas');
+
                     continue;
                 }
 
@@ -137,12 +141,13 @@ class SyncTakeatOrders extends Command
                             // Filtrar por excluded_channels
                             if (in_array($channel, $excludedChannels)) {
                                 $this->line("  ⏩ Ignorando pedido do canal excluído: {$channel}");
+
                                 continue;
                             }
 
                             $filteredOrders++;
 
-                            if (!$dryRun) {
+                            if (! $dryRun) {
                                 try {
                                     $this->processOrderBasket($basket, $session, $store);
                                     $savedOrders++;
@@ -163,10 +168,10 @@ class SyncTakeatOrders extends Command
                 $this->info("  ⏩ Pedidos excluídos (canais filtrados): {$excluded}");
                 $this->info("  💾 Pedidos a processar: {$filteredOrders}");
 
-                if (!$dryRun) {
+                if (! $dryRun) {
                     $this->info("  ✅ Pedidos salvos: {$savedOrders}");
                 } else {
-                    $this->warn("  ⚠️  Nenhum dado foi salvo (dry-run)");
+                    $this->warn('  ⚠️  Nenhum dado foi salvo (dry-run)');
                 }
 
             } catch (\Throwable $e) {
@@ -179,8 +184,8 @@ class SyncTakeatOrders extends Command
             }
         }
 
-        $this->line("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        $this->info("✅ Sincronização concluída!");
+        $this->line('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        $this->info('✅ Sincronização concluída!');
 
         return 0;
     }
@@ -308,7 +313,7 @@ class SyncTakeatOrders extends Command
 
         foreach ($orders as $item) {
             // Pular items cancelados
-            if (!empty($item['canceled_at'])) {
+            if (! empty($item['canceled_at'])) {
                 continue;
             }
 
@@ -361,7 +366,7 @@ class SyncTakeatOrders extends Command
             return 'CONCLUDED';
         }
 
-        return match($orderStatus) {
+        return match ($orderStatus) {
             'pending' => 'PLACED',
             'confirmed' => 'CONFIRMED',
             'ready' => 'READY_TO_PICKUP',

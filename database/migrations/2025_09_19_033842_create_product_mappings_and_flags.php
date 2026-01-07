@@ -22,7 +22,7 @@ return new class extends Migration
             $t->string('external_item_name')->nullable();
 
             $t->timestamps();
-            $t->unique(['tenant_id','provider','external_item_id','internal_product_id'], 'product_mappings_unique');
+            $t->unique(['tenant_id', 'provider', 'external_item_id', 'internal_product_id'], 'product_mappings_unique');
         });
 
         // Regras fixas de custo por bandeira (ajustáveis no futuro)
@@ -30,12 +30,12 @@ return new class extends Migration
             $t->id();
             $t->foreignId('tenant_id')->constrained()->cascadeOnDelete();
 
-            $t->enum('flag', ['CREDITO','PIX','TICKET_VR','DEBITO']);
+            $t->enum('flag', ['CREDITO', 'PIX', 'TICKET_VR', 'DEBITO']);
             $t->decimal('fee_percent', 8, 4)->default(0);  // %
             $t->decimal('fee_fixed', 12, 4)->default(0);   // valor fixo opcional
 
             $t->timestamps();
-            $t->unique(['tenant_id','flag']);
+            $t->unique(['tenant_id', 'flag']);
         });
     }
 

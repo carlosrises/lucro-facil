@@ -2,9 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Store;
 use App\Jobs\SyncOrdersJob;
-
+use App\Models\Store;
 use Illuminate\Console\Command;
 
 class SyncIfoodOrdersCommand extends Command

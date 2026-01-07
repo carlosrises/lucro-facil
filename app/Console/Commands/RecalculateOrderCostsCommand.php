@@ -32,12 +32,13 @@ class RecalculateOrderCostsCommand extends Command
         $tenantId = $this->option('tenant');
 
         // Se não passou ID nem tenant, tentar pegar qualquer custo para descobrir o tenant
-        if (!$costCommissionId && !$tenantId) {
+        if (! $costCommissionId && ! $tenantId) {
             $cost = CostCommission::first();
 
-            if (!$cost) {
+            if (! $cost) {
                 $this->error('Nenhum custo/comissão encontrado!');
                 $this->warn('Use --tenant=ID para recalcular pedidos de um tenant específico');
+
                 return 1;
             }
 
@@ -46,7 +47,7 @@ class RecalculateOrderCostsCommand extends Command
         }
 
         // Se passou tenant mas não ID, recalcular todos os pedidos do tenant
-        if ($tenantId && !$costCommissionId) {
+        if ($tenantId && ! $costCommissionId) {
             $this->info("Recalculando TODOS os pedidos do tenant {$tenantId}...");
 
             $service = app(\App\Services\OrderCostService::class);
@@ -60,14 +61,16 @@ class RecalculateOrderCostsCommand extends Command
                 });
 
             $this->info("Recálculo concluído! Total: {$count} pedidos");
+
             return 0;
         }
 
         // Se passou ID, usar a lógica antiga
         $cost = CostCommission::find($costCommissionId);
 
-        if (!$cost) {
+        if (! $cost) {
             $this->error("Custo/comissão ID {$costCommissionId} não encontrado!");
+
             return 1;
         }
 

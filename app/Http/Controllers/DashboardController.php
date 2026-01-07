@@ -18,8 +18,8 @@ class DashboardController extends Controller
         $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
 
         // Converter datas do horário de Brasília para UTC para filtrar corretamente
-        $startDateUtc = Carbon::parse($startDate . ' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
-        $endDateUtc = Carbon::parse($endDate . ' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+        $startDateUtc = Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+        $endDateUtc = Carbon::parse($endDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
 
         // Buscar pedidos do período
         $orders = Order::where('tenant_id', $tenantId)
@@ -67,8 +67,7 @@ class DashboardController extends Controller
                         }
                     }
                     $totalCmv += $itemCost * $itemQuantity;
-                }
-                elseif ($item->internalProduct && $item->internalProduct->unit_cost) {
+                } elseif ($item->internalProduct && $item->internalProduct->unit_cost) {
                     $unitCost = (float) $item->internalProduct->unit_cost;
                     $totalCmv += $unitCost * $itemQuantity;
                 }
@@ -133,8 +132,8 @@ class DashboardController extends Controller
         $previousEndDate = Carbon::parse($startDate)->subDay()->format('Y-m-d');
 
         // Converter datas do horário de Brasília para UTC
-        $previousStartDateUtc = Carbon::parse($previousStartDate . ' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
-        $previousEndDateUtc = Carbon::parse($previousEndDate . ' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+        $previousStartDateUtc = Carbon::parse($previousStartDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+        $previousEndDateUtc = Carbon::parse($previousEndDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
 
         $previousOrders = Order::where('tenant_id', $tenantId)
             ->with(['items.internalProduct', 'items.mappings.internalProduct'])

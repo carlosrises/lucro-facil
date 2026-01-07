@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Http;
 class TakeatClient
 {
     protected Store $store;
+
     protected ?string $token;
 
     public function __construct(protected int $tenantId, protected int $storeId)
@@ -21,7 +22,7 @@ class TakeatClient
         // Buscar token JWT do OauthToken
         $oauthToken = $this->store->oauthToken;
 
-        if (!$oauthToken || $oauthToken->expires_at->isPast()) {
+        if (! $oauthToken || $oauthToken->expires_at->isPast()) {
             throw new \Exception('Token Takeat expirado ou não encontrado. Faça login novamente.');
         }
 
@@ -83,12 +84,14 @@ class TakeatClient
 
             throw $e;
         }
-    }    /**
+    }
+
+    /**
      * GET /api/v1/table-sessions
      * Retorna sessões de comandas/pedidos dentro do intervalo de datas
      *
-     * @param string $startDate formato ISO 8601 (ex: 2025-08-06T03:00:00)
-     * @param string $endDate formato ISO 8601 (ex: 2025-08-07T03:00:00)
+     * @param  string  $startDate  formato ISO 8601 (ex: 2025-08-06T03:00:00)
+     * @param  string  $endDate  formato ISO 8601 (ex: 2025-08-07T03:00:00)
      */
     public function getTableSessions(string $startDate, string $endDate): array
     {

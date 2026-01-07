@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\InternalProduct;
-use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderItemMapping;
 use App\Models\ProductMapping;
@@ -24,7 +23,7 @@ class FlavorMappingService
         // Extrair o nome do sabor do SKU do add-on
         $flavorName = $this->extractFlavorNameFromSku($mapping->external_item_id);
 
-        if (!$flavorName) {
+        if (! $flavorName) {
             return 0;
         }
 
@@ -33,12 +32,14 @@ class FlavorMappingService
         // Buscar todos os order_items que contêm este sabor nos add_ons
         $orderItems = OrderItem::where('tenant_id', $tenantId)
             ->whereNotNull('add_ons')
-            ->whereRaw("JSON_LENGTH(add_ons) > 0")
+            ->whereRaw('JSON_LENGTH(add_ons) > 0')
             ->get();
 
         foreach ($orderItems as $orderItem) {
             $addOns = $orderItem->add_ons;
-            if (!is_array($addOns)) continue;
+            if (! is_array($addOns)) {
+                continue;
+            }
 
             foreach ($addOns as $index => $addOn) {
                 $addOnName = $addOn['name'] ?? '';
@@ -89,7 +90,7 @@ class FlavorMappingService
         // Buscar o produto pai (item principal) para saber quantos sabores suporta
         $parentProduct = $this->getParentProduct($orderItem);
 
-        if (!$parentProduct || $parentProduct->product_category !== 'pizza') {
+        if (! $parentProduct || $parentProduct->product_category !== 'pizza') {
             // Se não é pizza ou não tem produto pai, retorna 100%
             return 1.0;
         }
@@ -120,7 +121,7 @@ class FlavorMappingService
             ->where('item_type', 'parent_product')
             ->first();
 
-        if (!$productMapping) {
+        if (! $productMapping) {
             return null;
         }
 
@@ -133,7 +134,7 @@ class FlavorMappingService
     protected function countFlavorsInOrderItem(OrderItem $orderItem): int
     {
         $addOns = $orderItem->add_ons;
-        if (!is_array($addOns)) {
+        if (! is_array($addOns)) {
             return 0;
         }
 
@@ -141,10 +142,12 @@ class FlavorMappingService
 
         foreach ($addOns as $index => $addOn) {
             $addOnName = $addOn['name'] ?? '';
-            if (!$addOnName) continue;
+            if (! $addOnName) {
+                continue;
+            }
 
             // Verificar se este add-on é um sabor (tem ProductMapping do tipo 'flavor')
-            $addOnSku = 'addon_' . md5($addOnName);
+            $addOnSku = 'addon_'.md5($addOnName);
             $mapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
                 ->where('external_item_id', $addOnSku)
                 ->where('item_type', 'flavor')
@@ -166,22 +169,24 @@ class FlavorMappingService
      */
     protected function extractFlavorNameFromSku(string $sku): ?string
     {
-        if (!str_starts_with($sku, 'addon_')) {
+        if (! str_starts_with($sku, 'addon_')) {
             return null;
         }
 
         // Buscar no banco um order_item que tenha este add-on
         $orderItems = OrderItem::whereNotNull('add_ons')
-            ->whereRaw("JSON_LENGTH(add_ons) > 0")
+            ->whereRaw('JSON_LENGTH(add_ons) > 0')
             ->get();
 
         foreach ($orderItems as $orderItem) {
             $addOns = $orderItem->add_ons;
-            if (!is_array($addOns)) continue;
+            if (! is_array($addOns)) {
+                continue;
+            }
 
             foreach ($addOns as $addOn) {
                 $addOnName = $addOn['name'] ?? '';
-                $generatedSku = 'addon_' . md5($addOnName);
+                $generatedSku = 'addon_'.md5($addOnName);
 
                 if ($generatedSku === $sku) {
                     return $addOnName;

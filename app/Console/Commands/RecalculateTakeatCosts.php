@@ -9,12 +9,13 @@ use Illuminate\Console\Command;
 class RecalculateTakeatCosts extends Command
 {
     protected $signature = 'orders:recalculate-takeat-costs {--tenant= : ID do tenant para filtrar pedidos}';
+
     protected $description = 'Recalcular custos e comissões dos pedidos Takeat';
 
     public function handle(OrderCostService $costService): int
     {
         $tenantId = $this->option('tenant');
-        
+
         if ($tenantId) {
             $this->info("Buscando pedidos Takeat do tenant {$tenantId}...");
         } else {
@@ -22,11 +23,11 @@ class RecalculateTakeatCosts extends Command
         }
 
         $query = Order::where('provider', 'takeat');
-        
+
         if ($tenantId) {
             $query->where('tenant_id', $tenantId);
         }
-        
+
         $total = $query->count();
         $this->info("Encontrados {$total} pedidos Takeat");
 
@@ -37,16 +38,16 @@ class RecalculateTakeatCosts extends Command
 
         // Processar em chunks para não estourar memória
         $query->chunk(100, function ($orders) use ($costService, &$count, $bar) {
-                foreach ($orders as $order) {
-                    try {
-                        $costService->applyAndSaveCosts($order);
-                        $count++;
-                    } catch (\Exception $e) {
-                        $this->error("\nErro no pedido {$order->code}: " . $e->getMessage());
-                    }
-                    $bar->advance();
+            foreach ($orders as $order) {
+                try {
+                    $costService->applyAndSaveCosts($order);
+                    $count++;
+                } catch (\Exception $e) {
+                    $this->error("\nErro no pedido {$order->code}: ".$e->getMessage());
                 }
-            });
+                $bar->advance();
+            }
+        });
 
         $bar->finish();
         $this->newLine();

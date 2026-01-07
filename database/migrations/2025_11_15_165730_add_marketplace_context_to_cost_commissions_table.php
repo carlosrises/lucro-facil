@@ -18,7 +18,7 @@ return new class extends Migration
                 'delivery_only',
                 'pickup_only',
                 'payment_method',
-                'custom'
+                'custom',
             ])->default('all_orders')->after('type');
             $table->string('condition_value')->nullable()->after('applies_to');
 

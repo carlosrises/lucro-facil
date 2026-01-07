@@ -11,8 +11,8 @@ class OrderItemMappingsController extends Controller
 {
     public function __construct(
         private PizzaFractionService $pizzaFractionService
-    ) {
-    }
+    ) {}
+
     /**
      * Store multiple mappings for an order item
      */

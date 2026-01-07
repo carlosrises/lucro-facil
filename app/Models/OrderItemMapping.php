@@ -9,9 +9,13 @@ class OrderItemMapping extends Model
 {
     // Tipos de opção para sistema de pizza
     public const OPTION_TYPE_PIZZA_FLAVOR = 'pizza_flavor';
+
     public const OPTION_TYPE_REGULAR = 'regular';
+
     public const OPTION_TYPE_ADDON = 'addon';
+
     public const OPTION_TYPE_OBSERVATION = 'observation';
+
     public const OPTION_TYPE_DRINK = 'drink';
 
     public const OPTION_TYPES = [
@@ -69,7 +73,7 @@ class OrderItemMapping extends Model
      */
     public function calculateCost(): float
     {
-        if (!$this->internalProduct || !$this->internalProduct->unit_cost) {
+        if (! $this->internalProduct || ! $this->internalProduct->unit_cost) {
             return 0;
         }
 

@@ -55,7 +55,6 @@ class InternalProduct extends Model
         return $this->belongsTo(TaxCategory::class);
     }
 
-
     public function ingredients(): BelongsToMany
     {
         return $this->belongsToMany(Ingredient::class, 'product_costs')
@@ -66,7 +65,7 @@ class InternalProduct extends Model
     /**
      * Calcula o CMV (Custo de Mercadoria Vendida) baseado nos ingredientes.
      *
-     * @param string|null $size Tamanho específico para buscar ficha técnica (broto, media, grande, familia)
+     * @param  string|null  $size  Tamanho específico para buscar ficha técnica (broto, media, grande, familia)
      */
     public function calculateCMV(?string $size = null): float
     {

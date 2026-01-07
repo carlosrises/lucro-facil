@@ -27,8 +27,8 @@ return new class extends Migration
             $t->json('raw')->nullable();
 
             $t->timestamps();
-            $t->unique(['tenant_id','provider','event_id'], 'financial_events_unique');
-            $t->index(['tenant_id','order_uuid']);
+            $t->unique(['tenant_id', 'provider', 'event_id'], 'financial_events_unique');
+            $t->index(['tenant_id', 'order_uuid']);
         });
 
         Schema::create('settlements', function (Blueprint $t) {
@@ -43,7 +43,7 @@ return new class extends Migration
             $t->json('raw')->nullable();
 
             $t->timestamps();
-            $t->unique(['tenant_id','provider','settlement_id'], 'settlements_unique');
+            $t->unique(['tenant_id', 'provider', 'settlement_id'], 'settlements_unique');
         });
     }
 

@@ -7,7 +7,7 @@ Route::prefix('api/99food')->middleware('auth')->group(function () {
     /**
      * Authentication
      */
-    Route::prefix('oauth')->group(function() {
+    Route::prefix('oauth')->group(function () {
         Route::post('userCode', [NineNineFoodIntegrationController::class, 'userCode']);
         Route::post('token', [NineNineFoodIntegrationController::class, 'token']);
     });

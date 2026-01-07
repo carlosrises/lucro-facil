@@ -15,11 +15,11 @@ return new class extends Migration
             $t->id();
             $t->foreignId('tenant_id')->constrained()->cascadeOnDelete();
 
-            $t->enum('type', ['expense','income']);
+            $t->enum('type', ['expense', 'income']);
             $t->string('name');
             $t->timestamps();
 
-            $t->unique(['tenant_id','type','name'], 'finance_categories_unique');
+            $t->unique(['tenant_id', 'type', 'name'], 'finance_categories_unique');
         });
 
         Schema::create('finance_entries', function (Blueprint $t) {
@@ -33,7 +33,7 @@ return new class extends Migration
             $t->text('notes')->nullable();
             $t->timestamps();
 
-            $t->index(['tenant_id','occurred_on']);
+            $t->index(['tenant_id', 'occurred_on']);
         });
     }
 

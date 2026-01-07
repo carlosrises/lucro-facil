@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Models\InternalProduct;
-use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\ProductMapping;
 use App\Services\FlavorMappingService;
@@ -75,7 +74,7 @@ class TestFlavorFractionation extends Command
         $this->info('📦 Análise de Pedidos:');
         $ordersWithAddOns = OrderItem::where('tenant_id', $tenantId)
             ->whereNotNull('add_ons')
-            ->whereRaw("JSON_LENGTH(add_ons) > 0")
+            ->whereRaw('JSON_LENGTH(add_ons) > 0')
             ->with('order')
             ->limit(5)
             ->get();
@@ -112,7 +111,7 @@ class TestFlavorFractionation extends Command
                     $classifiedFlavors = 0;
                     foreach ($addOns as $addOn) {
                         $addOnName = $addOn['name'] ?? '';
-                        $addOnSku = 'addon_' . md5($addOnName);
+                        $addOnSku = 'addon_'.md5($addOnName);
                         $flavorMapping = \App\Models\ProductMapping::where('tenant_id', $tenantId)
                             ->where('external_item_id', $addOnSku)
                             ->where('item_type', 'flavor')
@@ -130,13 +129,13 @@ class TestFlavorFractionation extends Command
                             $percentage = round($fraction * 100, 2);
                             $this->line("    ✅ Fração por sabor: {$percentage}%");
                         } else {
-                            $this->line("    ⚠️  Nenhum sabor classificado ainda");
+                            $this->line('    ⚠️  Nenhum sabor classificado ainda');
                         }
                     } else {
-                        $this->line("    ⚠️  Não é pizza, não fraciona");
+                        $this->line('    ⚠️  Não é pizza, não fraciona');
                     }
                 } else {
-                    $this->line("    ⚠️  Base não mapeada");
+                    $this->line('    ⚠️  Base não mapeada');
                 }
 
                 $this->newLine();
@@ -144,7 +143,7 @@ class TestFlavorFractionation extends Command
         }
 
         // 5. Oferecer aplicar fracionamento a um sabor específico
-        if (!$flavorMappings->isEmpty()) {
+        if (! $flavorMappings->isEmpty()) {
             $this->newLine();
             if ($this->confirm('Deseja aplicar o fracionamento a um sabor específico?')) {
                 $flavorOptions = $flavorMappings->pluck('external_item_name', 'id')->toArray();
@@ -157,7 +156,7 @@ class TestFlavorFractionation extends Command
                 $mapping = $flavorMappings->firstWhere('id', array_search($selectedId, $flavorOptions));
 
                 if ($mapping) {
-                    $service = new FlavorMappingService();
+                    $service = new FlavorMappingService;
                     $this->info("Aplicando fracionamento para: {$mapping->external_item_name}...");
                     $count = $service->mapFlavorToAllOccurrences($mapping, $tenantId);
                     $this->info("✅ Fracionamento aplicado a {$count} ocorrências!");

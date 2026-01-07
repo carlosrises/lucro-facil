@@ -53,7 +53,7 @@ class FinancialSummaryController extends Controller
 
             // Agrupar por loja
             $storeName = $order->store->display_name ?? 'Desconhecido';
-            if (!isset($revenueByStore[$storeName])) {
+            if (! isset($revenueByStore[$storeName])) {
                 $revenueByStore[$storeName] = 0;
             }
             $revenueByStore[$storeName] += $revenue;

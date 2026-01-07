@@ -17,8 +17,9 @@ class ReapplyProductMappings extends Command
     {
         $tenantId = $this->option('tenant_id');
 
-        if (!$tenantId) {
+        if (! $tenantId) {
             $this->error('❌ Informe o tenant_id: --tenant_id=X');
+
             return 1;
         }
 
@@ -49,6 +50,7 @@ class ReapplyProductMappings extends Command
 
                 if ($hasMainMapping) {
                     $this->line("   ├─ Item {$orderItem->id} (Pedido {$orderItem->order_id}) já tem mapping");
+
                     continue;
                 }
 

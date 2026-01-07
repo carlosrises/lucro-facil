@@ -105,6 +105,7 @@ class CostCommissionsController extends Controller
             'type' => 'required|in:percentage,fixed',
             'value' => 'required|numeric|min:0',
             'applies_to' => 'required|in:all_orders,delivery_only,pickup_only,payment_method,custom',
+            'delivery_by' => 'nullable|in:all,store,marketplace',
             'payment_type' => 'nullable|in:all,online,offline',
             'condition_value' => 'nullable|string',
             'condition_values' => 'nullable|array',
@@ -134,11 +135,14 @@ class CostCommissionsController extends Controller
             \App\Jobs\RecalculateOrderCostsJob::dispatch(
                 $costCommission->id,
                 false, // false = aplica filtro de provider/origin
-                'cost_commission'
+                'cost_commission',
+                null,
+                null,
+                true // onlySpecificCommission = true (recalcula apenas esta comissão)
             );
             $cacheKey = "recalculate_progress_{$validated['tenant_id']}_cost_commission_{$costCommission->id}";
 
-            \Log::info("Taxa de pagamento criada", [
+            \Log::info('Taxa de pagamento criada', [
                 'cost_commission_id' => $costCommission->id,
                 'name' => $costCommission->name,
                 'provider' => $costCommission->provider,
@@ -168,6 +172,7 @@ class CostCommissionsController extends Controller
             'type' => 'required|in:percentage,fixed',
             'value' => 'required|numeric|min:0',
             'applies_to' => 'required|in:all_orders,delivery_only,pickup_only,payment_method,custom',
+            'delivery_by' => 'nullable|in:all,store,marketplace',
             'payment_type' => 'nullable|in:all,online,offline',
             'condition_value' => 'nullable|string',
             'condition_values' => 'nullable|array',
@@ -199,7 +204,10 @@ class CostCommissionsController extends Controller
             RecalculateOrderCostsJob::dispatch(
                 $costCommission->id,
                 false, // false = aplica filtro de provider/origin
-                'cost_commission'
+                'cost_commission',
+                null,
+                null,
+                true // onlySpecificCommission = true (recalcula apenas esta comissão)
             );
             $cacheKey = "recalculate_progress_{$costCommission->tenant_id}_cost_commission_{$costCommission->id}";
         }
@@ -242,13 +250,15 @@ class CostCommissionsController extends Controller
 
         // Se deve recalcular, disparar job APÓS excluir mas com dados salvos
         if ($shouldRecalculate) {
-            // Recalcular todos os pedidos, passando dados já que o registro foi excluído
+            // Remover comissão específica dos pedidos (granular)
             RecalculateOrderCostsJob::dispatch(
                 $costCommissionId,
                 false, // false = aplica filtro de provider/origin
                 'cost_commission',
                 $tenantId, // Passa tenantId para o job
-                $provider  // Passa provider para o job
+                $provider,  // Passa provider para o job
+                true, // onlySpecificCommission = true (remove apenas esta comissão)
+                true  // isDeleting = true (indica que é uma remoção)
             );
             $cacheKey = "recalculate_progress_{$tenantId}_cost_commission_{$costCommissionId}";
 

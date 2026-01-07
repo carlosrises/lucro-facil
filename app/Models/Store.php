@@ -47,11 +47,11 @@ class Store extends Model
      */
     public function hasExpiredToken(): bool
     {
-        if (!$this->oauthToken) {
+        if (! $this->oauthToken) {
             return true;
         }
 
-        if (!$this->oauthToken->expires_at) {
+        if (! $this->oauthToken->expires_at) {
             return false;
         }
 
@@ -63,7 +63,7 @@ class Store extends Model
      */
     public function hasTokenExpiringSoon(): bool
     {
-        if (!$this->oauthToken || !$this->oauthToken->expires_at) {
+        if (! $this->oauthToken || ! $this->oauthToken->expires_at) {
             return false;
         }
 

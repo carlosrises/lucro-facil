@@ -31,7 +31,7 @@ class IntegrationsController extends Controller
         })->values();
 
         $storesWithTokenExpiringSoon = $allStores->filter(function ($store) {
-            return $store->hasTokenExpiringSoon() && !$store->hasExpiredToken();
+            return $store->hasTokenExpiringSoon() && ! $store->hasExpiredToken();
         })->map(function ($store) {
             return [
                 'id' => $store->id,

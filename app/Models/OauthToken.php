@@ -10,12 +10,12 @@ class OauthToken extends Model
     protected $fillable = [
         'tenant_id', 'store_id', 'provider',
         'username', 'encrypted_password',
-        'access_token', 'refresh_token', 'expires_at', 'scopes'
+        'access_token', 'refresh_token', 'expires_at', 'scopes',
     ];
 
     protected $casts = [
         'expires_at' => 'datetime',
-        'scopes'     => 'array',
+        'scopes' => 'array',
     ];
 
     public function tenant()
@@ -41,7 +41,7 @@ class OauthToken extends Model
      */
     public function getPassword(): ?string
     {
-        if (!$this->encrypted_password) {
+        if (! $this->encrypted_password) {
             return null;
         }
 
@@ -57,6 +57,6 @@ class OauthToken extends Model
      */
     public function hasCredentials(): bool
     {
-        return !empty($this->username) && !empty($this->encrypted_password);
+        return ! empty($this->username) && ! empty($this->encrypted_password);
     }
 }

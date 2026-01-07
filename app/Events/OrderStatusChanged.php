@@ -25,7 +25,7 @@ class OrderStatusChanged implements ShouldBroadcast
      */
     public function broadcastOn(): Channel
     {
-        return new Channel('orders.tenant.' . $this->order->tenant_id);
+        return new Channel('orders.tenant.'.$this->order->tenant_id);
     }
 
     /**
@@ -58,18 +58,12 @@ class OrderStatusChanged implements ShouldBroadcast
     protected function getStatusChangeMessage(): string
     {
         return match ($this->newStatus) {
-            'CANCELLED', 'CANCELLATION_REQUESTED' =>
-                "Pedido #{$this->order->code} foi cancelado",
-            'CONFIRMED' =>
-                "Pedido #{$this->order->code} foi confirmado",
-            'DISPATCHED' =>
-                "Pedido #{$this->order->code} saiu para entrega",
-            'READY_TO_PICKUP' =>
-                "Pedido #{$this->order->code} está pronto para retirada",
-            'CONCLUDED' =>
-                "Pedido #{$this->order->code} foi concluído",
-            default =>
-                "Pedido #{$this->order->code} mudou de status"
+            'CANCELLED', 'CANCELLATION_REQUESTED' => "Pedido #{$this->order->code} foi cancelado",
+            'CONFIRMED' => "Pedido #{$this->order->code} foi confirmado",
+            'DISPATCHED' => "Pedido #{$this->order->code} saiu para entrega",
+            'READY_TO_PICKUP' => "Pedido #{$this->order->code} está pronto para retirada",
+            'CONCLUDED' => "Pedido #{$this->order->code} foi concluído",
+            default => "Pedido #{$this->order->code} mudou de status"
         };
     }
 }

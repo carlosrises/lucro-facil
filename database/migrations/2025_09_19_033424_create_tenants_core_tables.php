@@ -43,7 +43,7 @@ return new class extends Migration
             $t->timestamp('expires_at')->nullable();
             $t->json('scopes')->nullable();
             $t->timestamps();
-            $t->index(['tenant_id','provider']);
+            $t->index(['tenant_id', 'provider']);
         });
 
         Schema::create('sync_cursors', function (Blueprint $t) {
@@ -55,7 +55,7 @@ return new class extends Migration
             $t->timestamp('last_synced_at')->nullable();
             $t->timestamps();
 
-            $t->unique(['tenant_id','store_id','module'], 'sync_cursors_unique');
+            $t->unique(['tenant_id', 'store_id', 'module'], 'sync_cursors_unique');
         });
     }
 

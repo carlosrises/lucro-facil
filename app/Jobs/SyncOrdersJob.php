@@ -284,7 +284,7 @@ class SyncOrdersJob implements ShouldQueue
             ->where('external_item_id', $orderItem->sku)
             ->first();
 
-        if (!$productMapping) {
+        if (! $productMapping) {
             return; // Sem mapeamento configurado
         }
 

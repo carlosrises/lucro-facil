@@ -23,7 +23,7 @@ return new class extends Migration
             $t->boolean('active')->default(true);
 
             $t->timestamps();
-            $t->unique(['tenant_id','sku']);
+            $t->unique(['tenant_id', 'sku']);
         });
 
         Schema::create('ingredients', function (Blueprint $t) {
@@ -36,7 +36,7 @@ return new class extends Migration
             $t->boolean('active')->default(true);
 
             $t->timestamps();
-            $t->unique(['tenant_id','name','unit'], 'ingredients_unique');
+            $t->unique(['tenant_id', 'name', 'unit'], 'ingredients_unique');
         });
 
         // Relação N:N produto ↔ ingredientes + quantidade por produto
@@ -49,7 +49,7 @@ return new class extends Migration
             $t->decimal('qty', 12, 4)->default(0); // quanto de ingrediente por produto
             $t->timestamps();
 
-            $t->unique(['tenant_id','internal_product_id','ingredient_id'], 'product_costs_unique');
+            $t->unique(['tenant_id', 'internal_product_id', 'ingredient_id'], 'product_costs_unique');
         });
     }
 

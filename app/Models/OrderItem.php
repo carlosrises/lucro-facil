@@ -10,7 +10,7 @@ class OrderItem extends Model
 {
     protected $fillable = [
         'tenant_id', 'order_id', 'sku', 'name',
-        'qty', 'unit_price', 'total', 'add_ons'
+        'qty', 'unit_price', 'total', 'add_ons',
     ];
 
     protected $casts = [

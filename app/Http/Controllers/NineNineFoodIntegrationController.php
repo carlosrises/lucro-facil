@@ -157,6 +157,7 @@ class NineNineFoodIntegrationController extends Controller
         $stores->transform(function ($store) {
             $store->token_expired = $store->hasExpiredToken();
             $store->token_expiring_soon = $store->hasTokenExpiringSoon();
+
             return $store;
         });
 

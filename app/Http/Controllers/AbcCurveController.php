@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\InternalProduct;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -21,8 +19,8 @@ class AbcCurveController extends Controller
         $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
 
         // Converter datas do horário de Brasília para UTC
-        $startDateUtc = Carbon::parse($startDate . ' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
-        $endDateUtc = Carbon::parse($endDate . ' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+        $startDateUtc = Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+        $endDateUtc = Carbon::parse($endDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
 
         // Buscar itens de pedidos do período agrupados por produto interno
         // Nota: order_items usa SKU para mapear produtos via product_mappings

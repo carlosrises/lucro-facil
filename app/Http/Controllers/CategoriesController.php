@@ -79,7 +79,7 @@ class CategoriesController extends Controller
 
         // Filtros
         if ($request->filled('search')) {
-            $query->where('name', 'like', '%' . $request->search . '%');
+            $query->where('name', 'like', '%'.$request->search.'%');
         }
 
         if ($request->filled('active')) {
@@ -93,7 +93,7 @@ class CategoriesController extends Controller
             'filters' => [
                 'search' => $request->search ?? '',
                 'active' => $request->active ?? '',
-            ]
+            ],
         ]);
     }
 }

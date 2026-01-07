@@ -10,7 +10,7 @@ class FinancialEvent extends Model
         'tenant_id', 'store_id', 'provider',
         'event_id', 'order_uuid', 'type',
         'has_transfer_impact', 'amount', 'currency',
-        'occurred_at', 'raw'
+        'occurred_at', 'raw',
     ];
 
     protected $casts = [

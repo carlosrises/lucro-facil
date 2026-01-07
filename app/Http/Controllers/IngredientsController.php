@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Ingredient;
 use App\Models\Category;
+use App\Models\Ingredient;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -14,14 +14,11 @@ class IngredientsController extends Controller
         $query = Ingredient::query()
             ->where('tenant_id', tenant_id())
             ->with('category')
-            ->when($request->filled('search'), fn ($q, $search) =>
-                $q->where('name', 'like', "%{$request->input('search')}%")
+            ->when($request->filled('search'), fn ($q, $search) => $q->where('name', 'like', "%{$request->input('search')}%")
             )
-            ->when($request->filled('category_id'), fn ($q) =>
-                $q->where('category_id', $request->input('category_id'))
+            ->when($request->filled('category_id'), fn ($q) => $q->where('category_id', $request->input('category_id'))
             )
-            ->when($request->filled('active'), fn ($q) =>
-                $q->where('active', $request->boolean('active'))
+            ->when($request->filled('active'), fn ($q) => $q->where('active', $request->boolean('active'))
             )
             ->orderBy('name');
 
@@ -104,7 +101,7 @@ class IngredientsController extends Controller
             abort(403);
         }
 
-        $ingredient->update(['active' => !$ingredient->active]);
+        $ingredient->update(['active' => ! $ingredient->active]);
 
         return redirect()->back();
     }

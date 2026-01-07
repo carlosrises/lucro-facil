@@ -18,7 +18,7 @@ class TakeatIntegrationController extends Controller
             'tenant_id' => auth()->user()->tenant_id ?? 'N/A',
             'user_id' => auth()->id() ?? 'N/A',
             'email' => $request->input('email'),
-            'has_password' => !empty($request->input('password')),
+            'has_password' => ! empty($request->input('password')),
         ]);
 
         $validated = $request->validate([
@@ -121,7 +121,9 @@ class TakeatIntegrationController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
-    }    /**
+    }
+
+    /**
      * Lista todas as lojas Takeat integradas
      */
     public function stores()
@@ -134,6 +136,7 @@ class TakeatIntegrationController extends Controller
         $stores->transform(function ($store) {
             $store->token_expired = $store->hasExpiredToken();
             $store->token_expiring_soon = $store->hasTokenExpiringSoon();
+
             return $store;
         });
 

@@ -3,13 +3,10 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class InitialSetupSeeder extends Seeder
 {
@@ -21,8 +18,8 @@ class InitialSetupSeeder extends Seeder
         // 1) Roles básicas
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-    // Inclui role 'admin' para compatibilidade com verificações antigas
-    $roles = ['admin','admin:system','admin:tenant','manager','operator'];
+        // Inclui role 'admin' para compatibilidade com verificações antigas
+        $roles = ['admin', 'admin:system', 'admin:tenant', 'manager', 'operator'];
         foreach ($roles as $role) {
             \Spatie\Permission\Models\Role::firstOrCreate(['name' => $role]);
         }

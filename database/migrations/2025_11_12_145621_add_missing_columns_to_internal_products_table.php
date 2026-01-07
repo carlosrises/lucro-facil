@@ -13,20 +13,20 @@ return new class extends Migration
     {
         Schema::table('internal_products', function (Blueprint $table) {
             // Adicionar tipo (produto ou serviço) se não existir
-            if (!Schema::hasColumn('internal_products', 'type')) {
+            if (! Schema::hasColumn('internal_products', 'type')) {
                 $table->enum('type', ['product', 'service'])->default('product')->after('name');
             }
 
             // Adicionar unidade de medida se não existir
-            if (!Schema::hasColumn('internal_products', 'unit')) {
+            if (! Schema::hasColumn('internal_products', 'unit')) {
                 $table->string('unit')->default('unit')->after('type');
             }
 
             // Adicionar custo unitário calculado (CMV) e preço de venda se não existirem
-            if (!Schema::hasColumn('internal_products', 'unit_cost')) {
+            if (! Schema::hasColumn('internal_products', 'unit_cost')) {
                 $table->decimal('unit_cost', 12, 2)->default(0)->after('unit');
             }
-            if (!Schema::hasColumn('internal_products', 'sale_price')) {
+            if (! Schema::hasColumn('internal_products', 'sale_price')) {
                 $table->decimal('sale_price', 12, 2)->default(0)->after('unit_cost');
             }
         });

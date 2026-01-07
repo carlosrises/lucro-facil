@@ -65,7 +65,7 @@ Schedule::command('entries:generate-recurring')
 
 // Verificar e alertar sobre tokens próximos de expirar
 // Executa diariamente às 08:00 de Brasília
-Schedule::job(new \App\Jobs\RefreshTakeatTokensJob())
+Schedule::job(new \App\Jobs\RefreshTakeatTokensJob)
     ->dailyAt('08:00')
     ->timezone('America/Sao_Paulo')
     ->withoutOverlapping();

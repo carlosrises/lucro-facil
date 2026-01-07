@@ -3,10 +3,10 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Builder;
 
 class FinanceEntry extends Model
 {
@@ -81,7 +81,7 @@ class FinanceEntry extends Model
     {
         return $query->where(function ($q) {
             $q->where('is_recurring', false)
-              ->orWhereNotNull('parent_entry_id');
+                ->orWhereNotNull('parent_entry_id');
         });
     }
 }

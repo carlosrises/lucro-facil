@@ -30,7 +30,7 @@ class RecurringEntryService
      */
     public function generateInstallments(FinanceEntry $template, int $count = 6): void
     {
-        if (!$template->is_recurring || $template->parent_entry_id !== null) {
+        if (! $template->is_recurring || $template->parent_entry_id !== null) {
             return; // Só gera parcelas de templates
         }
 
@@ -96,7 +96,7 @@ class RecurringEntryService
      */
     public function updateRecurringEntry(FinanceEntry $template, array $data): void
     {
-        if (!$template->is_recurring || $template->parent_entry_id !== null) {
+        if (! $template->is_recurring || $template->parent_entry_id !== null) {
             return;
         }
 

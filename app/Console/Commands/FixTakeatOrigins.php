@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 class FixTakeatOrigins extends Command
 {
     protected $signature = 'takeat:fix-origins';
+
     protected $description = 'Atualiza o campo origin dos pedidos Takeat baseado no sales_channel do raw';
 
     public function handle()
@@ -23,7 +24,7 @@ class FixTakeatOrigins extends Command
         foreach ($orders as $order) {
             $raw = $order->raw;
 
-            if (!isset($raw['session'])) {
+            if (! isset($raw['session'])) {
                 continue;
             }
 

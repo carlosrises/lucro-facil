@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
-
 use Illuminate\Database\Eloquent\Model;
 
 class Order extends Model
@@ -21,7 +20,7 @@ class Order extends Model
 
     protected $casts = [
         'placed_at' => 'datetime',
-        'raw'       => 'array',
+        'raw' => 'array',
         'calculated_costs' => 'array',
         'total_costs' => 'decimal:2',
         'total_commissions' => 'decimal:2',

@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Model;
 
 class FinanceCategory extends Model
 {
     use BelongsToTenant;
 
     protected $fillable = [
-        'tenant_id', 'parent_id', 'type', 'name'
+        'tenant_id', 'parent_id', 'type', 'name',
     ];
 
     public function parent()

@@ -9,7 +9,7 @@ class Plan extends Model
 {
     protected $fillable = [
         'code', 'name', 'price_month',
-        'max_stores', 'retention_days', 'reports_advanced', 'features'
+        'max_stores', 'retention_days', 'reports_advanced', 'features',
     ];
 
     protected $casts = [

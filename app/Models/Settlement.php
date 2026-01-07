@@ -8,7 +8,7 @@ class Settlement extends Model
 {
     protected $fillable = [
         'tenant_id', 'store_id', 'provider',
-        'settlement_id', 'settlement_date', 'amount', 'raw'
+        'settlement_id', 'settlement_date', 'amount', 'raw',
     ];
 
     protected $casts = [

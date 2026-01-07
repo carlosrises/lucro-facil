@@ -8,7 +8,7 @@ class Tenant extends Model
 {
     protected $fillable = [
         'uuid', 'name', 'document', 'email', 'phone',
-        'margin_excellent', 'margin_good_min', 'margin_good_max', 'margin_poor'
+        'margin_excellent', 'margin_good_min', 'margin_good_max', 'margin_poor',
     ];
 
     protected $casts = [

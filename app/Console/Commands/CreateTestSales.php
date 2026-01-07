@@ -9,14 +9,16 @@ use Illuminate\Console\Command;
 class CreateTestSales extends Command
 {
     protected $signature = 'sales:create-test';
+
     protected $description = 'Create test sales data for development';
 
     public function handle()
     {
         $store = Store::where('provider', 'ifood')->first();
 
-        if (!$store) {
+        if (! $store) {
             $this->error('No iFood store found. Create a store first.');
+
             return 1;
         }
 
@@ -29,7 +31,7 @@ class CreateTestSales extends Command
             [
                 'tenant_id' => $tenantId,
                 'store_id' => $store->id,
-                'sale_uuid' => 'TEST-001-' . time(),
+                'sale_uuid' => 'TEST-001-'.time(),
                 'short_id' => 'T001',
                 'type' => 'DELIVERY',
                 'category' => 'FOOD',
@@ -49,7 +51,7 @@ class CreateTestSales extends Command
                 'concluded_at' => now()->subHours(1),
                 'expected_payment_date' => now()->addDays(2),
                 'raw' => json_encode([
-                    'id' => 'TEST-001-' . time(),
+                    'id' => 'TEST-001-'.time(),
                     'items' => [
                         [
                             'id' => 'item-1',
@@ -71,10 +73,10 @@ class CreateTestSales extends Command
                                             'quantity' => 1,
                                             'unitPrice' => 0,
                                             'totalPrice' => 0,
-                                        ]
-                                    ]
-                                ]
-                            ]
+                                        ],
+                                    ],
+                                ],
+                            ],
                         ],
                         [
                             'id' => 'item-2',
@@ -89,14 +91,14 @@ class CreateTestSales extends Command
                             'quantity' => 1,
                             'unitPrice' => 500,
                             'totalPrice' => 500,
-                        ]
-                    ]
-                ])
+                        ],
+                    ],
+                ]),
             ],
             [
                 'tenant_id' => $tenantId,
                 'store_id' => $store->id,
-                'sale_uuid' => 'TEST-002-' . time(),
+                'sale_uuid' => 'TEST-002-'.time(),
                 'short_id' => 'T002',
                 'type' => 'DELIVERY',
                 'category' => 'FOOD',
@@ -116,7 +118,7 @@ class CreateTestSales extends Command
                 'concluded_at' => null,
                 'expected_payment_date' => null,
                 'raw' => json_encode([
-                    'id' => 'TEST-002-' . time(),
+                    'id' => 'TEST-002-'.time(),
                     'items' => [
                         [
                             'id' => 'item-4',
@@ -124,14 +126,14 @@ class CreateTestSales extends Command
                             'quantity' => 1,
                             'unitPrice' => 3200,
                             'totalPrice' => 3200,
-                        ]
-                    ]
-                ])
+                        ],
+                    ],
+                ]),
             ],
             [
                 'tenant_id' => $tenantId,
                 'store_id' => $store->id,
-                'sale_uuid' => 'TEST-003-' . time(),
+                'sale_uuid' => 'TEST-003-'.time(),
                 'short_id' => 'T003',
                 'type' => 'TAKEOUT',
                 'category' => 'FOOD',
@@ -151,7 +153,7 @@ class CreateTestSales extends Command
                 'concluded_at' => null,
                 'expected_payment_date' => now()->addDays(1),
                 'raw' => json_encode([
-                    'id' => 'TEST-003-' . time(),
+                    'id' => 'TEST-003-'.time(),
                     'items' => [
                         [
                             'id' => 'item-5',
@@ -166,19 +168,20 @@ class CreateTestSales extends Command
                                     'quantity' => 1,
                                     'unitPrice' => 1000,
                                     'totalPrice' => 1000,
-                                ]
-                            ]
-                        ]
-                    ]
-                ])
-            ]
+                                ],
+                            ],
+                        ],
+                    ],
+                ]),
+            ],
         ];
 
         foreach ($testSales as $saleData) {
             Sale::create($saleData);
         }
 
-        $this->info('Created ' . count($testSales) . ' test sales successfully!');
+        $this->info('Created '.count($testSales).' test sales successfully!');
+
         return 0;
     }
 }

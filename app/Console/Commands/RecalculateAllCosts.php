@@ -9,6 +9,7 @@ use Illuminate\Console\Command;
 class RecalculateAllCosts extends Command
 {
     protected $signature = 'orders:recalculate-all-costs';
+
     protected $description = 'Recalcular custos e comissões de todos os pedidos';
 
     public function handle(OrderCostService $costService): int
@@ -29,7 +30,7 @@ class RecalculateAllCosts extends Command
                 $costService->applyAndSaveCosts($order);
                 $count++;
             } catch (\Exception $e) {
-                $this->error("\nErro no pedido {$order->code}: " . $e->getMessage());
+                $this->error("\nErro no pedido {$order->code}: ".$e->getMessage());
             }
             $bar->advance();
         }

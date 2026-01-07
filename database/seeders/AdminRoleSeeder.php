@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Role;
-use Spatie\Permission\Models\Permission;
 use App\Models\User;
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 
 class AdminRoleSeeder extends Seeder
 {
@@ -20,7 +20,7 @@ class AdminRoleSeeder extends Seeder
             'manage-plans',
             'manage-payments',
             'manage-tickets',
-            'view-admin-dashboard'
+            'view-admin-dashboard',
         ];
 
         foreach ($permissions as $permission) {
@@ -30,7 +30,7 @@ class AdminRoleSeeder extends Seeder
 
         // Atribuir role de admin ao primeiro usuário (se existir)
         $user = User::first();
-        if ($user && !$user->hasRole('admin')) {
+        if ($user && ! $user->hasRole('admin')) {
             $user->assignRole('admin');
         }
 
