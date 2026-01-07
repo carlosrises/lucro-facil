@@ -17,6 +17,7 @@ class CostCommission extends Model
         'type',
         'value',
         'applies_to',
+        'delivery_by',
         'payment_type',
         'condition_value',
         'condition_values',
@@ -55,13 +56,13 @@ class CostCommission extends Model
     {
         return $query->where(function ($q) use ($provider, $origin) {
             $q->whereNull('provider')
-              ->orWhere('provider', $provider);
+                ->orWhere('provider', $provider);
 
             // Se for pedido Takeat com origin, verificar também provider "takeat-{origin}"
             // Ex: provider='takeat' + origin='ifood' também pega regras com provider='takeat-ifood'
             if ($provider === 'takeat' && $origin) {
                 $q->orWhere('provider', $origin)
-                  ->orWhere('provider', "takeat-{$origin}");
+                    ->orWhere('provider', "takeat-{$origin}");
             }
         });
     }
@@ -86,9 +87,9 @@ class CostCommission extends Model
     public function getFormattedValueAttribute(): string
     {
         if ($this->type === 'percentage') {
-            return number_format($this->value, 2, ',', '.') . '%';
+            return number_format($this->value, 2, ',', '.').'%';
         }
 
-        return 'R$ ' . number_format($this->value, 2, ',', '.');
+        return 'R$ '.number_format($this->value, 2, ',', '.');
     }
 }
