@@ -20,6 +20,8 @@ class RecalculateOrderCostsJob implements ShouldQueue
         public ?string $type = 'cost_commission', // 'cost_commission' ou 'product'
         public ?int $tenantId = null, // Para quando o registro já foi excluído
         public ?string $provider = null, // Para quando o registro já foi excluído
+        public bool $onlySpecificCommission = false, // Recalcular apenas esta comissão específica
+        public bool $isDeleting = false, // Flag para indicar que está removendo a comissão
     ) {}
 
     /**
@@ -29,7 +31,10 @@ class RecalculateOrderCostsJob implements ShouldQueue
     {
         $cacheKey = $this->getCacheKey();
 
-        // Inicializar progresso no cache
+        // Limpar qualquer cache antigo antes de iniciar
+        \Cache::forget($cacheKey);
+
+        // Inicializar progresso no cache com status 'processing'
         \Cache::put($cacheKey, [
             'status' => 'processing',
             'total' => 0,
@@ -48,37 +53,44 @@ class RecalculateOrderCostsJob implements ShouldQueue
             $costCommission = \App\Models\CostCommission::find($this->referenceId);
 
             // Se não encontrar mas temos tenantId (caso de exclusão), usar os dados passados
-            if (!$costCommission && $this->tenantId) {
+            if (! $costCommission && $this->tenantId) {
                 $query = Order::where('tenant_id', $this->tenantId);
 
-                if (!$this->applyToAll && $this->provider) {
-                    $query->where(function($q) {
+                if (! $this->applyToAll && $this->provider) {
+                    $query->where(function ($q) {
                         $q->where('provider', $this->provider)
-                          ->orWhere(function($q2) {
-                              $q2->where('provider', 'takeat')
-                                 ->where('origin', $this->provider);
-                          });
+                            ->orWhere(function ($q2) {
+                                $q2->where('provider', 'takeat')
+                                    ->where('origin', $this->provider);
+                            });
                     });
                 }
-            } elseif (!$costCommission) {
+            } elseif (! $costCommission) {
                 \Log::error("CostCommission não encontrada e sem dados alternativos: {$this->referenceId}");
                 \Cache::put($cacheKey, [
                     'status' => 'error',
                     'message' => 'Registro não encontrado',
                 ], now()->addHours(2));
+
                 return;
             } else {
                 // Registro encontrado, usar seus dados
                 $query = Order::where('tenant_id', $costCommission->tenant_id);
 
-                if (!$this->applyToAll && $costCommission->provider) {
-                    $query->where(function($q) use ($costCommission) {
-                        $q->where('provider', $costCommission->provider)
-                          ->orWhere(function($q2) use ($costCommission) {
-                              $q2->where('provider', 'takeat')
-                                 ->where('origin', $costCommission->provider);
-                          });
-                    });
+                if (! $this->applyToAll && $costCommission->provider) {
+                    // Se provider for takeat-{origin}, precisamos separar
+                    if (str_starts_with($costCommission->provider, 'takeat-')) {
+                        $origin = str_replace('takeat-', '', $costCommission->provider);
+                        $query->where('provider', 'takeat')->where('origin', $origin);
+                    } else {
+                        $query->where(function ($q) use ($costCommission) {
+                            $q->where('provider', $costCommission->provider)
+                                ->orWhere(function ($q2) use ($costCommission) {
+                                    $q2->where('provider', 'takeat')
+                                        ->where('origin', $costCommission->provider);
+                                });
+                        });
+                    }
                 }
             }
         }
@@ -103,13 +115,15 @@ class RecalculateOrderCostsJob implements ShouldQueue
                 'percentage' => 100,
                 'completed_at' => now()->toISOString(),
             ], now()->addHours(2));
+
             return;
         }
 
         // Processar em chunks para não sobrecarregar memória
         $processed = 0;
-        $query->chunk(100, function ($orders) use ($costService, $cacheKey, &$processed, $total) {
-            $costService->recalculateBatch($orders);
+        $commissionId = $this->onlySpecificCommission ? $this->referenceId : null;
+        $query->chunk(100, function ($orders) use ($costService, $cacheKey, &$processed, $total, $commissionId) {
+            $costService->recalculateBatch($orders, $commissionId, $this->isDeleting);
             $processed += $orders->count();
 
             // Atualizar progresso no cache
@@ -141,6 +155,7 @@ class RecalculateOrderCostsJob implements ShouldQueue
     private function getCacheKey(): string
     {
         $tenantId = $this->tenantId ?? (\App\Models\CostCommission::find($this->referenceId)?->tenant_id ?? 'unknown');
+
         return "recalculate_progress_{$tenantId}_{$this->type}_{$this->referenceId}";
     }
 }
