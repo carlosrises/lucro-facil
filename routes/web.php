@@ -1,22 +1,23 @@
 <?php
 
-use App\Http\Controllers\OrdersController;
-use App\Http\Controllers\SalesController;
-use App\Http\Controllers\StoresController;
+use App\Http\Controllers\AbcCurveController;
+use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\CostCommissionsController;
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\CategoriesController;
-use App\Http\Controllers\IngredientsController;
-use App\Http\Controllers\ProductsController;
-use App\Http\Controllers\UsersController;
-use App\Http\Controllers\ProductMappingController;
-use App\Http\Controllers\OrderItemMappingsController;
-use App\Http\Controllers\TaxCategoriesController;
 use App\Http\Controllers\FinanceCategoriesController;
 use App\Http\Controllers\FinanceEntriesController;
 use App\Http\Controllers\FinancialSummaryController;
-use App\Http\Controllers\AbcCurveController;
+use App\Http\Controllers\IngredientsController;
 use App\Http\Controllers\ItemTriageController;
+use App\Http\Controllers\OrderItemMappingsController;
+use App\Http\Controllers\OrdersController;
+use App\Http\Controllers\ProductMappingController;
+use App\Http\Controllers\ProductsController;
+use App\Http\Controllers\RecalculationStatusController;
+use App\Http\Controllers\SalesController;
+use App\Http\Controllers\StoresController;
+use App\Http\Controllers\TaxCategoriesController;
+use App\Http\Controllers\UsersController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -26,6 +27,9 @@ Route::get('/', function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    // Verificar status de recálculos ativos
+    Route::get('recalculation-status', [RecalculationStatusController::class, 'check'])->name('recalculation.status');
 
     Route::get('orders', [OrdersController::class, 'index'])->name('orders.index');
 
