@@ -166,7 +166,13 @@ class ItemTriageController extends Controller
 
         if ($request->filled('item_type')) {
             $itemType = $request->get('item_type');
-            $allItems = $allItems->filter(fn($item) => $item['mapping']['item_type'] ?? null === $itemType);
+            $allItems = $allItems->filter(function($item) use ($itemType) {
+                // Só filtra se o item tiver mapping (foi classificado)
+                if ($item['mapping'] === null) {
+                    return false;
+                }
+                return ($item['mapping']['item_type'] ?? null) === $itemType;
+            });
         }
 
         if ($linkStatus === 'linked') {
