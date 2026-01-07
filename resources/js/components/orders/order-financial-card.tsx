@@ -720,11 +720,15 @@ export function OrderFinancialCard({
                                                             hasMappings &&
                                                             item.mappings
                                                         ) {
+                                                            // Mostrar apenas mappings do tipo 'main' (do item principal)
                                                             item.mappings.forEach(
                                                                 (
                                                                     m: OrderItemMapping,
                                                                 ) => {
+                                                                    // Filtrar apenas mapping principal, não add-ons
                                                                     if (
+                                                                        m.mapping_type ===
+                                                                            'main' &&
                                                                         m
                                                                             .internal_product
                                                                             ?.name
@@ -737,21 +741,27 @@ export function OrderFinancialCard({
                                                                             ).toFixed(
                                                                                 0,
                                                                             );
-                                                                        const type =
-                                                                            m.mapping_type ===
-                                                                            'main'
-                                                                                ? 'Principal'
-                                                                                : m.mapping_type ===
-                                                                                    'addon'
-                                                                                  ? 'Complemento'
-                                                                                  : 'Opção';
                                                                         parts.push(
-                                                                            `${m.internal_product.name} (${pct}% - ${type})`,
+                                                                            `${m.internal_product.name} (${pct}% - Principal)`,
                                                                         );
                                                                     }
                                                                 },
                                                             );
+                                                        }
+
+                                                        // Se não tem mapping principal, verificar product_mapping (classificação)
+                                                        if (
+                                                            parts.length ===
+                                                                0 &&
+                                                            item.product_mapping
+                                                                ?.internal_product
+                                                        ) {
+                                                            parts.push(
+                                                                `${item.product_mapping.internal_product.name} (100% - Classificado)`,
+                                                            );
                                                         } else if (
+                                                            parts.length ===
+                                                                0 &&
                                                             hasLegacyProduct &&
                                                             item.internal_product
                                                         ) {
@@ -1078,6 +1088,12 @@ export function OrderFinancialCard({
                                                                                   totalFlavors
                                                                                 : baseAddonCost;
 
+                                                                        // Tooltip para add-on
+                                                                        const addonTooltipText =
+                                                                            internalProduct?.name
+                                                                                ? `${internalProduct.name} (100% - Complemento)`
+                                                                                : null;
+
                                                                         return (
                                                                             <li
                                                                                 key={
@@ -1101,11 +1117,43 @@ export function OrderFinancialCard({
                                                                                             }
                                                                                         </span>
                                                                                     )}
-                                                                                    <span className="text-xs leading-4 font-normal text-muted-foreground/70">
-                                                                                        {
-                                                                                            addOn.name
-                                                                                        }
-                                                                                    </span>
+                                                                                    {addonTooltipText ? (
+                                                                                        <TooltipProvider
+                                                                                            delayDuration={
+                                                                                                300
+                                                                                            }
+                                                                                        >
+                                                                                            <Tooltip>
+                                                                                                <TooltipTrigger
+                                                                                                    asChild
+                                                                                                >
+                                                                                                    <span className="cursor-help text-xs leading-4 font-normal text-muted-foreground/70">
+                                                                                                        {
+                                                                                                            addOn.name
+                                                                                                        }
+                                                                                                    </span>
+                                                                                                </TooltipTrigger>
+                                                                                                <TooltipContent
+                                                                                                    side="right"
+                                                                                                    className="max-w-xs"
+                                                                                                >
+                                                                                                    <p className="text-xs">
+                                                                                                        Vinculado
+                                                                                                        a:{' '}
+                                                                                                        {
+                                                                                                            addonTooltipText
+                                                                                                        }
+                                                                                                    </p>
+                                                                                                </TooltipContent>
+                                                                                            </Tooltip>
+                                                                                        </TooltipProvider>
+                                                                                    ) : (
+                                                                                        <span className="text-xs leading-4 font-normal text-muted-foreground/70">
+                                                                                            {
+                                                                                                addOn.name
+                                                                                            }
+                                                                                        </span>
+                                                                                    )}
                                                                                     {hasMapping ? (
                                                                                         <Check className="h-3 w-3 shrink-0 text-green-600" />
                                                                                     ) : (
