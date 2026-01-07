@@ -8,14 +8,26 @@ use Illuminate\Console\Command;
 
 class RecalculateTakeatCosts extends Command
 {
-    protected $signature = 'orders:recalculate-takeat-costs';
+    protected $signature = 'orders:recalculate-takeat-costs {--tenant= : ID do tenant para filtrar pedidos}';
     protected $description = 'Recalcular custos e comissões dos pedidos Takeat';
 
     public function handle(OrderCostService $costService): int
     {
-        $this->info('Buscando pedidos Takeat...');
+        $tenantId = $this->option('tenant');
+        
+        if ($tenantId) {
+            $this->info("Buscando pedidos Takeat do tenant {$tenantId}...");
+        } else {
+            $this->info('Buscando pedidos Takeat de todos os tenants...');
+        }
 
-        $total = Order::where('provider', 'takeat')->count();
+        $query = Order::where('provider', 'takeat');
+        
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+        
+        $total = $query->count();
         $this->info("Encontrados {$total} pedidos Takeat");
 
         $bar = $this->output->createProgressBar($total);
@@ -24,8 +36,7 @@ class RecalculateTakeatCosts extends Command
         $count = 0;
 
         // Processar em chunks para não estourar memória
-        Order::where('provider', 'takeat')
-            ->chunk(100, function ($orders) use ($costService, &$count, $bar) {
+        $query->chunk(100, function ($orders) use ($costService, &$count, $bar) {
                 foreach ($orders as $order) {
                     try {
                         $costService->applyAndSaveCosts($order);
