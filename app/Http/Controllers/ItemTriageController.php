@@ -266,9 +266,16 @@ class ItemTriageController extends Controller
                 }
             }
 
-            $orderIds = $orderIds->unique()->take(10);
+            // Buscar IDs dos 10 pedidos mais recentes
+            $recentOrderIds = Order::whereIn('id', $orderIds->unique())
+                ->where('tenant_id', $tenantId)
+                ->orderByDesc('placed_at')
+                ->limit(10)
+                ->pluck('id');
 
-            $recentOrders = Order::whereIn('id', $orderIds)
+            $totalOrders = $orderIds->unique()->count();
+
+            $recentOrders = Order::whereIn('id', $recentOrderIds)
                 ->where('tenant_id', $tenantId)
                 ->with(['items'])
                 ->orderByDesc('placed_at')
@@ -298,7 +305,7 @@ class ItemTriageController extends Controller
 
             return response()->json([
                 'recent_orders' => $recentOrders,
-                'total_orders' => $orderIds->count(),
+                'total_orders' => $totalOrders,
             ]);
         }
 
@@ -310,16 +317,22 @@ class ItemTriageController extends Controller
             ->count('orders.id');
 
         // Buscar pedidos recentes com este item (agrupar por pedido)
-        $orderIds = Order::where('orders.tenant_id', $tenantId)
+        $orderIdsWithDates = Order::where('orders.tenant_id', $tenantId)
             ->join('order_items', 'orders.id', '=', 'order_items.order_id')
             ->where('order_items.sku', $sku)
             ->select('orders.id', 'orders.placed_at')
             ->distinct()
             ->orderByDesc('orders.placed_at')
             ->limit(10)
-            ->pluck('orders.id');
+            ->get();
 
-        \Log::info('Order IDs found:', ['sku' => $sku, 'count' => $orderIds->count(), 'ids' => $orderIds->toArray()]);
+        \Log::info('Order IDs found:', [
+            'sku' => $sku,
+            'count' => $orderIdsWithDates->count(),
+            'orders' => $orderIdsWithDates->map(fn($o) => ['id' => $o->id, 'placed_at' => $o->placed_at])->toArray()
+        ]);
+
+        $orderIds = $orderIdsWithDates->pluck('id');
 
         $recentOrders = Order::where('tenant_id', $tenantId)
             ->whereIn('id', $orderIds)
