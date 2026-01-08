@@ -11,20 +11,32 @@ class FindOrphanTaxes extends Command
 {
     protected $signature = 'orders:find-orphan-taxes 
                             {--tenant= : ID do tenant para filtrar pedidos}
-                            {--fix : Recalcular automaticamente pedidos com taxas órfãs}';
+                            {--fix : Recalcular automaticamente pedidos com taxas órfãs}
+                            {--include-inactive : Incluir taxas inativas (active=false) como órfãs}';
 
-    protected $description = 'Encontrar pedidos com taxas no calculated_costs que não existem mais no banco';
+    protected $description = 'Encontrar pedidos com taxas no calculated_costs que não existem mais ou estão inativas';
 
     public function handle(OrderCostService $costService): int
     {
         $tenantId = $this->option('tenant');
         $fix = $this->option('fix');
+        $includeInactive = $this->option('include-inactive');
 
         $this->info('🔍 Buscando pedidos com calculated_costs...');
 
         // Buscar todos os IDs de taxas ativas
-        $activeTaxIds = CostCommission::pluck('id')->toArray();
+        $activeTaxIds = CostCommission::active()->pluck('id')->toArray();
         $this->info("📋 Taxas ativas no banco: ".count($activeTaxIds));
+
+        if ($includeInactive) {
+            $inactiveTaxIds = CostCommission::where('active', false)->pluck('id')->toArray();
+            $this->warn("⚠️  Taxas inativas no banco: ".count($inactiveTaxIds)." (serão tratadas como órfãs)");
+        }
+
+        if ($includeInactive) {
+            $inactiveTaxIds = CostCommission::where('active', false)->pluck('id')->toArray();
+            $this->warn("⚠️  Taxas inativas no banco: ".count($inactiveTaxIds)." (serão tratadas como órfãs)");
+        }
 
         // Buscar pedidos com calculated_costs
         $query = Order::whereNotNull('calculated_costs');
@@ -42,7 +54,7 @@ class FindOrphanTaxes extends Command
         $bar = $this->output->createProgressBar($total);
         $bar->start();
 
-        $query->chunk(100, function ($orders) use ($activeTaxIds, &$ordersWithOrphans, &$orphanTaxIds, $bar) {
+        $query->chunk(100, function ($orders) use ($activeTaxIds, $includeInactive, &$ordersWithOrphans, &$orphanTaxIds, $bar) {
             foreach ($orders as $order) {
                 $costs = $order->calculated_costs;
                 $categories = ['costs', 'commissions', 'taxes', 'payment_methods'];
@@ -53,8 +65,22 @@ class FindOrphanTaxes extends Command
                         foreach ($costs[$category] as $item) {
                             $taxId = $item['id'] ?? null;
 
-                            // Se tem ID e não existe mais no banco
-                            if ($taxId && ! in_array($taxId, $activeTaxIds)) {
+                            // Se tem ID e não está ativo (ou não existe mais)
+                            $isOrphan = false;
+                            if ($taxId) {
+                                if (! in_array($taxId, $activeTaxIds)) {
+                                    // Não está ativo - pode estar inativo ou deletado
+                                    $taxExists = CostCommission::where('id', $taxId)->exists();
+                                    
+                                    if (! $taxExists) {
+                                        $isOrphan = true; // Deletada
+                                    } elseif ($includeInactive) {
+                                        $isOrphan = true; // Inativa
+                                    }
+                                }
+                            }
+
+                            if ($isOrphan) {
                                 $hasOrphan = true;
                                 $orphanTaxIds[$taxId] = ($orphanTaxIds[$taxId] ?? 0) + 1;
 
