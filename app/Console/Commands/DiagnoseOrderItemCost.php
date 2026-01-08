@@ -58,7 +58,7 @@ class DiagnoseOrderItemCost extends Command
         $this->info("🔍 Item: {$orderItem->name}");
         $this->line("   ID: {$orderItem->id} | SKU: {$orderItem->sku}");
         $this->line("   Quantidade: {$orderItem->quantity}x | Valor unitário: R$ {$orderItem->unit_price}");
-        
+
         if ($orderItem->total_cost) {
             $this->line("   💰 Total Cost (do backend): R$ {$orderItem->total_cost}");
         }
@@ -114,7 +114,7 @@ class DiagnoseOrderItemCost extends Command
             foreach ($addonMappings as $mapping) {
                 $cost = $mapping->internalProduct->unit_cost * $mapping->quantity * $orderItem->quantity;
                 $totalAddonCost += $cost;
-                
+
                 $fractionInfo = $mapping->auto_fraction ? " (fração: {$mapping->quantity})" : "";
                 $this->line("   ├─ {$mapping->internalProduct->name}{$fractionInfo}");
                 $this->line("      → Custo unitário: R$ " . number_format($mapping->internalProduct->unit_cost, 2, ',', '.'));
@@ -130,9 +130,9 @@ class DiagnoseOrderItemCost extends Command
 
         // 4. Cálculo Frontend (como o frontend calcula)
         $this->line("💻 4. Simulação do Cálculo Frontend:");
-        
+
         $frontendCost = 0;
-        
+
         // Prioridade 1: total_cost do backend
         if ($orderItem->total_cost) {
             $frontendCost = $orderItem->total_cost;
@@ -145,7 +145,7 @@ class DiagnoseOrderItemCost extends Command
                 $frontendCost += $mainCost;
                 $this->line("   → Custo do mapping 'main': R$ " . number_format($mainCost, 2, ',', '.'));
             }
-            
+
             foreach ($addonMappings as $mapping) {
                 $addonCost = $mapping->internalProduct->unit_cost * $mapping->quantity * $orderItem->quantity;
                 $frontendCost += $addonCost;
