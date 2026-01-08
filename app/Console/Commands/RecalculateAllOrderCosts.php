@@ -7,40 +7,50 @@ use App\Models\Order;
 use App\Services\OrderCostService;
 use Illuminate\Console\Command;
 
-class RecalculateTakeatCosts extends Command
+class RecalculateAllOrderCosts extends Command
 {
-    protected $signature = 'orders:recalculate-takeat-costs 
+    protected $signature = 'orders:recalculate-all-costs 
                             {--tenant= : ID do tenant para filtrar pedidos}
+                            {--provider= : Filtrar por provider específico}
                             {--debug : Mostrar informações de debug}
                             {--force-clean : Limpar calculated_costs antes de recalcular}';
 
-    protected $description = 'Recalcular custos e comissões dos pedidos Takeat do zero';
+    protected $description = 'Recalcular custos e comissões de TODOS os pedidos do zero (iFood, 99Food, Takeat, etc)';
 
     public function handle(OrderCostService $costService): int
     {
         $tenantId = $this->option('tenant');
+        $provider = $this->option('provider');
         $debug = $this->option('debug');
         $forceClean = $this->option('force-clean');
 
+        $this->info('🔍 Buscando pedidos...');
+
         if ($tenantId) {
-            $this->info("🔍 Buscando pedidos Takeat do tenant {$tenantId}...");
-        } else {
-            $this->info('🔍 Buscando pedidos Takeat de todos os tenants...');
+            $this->line("   Tenant: {$tenantId}");
+        }
+
+        if ($provider) {
+            $this->line("   Provider: {$provider}");
         }
 
         // Mostrar taxas ativas que serão aplicadas
         if ($debug) {
-            $this->showActiveTaxes($tenantId);
+            $this->showActiveTaxes($tenantId, $provider);
         }
 
-        $query = Order::where('provider', 'takeat');
+        $query = Order::query();
 
         if ($tenantId) {
             $query->where('tenant_id', $tenantId);
         }
 
+        if ($provider) {
+            $query->where('provider', $provider);
+        }
+
         $total = $query->count();
-        $this->info("📊 Encontrados {$total} pedidos Takeat");
+        $this->info("📊 Encontrados {$total} pedidos");
 
         if ($total === 0) {
             $this->warn('Nenhum pedido encontrado para recalcular.');
@@ -53,6 +63,10 @@ class RecalculateTakeatCosts extends Command
             $this->info('Operação cancelada.');
 
             return 0;
+        }
+
+        if ($forceClean) {
+            $this->warn('⚠️  Modo force-clean ativado: calculated_costs será limpo antes de recalcular');
         }
 
         $bar = $this->output->createProgressBar($total);
@@ -78,7 +92,7 @@ class RecalculateTakeatCosts extends Command
 
                     if ($debug) {
                         $this->newLine();
-                        $this->line("🔧 Recalculando pedido {$order->code} (origin: {$order->origin})");
+                        $this->line("🔧 Recalculando pedido {$order->code} (provider: {$order->provider}, origin: {$order->origin})");
                     }
 
                     $costService->applyAndSaveCosts($order);
@@ -113,7 +127,7 @@ class RecalculateTakeatCosts extends Command
     /**
      * Mostrar taxas ativas que serão aplicadas
      */
-    private function showActiveTaxes(?int $tenantId): void
+    private function showActiveTaxes(?int $tenantId, ?string $provider): void
     {
         $this->newLine();
         $this->info('📋 Taxas ativas que serão aplicadas:');
@@ -122,6 +136,13 @@ class RecalculateTakeatCosts extends Command
 
         if ($tenantId) {
             $query->where('tenant_id', $tenantId);
+        }
+
+        if ($provider) {
+            $query->where(function ($q) use ($provider) {
+                $q->whereNull('provider')
+                    ->orWhere('provider', $provider);
+            });
         }
 
         $taxes = $query->orderBy('category')->orderBy('name')->get();
@@ -138,8 +159,9 @@ class RecalculateTakeatCosts extends Command
             $this->line("\n  {$category}:");
             foreach ($items as $tax) {
                 $value = $tax->type === 'percentage' ? "{$tax->value}%" : "R$ {$tax->value}";
-                $provider = $tax->provider ?: 'todos';
-                $this->line("    • {$tax->name} ({$value}) - provider: {$provider}");
+                $providerLabel = $tax->provider ?: 'todos';
+                $active = $tax->active ? '✓' : '✗';
+                $this->line("    {$active} {$tax->name} ({$value}) - provider: {$providerLabel}");
             }
         }
 
@@ -170,6 +192,8 @@ class RecalculateTakeatCosts extends Command
             }
         }
 
-        $this->line("  💰 Total: R$ {$order->total_costs} + R$ {$order->total_commissions}");
+        $this->line("  💰 Total custos: R$ {$order->total_costs}");
+        $this->line("  💰 Total comissões: R$ {$order->total_commissions}");
+        $this->line("  💵 Receita líquida: R$ {$order->net_revenue}");
     }
 }
