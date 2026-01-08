@@ -70,6 +70,8 @@ class OrderItemMapping extends Model
 
     /**
      * Calcular custo total desta associação
+     * IMPORTANTE: Não faz queries complexas para evitar estouro de memória
+     * O CMV por tamanho é aplicado no momento do recálculo (comando)
      */
     public function calculateCost(): float
     {
@@ -78,43 +80,10 @@ class OrderItemMapping extends Model
         }
 
         $quantity = (float) $this->quantity;
-
-        // Se for sabor de pizza e o produto tiver ficha técnica por tamanho,
-        // detectar o tamanho do item pai e buscar o CMV específico
-        if ($this->internalProduct->product_category === 'sabor_pizza' && $this->orderItem) {
-            $size = $this->detectPizzaSize($this->orderItem->name);
-
-            if ($size) {
-                // Verificar se existe ficha técnica para esse tamanho
-                $hasCostForSize = $this->internalProduct->costs()
-                    ->where('size', $size)
-                    ->exists();
-
-                if ($hasCostForSize) {
-                    $cmv = $this->internalProduct->calculateCMV($size);
-
-                    return $cmv * $quantity;
-                }
-            }
-        }
-
-        // Fallback: usar unit_cost ou getFinalCostAttribute (que já calcula CMV se tiver ficha técnica sem tamanho)
-        $unitCost = (float) $this->internalProduct->final_cost;
+        $unitCost = (float) $this->internalProduct->unit_cost;
 
         return $unitCost * $quantity;
     }
-
-    /**
-     * Detectar tamanho da pizza baseado no nome do item
-     */
-    protected function detectPizzaSize(string $itemName): ?string
-    {
-        $nameLower = mb_strtolower($itemName);
-
-        // Padrões de família (big, don, 70x35, gigante, super)
-        if (preg_match('/\b(big|don|70x35|gigante|super|familia|família)\b/i', $nameLower)) {
-            return 'familia';
-        }
 
         // Padrões de grande
         if (preg_match('/\b(grande|gd|g)\b/i', $nameLower)) {
