@@ -133,14 +133,14 @@ export default function FinancialSummary() {
 
                                 {/* Container dos Cards com largura máxima */}
                                 <div className="mx-auto w-full max-w-4xl space-y-6">
-                                    {/* 1. RECEITA BRUTA */}
+                                    {/* 1. FATURAMENTO */}
                                     <Card>
                                         <CardHeader className="px-6">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
                                                     <ShoppingCart className="h-5 w-5 text-blue-600" />
                                                     <CardTitle>
-                                                        Receita Bruta
+                                                        Faturamento
                                                     </CardTitle>
                                                 </div>
                                                 <Badge
@@ -203,135 +203,7 @@ export default function FinancialSummary() {
                                         </CardContent>
                                     </Card>
 
-                                    {/* 2. (-) CMV */}
-                                    <Card className="border-l-4 border-l-red-500">
-                                        <CardHeader className="px-6">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <MinusCircle className="h-5 w-5 text-red-600" />
-                                                    <CardTitle>
-                                                        (-) Custo da Mercadoria
-                                                        Vendida
-                                                    </CardTitle>
-                                                </div>
-                                                <Badge
-                                                    variant="secondary"
-                                                    className="text-lg font-semibold text-red-700"
-                                                >
-                                                    {new Intl.NumberFormat(
-                                                        'pt-BR',
-                                                        {
-                                                            style: 'currency',
-                                                            currency: 'BRL',
-                                                        },
-                                                    ).format(data.cmv)}
-                                                </Badge>
-                                            </div>
-                                            <CardDescription>
-                                                Custo dos insumos e produtos
-                                            </CardDescription>
-                                        </CardHeader>
-                                    </Card>
-
-                                    {/* 3. (=) LUCRO BRUTO */}
-                                    <Card className="border-2 border-emerald-500 bg-emerald-50/50">
-                                        <CardHeader className="px-6">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <TrendingUp className="h-5 w-5 text-emerald-600" />
-                                                    <CardTitle className="text-emerald-700">
-                                                        (=) Lucro Bruto
-                                                    </CardTitle>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="border-emerald-600 text-emerald-700"
-                                                    >
-                                                        {data.grossProfitPercent.toFixed(
-                                                            1,
-                                                        )}
-                                                        %
-                                                    </Badge>
-                                                    <Badge className="bg-emerald-600 text-lg font-bold">
-                                                        {new Intl.NumberFormat(
-                                                            'pt-BR',
-                                                            {
-                                                                style: 'currency',
-                                                                currency: 'BRL',
-                                                            },
-                                                        ).format(
-                                                            data.grossProfit,
-                                                        )}
-                                                    </Badge>
-                                                </div>
-                                            </div>
-                                            <CardDescription>
-                                                Margem de contribuição após CMV
-                                            </CardDescription>
-                                        </CardHeader>
-                                    </Card>
-
-                                    {/* 4. (-) IMPOSTOS */}
-                                    <Card className="border-l-4 border-l-orange-500">
-                                        <CardHeader className="px-6">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <MinusCircle className="h-5 w-5 text-orange-600" />
-                                                    <CardTitle>
-                                                        (-) Impostos
-                                                    </CardTitle>
-                                                </div>
-                                                <Badge
-                                                    variant="secondary"
-                                                    className="text-lg font-semibold text-orange-700"
-                                                >
-                                                    {new Intl.NumberFormat(
-                                                        'pt-BR',
-                                                        {
-                                                            style: 'currency',
-                                                            currency: 'BRL',
-                                                        },
-                                                    ).format(data.taxes)}
-                                                </Badge>
-                                            </div>
-                                            <CardDescription>
-                                                Impostos sobre produtos e
-                                                adicionais
-                                            </CardDescription>
-                                        </CardHeader>
-                                    </Card>
-
-                                    {/* 5. (-) COMISSÕES */}
-                                    <Card className="border-l-4 border-l-purple-500">
-                                        <CardHeader className="px-6">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <MinusCircle className="h-5 w-5 text-purple-600" />
-                                                    <CardTitle>
-                                                        (-) Comissões
-                                                    </CardTitle>
-                                                </div>
-                                                <Badge
-                                                    variant="secondary"
-                                                    className="text-lg font-semibold text-purple-700"
-                                                >
-                                                    {new Intl.NumberFormat(
-                                                        'pt-BR',
-                                                        {
-                                                            style: 'currency',
-                                                            currency: 'BRL',
-                                                        },
-                                                    ).format(data.commissions)}
-                                                </Badge>
-                                            </div>
-                                            <CardDescription>
-                                                Comissões dos marketplaces
-                                            </CardDescription>
-                                        </CardHeader>
-                                    </Card>
-
-                                    {/* 6. (-) TAXAS DE PAGAMENTO */}
+                                    {/* 2. (-) TAXAS DE PAGAMENTO */}
                                     <Card className="border-l-4 border-l-amber-500">
                                         <CardHeader className="px-6">
                                             <div className="flex items-center justify-between">
@@ -360,14 +232,111 @@ export default function FinancialSummary() {
                                         </CardHeader>
                                     </Card>
 
-                                    {/* 7. (-) CUSTOS OPERACIONAIS DOS PEDIDOS */}
+                                    {/* 3. (-) COMISSÃO MARKETPLACE */}
+                                    <Card className="border-l-4 border-l-purple-500">
+                                        <CardHeader className="px-6">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <MinusCircle className="h-5 w-5 text-purple-600" />
+                                                    <CardTitle>
+                                                        (-) Comissão Marketplace
+                                                    </CardTitle>
+                                                </div>
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="text-lg font-semibold text-purple-700"
+                                                >
+                                                    {new Intl.NumberFormat(
+                                                        'pt-BR',
+                                                        {
+                                                            style: 'currency',
+                                                            currency: 'BRL',
+                                                        },
+                                                    ).format(data.commissions)}
+                                                </Badge>
+                                            </div>
+                                            <CardDescription>
+                                                Comissões dos marketplaces
+                                            </CardDescription>
+                                        </CardHeader>
+                                    </Card>
+
+                                    {/* 4. (=) RECEITA PÓS DEDUÇÃO */}
+                                    <Card className="border-2 border-emerald-500 bg-emerald-50/50">
+                                        <CardHeader className="px-6">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <TrendingUp className="h-5 w-5 text-emerald-600" />
+                                                    <CardTitle className="text-emerald-700">
+                                                        (=) Receita pós Dedução
+                                                    </CardTitle>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="border-emerald-600 text-emerald-700"
+                                                    >
+                                                        {data.grossProfitPercent.toFixed(
+                                                            1,
+                                                        )}
+                                                        %
+                                                    </Badge>
+                                                    <Badge className="bg-emerald-600 text-lg font-bold">
+                                                        {new Intl.NumberFormat(
+                                                            'pt-BR',
+                                                            {
+                                                                style: 'currency',
+                                                                currency: 'BRL',
+                                                            },
+                                                        ).format(
+                                                            data.grossProfit,
+                                                        )}
+                                                    </Badge>
+                                                </div>
+                                            </div>
+                                            <CardDescription>
+                                                Receita após dedução de taxas e comissões
+                                            </CardDescription>
+                                        </CardHeader>
+                                    </Card>
+
+                                    {/* 5. (-) CMV */}
+                                    <Card className="border-l-4 border-l-red-500">
+                                        <CardHeader className="px-6">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <MinusCircle className="h-5 w-5 text-red-600" />
+                                                    <CardTitle>
+                                                        (-) Custos da Mercadoria Vendida
+                                                    </CardTitle>
+                                                </div>
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="text-lg font-semibold text-red-700"
+                                                >
+                                                    {new Intl.NumberFormat(
+                                                        'pt-BR',
+                                                        {
+                                                            style: 'currency',
+                                                            currency: 'BRL',
+                                                        },
+                                                    ).format(data.cmv)}
+                                                </Badge>
+                                            </div>
+                                            <CardDescription>
+                                                Custo dos insumos e produtos
+                                            </CardDescription>
+                                        </CardHeader>
+                                    </Card>
+
+                                    {/* 6. (-) DESPESAS OPERACIONAIS */}
                                     <Card className="border-l-4 border-l-rose-500">
                                         <CardHeader className="px-6">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
                                                     <MinusCircle className="h-5 w-5 text-rose-600" />
                                                     <CardTitle>
-                                                        (-) Custos Operacionais
+                                                        (-) Despesas Operacionais
                                                     </CardTitle>
                                                 </div>
                                                 <Badge
@@ -384,21 +353,48 @@ export default function FinancialSummary() {
                                                 </Badge>
                                             </div>
                                             <CardDescription>
-                                                Custos fixos atribuídos aos
-                                                pedidos
+                                                Custos fixos atribuídos aos pedidos
                                             </CardDescription>
                                         </CardHeader>
                                     </Card>
 
-                                    {/* 8. (=) LUCRO OPERACIONAL DOS PEDIDOS */}
+                                    {/* 7. (-) IMPOSTOS */}
+                                    <Card className="border-l-4 border-l-orange-500">
+                                        <CardHeader className="px-6">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <MinusCircle className="h-5 w-5 text-orange-600" />
+                                                    <CardTitle>
+                                                        (-) Impostos
+                                                    </CardTitle>
+                                                </div>
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="text-lg font-semibold text-orange-700"
+                                                >
+                                                    {new Intl.NumberFormat(
+                                                        'pt-BR',
+                                                        {
+                                                            style: 'currency',
+                                                            currency: 'BRL',
+                                                        },
+                                                    ).format(data.taxes)}
+                                                </Badge>
+                                            </div>
+                                            <CardDescription>
+                                                Impostos sobre produtos e adicionais
+                                            </CardDescription>
+                                        </CardHeader>
+                                    </Card>
+
+                                    {/* 8. (=) MARGEM DE CONTRIBUIÇÃO */}
                                     <Card className="border-2 border-blue-500 bg-blue-50/50">
                                         <CardHeader className="px-6">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
                                                     <DollarSign className="h-5 w-5 text-blue-600" />
                                                     <CardTitle className="text-blue-700">
-                                                        (=) Lucro Operacional
-                                                        dos Pedidos
+                                                        (=) Margem de Contribuição
                                                     </CardTitle>
                                                 </div>
                                                 <div className="flex items-center gap-2">
@@ -425,13 +421,12 @@ export default function FinancialSummary() {
                                                 </div>
                                             </div>
                                             <CardDescription>
-                                                Resultado operacional antes de
-                                                receitas/despesas extras
+                                                Resultado antes dos custos fixos
                                             </CardDescription>
                                         </CardHeader>
                                     </Card>
 
-                                    {/* 9. (+) RECEITAS EXTRAS */}
+                                    {/* 9. (+) RECEITAS EXTRAS (CUSTOS FIXOS) */}
                                     {data.extraIncome > 0 && (
                                         <Card className="border-l-4 border-l-green-500">
                                             <CardHeader className="px-6">
@@ -439,7 +434,7 @@ export default function FinancialSummary() {
                                                     <div className="flex items-center gap-2">
                                                         <PlusCircle className="h-5 w-5 text-green-600" />
                                                         <CardTitle>
-                                                            (+) Receitas Extras
+                                                            (+) Custos Fixos
                                                         </CardTitle>
                                                     </div>
                                                     <Badge
@@ -458,8 +453,7 @@ export default function FinancialSummary() {
                                                     </Badge>
                                                 </div>
                                                 <CardDescription>
-                                                    Receitas operacionais
-                                                    adicionais
+                                                    Custos fixos operacionais
                                                 </CardDescription>
                                             </CardHeader>
                                         </Card>
