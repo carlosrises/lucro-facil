@@ -63,7 +63,16 @@ class DiagnoseOrderItemCost extends Command
         $detectedSize = $this->detectPizzaSize($orderItem->name);
         if ($detectedSize) {
             $this->line("   🍕 Tamanho detectado: " . strtoupper($detectedSize));
+        } else {
+            $this->warn("   ⚠️  Tamanho NÃO detectado no nome do item");
+            $this->line("      Sugestão: Nome deve conter broto, média, grande, família, big, don, etc.");
         }
+
+        if ($orderItem->total_cost) {
+            $this->line("   💰 Total Cost (do backend): R$ {$orderItem->total_cost}");
+        }
+
+        $this->newLine();
         
         $this->line("📋 1. ProductMapping (SKU → Produto Interno):");
         $productMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
@@ -206,6 +215,10 @@ class DiagnoseOrderItemCost extends Command
                         }
                     } else {
                         $this->line("      → Custo único: R$ " . number_format($product->unit_cost, 2, ',', '.'));
+                        if ($detectedSize) {
+                            $this->warn("      ⚠️  Este produto NÃO tem CMV por tamanho configurado!");
+                            $this->line("         Recomendação: Configure CMV diferente para cada tamanho (broto, média, grande, família)");
+                        }
                     }
                 }
             }
@@ -219,13 +232,29 @@ class DiagnoseOrderItemCost extends Command
     {
         $itemNameLower = strtolower($itemName);
         
+        // Broto
         if (str_contains($itemNameLower, 'broto')) {
             return 'broto';
-        } elseif (str_contains($itemNameLower, 'média') || str_contains($itemNameLower, 'media')) {
+        }
+        
+        // Média
+        if (str_contains($itemNameLower, 'média') || str_contains($itemNameLower, 'media')) {
             return 'media';
-        } elseif (str_contains($itemNameLower, 'grande')) {
+        }
+        
+        // Grande
+        if (str_contains($itemNameLower, 'grande')) {
             return 'grande';
-        } elseif (str_contains($itemNameLower, 'família') || str_contains($itemNameLower, 'familia')) {
+        }
+        
+        // Família (vários padrões)
+        if (str_contains($itemNameLower, 'família') || 
+            str_contains($itemNameLower, 'familia') ||
+            str_contains($itemNameLower, 'big') ||
+            str_contains($itemNameLower, 'don') ||
+            str_contains($itemNameLower, '70x35') ||
+            str_contains($itemNameLower, 'gigante') ||
+            str_contains($itemNameLower, 'super')) {
             return 'familia';
         }
         
