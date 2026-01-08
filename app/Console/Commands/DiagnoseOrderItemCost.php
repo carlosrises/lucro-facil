@@ -11,20 +11,20 @@ use Illuminate\Console\Command;
 class DiagnoseOrderItemCost extends Command
 {
     protected $signature = 'orders:diagnose-item-cost
-                            {order : Código do pedido}
+                            {order : ID do pedido}
                             {--item= : Nome do item para diagnosticar}';
 
     protected $description = 'Diagnostica de onde vem o custo de um item específico do pedido';
 
     public function handle(): int
     {
-        $orderCode = $this->argument('order');
+        $orderId = $this->argument('order');
         $itemName = $this->option('item');
 
-        $order = Order::where('code', $orderCode)->first();
+        $order = Order::find($orderId);
 
         if (!$order) {
-            $this->error("❌ Pedido {$orderCode} não encontrado");
+            $this->error("❌ Pedido ID {$orderId} não encontrado");
             return 1;
         }
 
