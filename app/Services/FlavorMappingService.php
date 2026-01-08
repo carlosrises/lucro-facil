@@ -76,10 +76,35 @@ class FlavorMappingService
                 ]);
 
                 $mappedCount++;
+
+                // NOVO: Recalcular frações de todos os sabores deste order_item
+                $this->recalculateFractionsForOrderItem($orderItem);
             }
         }
 
         return $mappedCount;
+    }
+
+    /**
+     * Recalcular as frações de todos os sabores de um order_item
+     */
+    protected function recalculateFractionsForOrderItem(OrderItem $orderItem): void
+    {
+        // Contar sabores de pizza com auto_fraction ativado
+        $flavorMappings = OrderItemMapping::where('order_item_id', $orderItem->id)
+            ->where('auto_fraction', true);
+
+        $totalFlavors = $flavorMappings->count();
+
+        if ($totalFlavors === 0) {
+            return;
+        }
+
+        // Calcular nova fração
+        $newFraction = 1.0 / $totalFlavors;
+
+        // Atualizar todas as frações
+        $flavorMappings->update(['quantity' => $newFraction]);
     }
 
     /**
