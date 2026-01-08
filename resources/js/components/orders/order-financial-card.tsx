@@ -624,14 +624,16 @@ export function OrderFinancialCard({
                                                     item.internal_product
                                                         ?.unit_cost;
 
-                                                // Verificar se tem produto interno vinculado (não apenas classificação)
-                                                // Para mappings, o internal_product_id pode ser null quando é apenas classificação
+                                                // Verificar se tem produto interno vinculado no ITEM PRINCIPAL (mapping tipo 'main')
+                                                // Não considerar apenas add-ons - esses são mostrados separadamente
                                                 const hasInternalProduct =
                                                     hasMappings
                                                         ? item.mappings.some(
                                                               (
                                                                   m: OrderItemMapping,
                                                               ) =>
+                                                                  m.mapping_type ===
+                                                                      'main' &&
                                                                   m.internal_product_id !==
                                                                       null &&
                                                                   m.internal_product !==

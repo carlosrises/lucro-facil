@@ -38,6 +38,7 @@ type OrderItem = {
     };
     mappings?: Array<{
         id: number;
+        mapping_type?: 'main' | 'option' | 'addon';
         internal_product?: {
             id: number;
             name: string;
@@ -55,15 +56,29 @@ export function calculateItemCost(item: OrderItem): number {
 
     // Novo sistema: usar mappings se existir
     if (item.mappings && item.mappings.length > 0) {
-        const mappingsCost = item.mappings.reduce((sum, mapping) => {
-            if (mapping.internal_product?.unit_cost) {
-                const unitCost = parseFloat(mapping.internal_product.unit_cost);
-                const mappingQuantity = mapping.quantity || 1;
-                return sum + unitCost * mappingQuantity;
-            }
-            return sum;
-        }, 0);
-        return mappingsCost * itemQuantity;
+        // Separar mappings do tipo 'main' (item principal) dos add-ons
+        const mainMappings = item.mappings.filter(
+            (m) => m.mapping_type === 'main',
+        );
+
+        // Se tem mapping 'main', calcular APENAS dele (ignorar add-ons aqui)
+        if (mainMappings.length > 0) {
+            const mappingsCost = mainMappings.reduce((sum, mapping) => {
+                if (mapping.internal_product?.unit_cost) {
+                    const unitCost = parseFloat(
+                        mapping.internal_product.unit_cost,
+                    );
+                    const mappingQuantity = mapping.quantity || 1;
+                    return sum + unitCost * mappingQuantity;
+                }
+                return sum;
+            }, 0);
+            return mappingsCost * itemQuantity;
+        }
+
+        // Se NÃO tem mapping 'main', mas tem add-ons, retorna 0
+        // (os add-ons serão mostrados separadamente abaixo)
+        return 0;
     }
 
     // Fallback: sistema legado (internal_product direto)
