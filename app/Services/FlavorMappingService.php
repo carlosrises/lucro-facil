@@ -62,12 +62,15 @@ class FlavorMappingService
                 // Calcular a fração baseado no produto pai
                 $fraction = $this->calculateFraction($orderItem, $addOn);
 
+                // Obter quantidade do add-on (quantas unidades deste add-on no pedido)
+                $addOnQuantity = $addOn['quantity'] ?? $addOn['qty'] ?? 1;
+
                 // Criar o mapeamento
                 OrderItemMapping::create([
                     'tenant_id' => $tenantId,
                     'order_item_id' => $orderItem->id,
                     'internal_product_id' => $mapping->internal_product_id,
-                    'quantity' => $fraction,
+                    'quantity' => $fraction * $addOnQuantity, // Fração x Quantidade do add-on
                     'mapping_type' => 'addon',
                     'option_type' => 'pizza_flavor',
                     'auto_fraction' => true,
@@ -90,21 +93,32 @@ class FlavorMappingService
      */
     protected function recalculateFractionsForOrderItem(OrderItem $orderItem): void
     {
-        // Contar sabores de pizza com auto_fraction ativado
+        // Buscar sabores de pizza com auto_fraction ativado
         $flavorMappings = OrderItemMapping::where('order_item_id', $orderItem->id)
-            ->where('auto_fraction', true);
+            ->where('auto_fraction', true)
+            ->get();
 
-        $totalFlavors = $flavorMappings->count();
-
-        if ($totalFlavors === 0) {
+        if ($flavorMappings->isEmpty()) {
             return;
         }
 
-        // Calcular nova fração
+        $totalFlavors = $flavorMappings->count();
         $newFraction = 1.0 / $totalFlavors;
 
-        // Atualizar todas as frações
-        $flavorMappings->update(['quantity' => $newFraction]);
+        // Atualizar fração de cada sabor, mantendo a quantidade do add-on
+        foreach ($flavorMappings as $mapping) {
+            // Buscar o add-on original para pegar a quantidade
+            $addOns = $orderItem->add_ons;
+            $addOnQuantity = 1;
+
+            if (is_array($addOns) && isset($addOns[$mapping->external_reference])) {
+                $addOn = $addOns[$mapping->external_reference];
+                $addOnQuantity = $addOn['quantity'] ?? $addOn['qty'] ?? 1;
+            }
+
+            // Atualizar: nova fração x quantidade do add-on
+            $mapping->update(['quantity' => $newFraction * $addOnQuantity]);
+        }
     }
 
     /**
