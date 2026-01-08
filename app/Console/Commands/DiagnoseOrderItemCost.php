@@ -59,13 +59,12 @@ class DiagnoseOrderItemCost extends Command
         $this->line("   ID: {$orderItem->id} | SKU: {$orderItem->sku}");
         $this->line("   Quantidade: {$orderItem->quantity}x | Valor unitário: R$ {$orderItem->unit_price}");
 
-        if ($orderItem->total_cost) {
-            $this->line("   💰 Total Cost (do backend): R$ {$orderItem->total_cost}");
+        // Detectar tamanho do item pai
+        $detectedSize = $this->detectPizzaSize($orderItem->name);
+        if ($detectedSize) {
+            $this->line("   🍕 Tamanho detectado: " . strtoupper($detectedSize));
         }
-
-        $this->newLine();
-
-        // 1. Verificar ProductMapping do item principal
+        
         $this->line("📋 1. ProductMapping (SKU → Produto Interno):");
         $productMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
             ->where('external_item_id', $orderItem->sku)
@@ -168,11 +167,68 @@ class DiagnoseOrderItemCost extends Command
         if ($orderItem->add_ons && is_array($orderItem->add_ons)) {
             $this->newLine();
             $this->line("📎 5. Add-ons no JSON do pedido:");
+            
+            $detectedSize = $this->detectPizzaSize($orderItem->name);
+            
             foreach ($orderItem->add_ons as $index => $addOn) {
                 $addOnName = $addOn['name'] ?? 'N/A';
                 $addOnQty = $addOn['quantity'] ?? $addOn['qty'] ?? 1;
                 $this->line("   [{$index}] {$addOnName} ({$addOnQty}x)");
+                
+                // Verificar se este add-on tem ProductMapping
+                $addOnSku = 'addon_'.md5($addOnName);
+                $productMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
+                    ->where('external_item_id', $addOnSku)
+                    ->where('item_type', 'flavor')
+                    ->first();
+                
+                if ($productMapping && $productMapping->internalProduct) {
+                    $product = $productMapping->internalProduct;
+                    $this->line("      → Produto: {$product->name}");
+                    
+                    // Verificar se tem CMV por tamanho
+                    if ($product->cmv_by_size && is_array($product->cmv_by_size)) {
+                        $this->line("      → CMV por tamanho:");
+                        foreach ($product->cmv_by_size as $size => $cost) {
+                            $marker = ($detectedSize && $size === $detectedSize) ? ' ← TAMANHO ATUAL' : '';
+                            $this->line("         • {$size}: R$ " . number_format($cost, 2, ',', '.') . $marker);
+                        }
+                        
+                        // Verificar se o custo usado está correto
+                        $unitCost = floatval($product->unit_cost);
+                        if ($detectedSize && isset($product->cmv_by_size[$detectedSize])) {
+                            $expectedCost = floatval($product->cmv_by_size[$detectedSize]);
+                            if (abs($unitCost - $expectedCost) > 0.01) {
+                                $this->warn("      ⚠️  ATENÇÃO: unit_cost (R$ {$unitCost}) difere do CMV do tamanho {$detectedSize} (R$ {$expectedCost})");
+                            } else {
+                                $this->line("      ✅ Custo correto para tamanho {$detectedSize}");
+                            }
+                        }
+                    } else {
+                        $this->line("      → Custo único: R$ " . number_format($product->unit_cost, 2, ',', '.'));
+                    }
+                }
             }
         }
+    }
+    
+    /**
+     * Detectar tamanho da pizza a partir do nome
+     */
+    protected function detectPizzaSize(string $itemName): ?string
+    {
+        $itemNameLower = strtolower($itemName);
+        
+        if (str_contains($itemNameLower, 'broto')) {
+            return 'broto';
+        } elseif (str_contains($itemNameLower, 'média') || str_contains($itemNameLower, 'media')) {
+            return 'media';
+        } elseif (str_contains($itemNameLower, 'grande')) {
+            return 'grande';
+        } elseif (str_contains($itemNameLower, 'família') || str_contains($itemNameLower, 'familia')) {
+            return 'familia';
+        }
+        
+        return null;
     }
 }
