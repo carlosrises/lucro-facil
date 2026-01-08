@@ -104,7 +104,7 @@ export default function CostCommissions() {
         if (itemToDelete) {
             router.delete(`/cost-commissions/${itemToDelete.id}`, {
                 data: { recalculate },
-                onSuccess: () => {
+                onSuccess: (page) => {
                     setIsDeleteDialogOpen(false);
                     setItemToDelete(null);
                     toast.success(
@@ -112,6 +112,18 @@ export default function CostCommissions() {
                             ? 'Custo/Comissão excluído! Recalculando pedidos...'
                             : 'Custo/Comissão excluído com sucesso!',
                     );
+
+                    // Verificar se há recalculate_cache_key no flash message
+                    const recalculateCacheKey =
+                        page.props?.flash?.recalculate_cache_key;
+                    if (recalculateCacheKey && recalculate) {
+                        console.log(
+                            'Starting recalculate monitoring after delete with key:',
+                            recalculateCacheKey,
+                        );
+                        startRecalculateMonitoring(recalculateCacheKey);
+                        setCurrentCacheKey(recalculateCacheKey);
+                    }
                 },
                 onError: () => {
                     toast.error('Erro ao excluir custo/comissão');
