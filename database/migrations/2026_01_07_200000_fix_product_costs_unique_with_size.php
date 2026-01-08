@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::table('product_costs', function (Blueprint $table) {
             // 1. Verificar se já existe o campo size (da migration 2026_01_05_220001)
             $hasSizeColumn = Schema::hasColumn('product_costs', 'size');
-            
+
             // 2. Dropar as foreign keys que dependem das colunas do índice único
             $table->dropForeign(['tenant_id']);
             $table->dropForeign(['internal_product_id']);
