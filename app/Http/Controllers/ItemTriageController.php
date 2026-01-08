@@ -392,12 +392,18 @@ class ItemTriageController extends Controller
             ->where('external_item_id', $validated['sku'])
             ->first();
 
+        $isUpdate = false;
+
         if ($mapping) {
             // Atualizar mapping existente
+            $isUpdate = true;
             $mapping->update([
                 'item_type' => $validated['item_type'],
                 'internal_product_id' => $validated['internal_product_id'],
             ]);
+
+            // Recalcular CMV dos pedidos que têm este item
+            $this->recalculateOrdersWithItem($mapping, $tenantId);
         } else {
             // Criar novo mapping
             $mapping = ProductMapping::create([
@@ -445,6 +451,34 @@ class ItemTriageController extends Controller
                 'option_type' => 'regular',
                 'auto_fraction' => false,
             ]);
+        }
+    }
+
+    /**
+     * Recalcular CMV dos pedidos que contêm um item específico
+     */
+    private function recalculateOrdersWithItem(ProductMapping $mapping, int $tenantId): void
+    {
+        // Buscar pedidos que têm este item (por SKU)
+        $orderIds = OrderItem::where('tenant_id', $tenantId)
+            ->where('sku', $mapping->external_item_id)
+            ->distinct()
+            ->pluck('order_id');
+
+        if ($orderIds->isEmpty()) {
+            return;
+        }
+
+        // Buscar os pedidos e recalcular CMV
+        $orders = Order::whereIn('id', $orderIds)->get();
+        $costService = app(\App\Services\OrderCostService::class);
+
+        foreach ($orders as $order) {
+            try {
+                $costService->applyAndSaveCosts($order);
+            } catch (\Exception $e) {
+                \Log::error("Erro ao recalcular custos do pedido {$order->id} após atualizar mapping: ".$e->getMessage());
+            }
         }
     }
 }
