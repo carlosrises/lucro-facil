@@ -81,7 +81,7 @@ class FlavorMappingService
                 $mappedCount++;
 
                 // NOVO: Recalcular frações de todos os sabores deste order_item
-                $this->recalculateFractionsForOrderItem($orderItem);
+                $this->recalculateAllFlavorsForOrderItem($orderItem);
             }
         }
 
@@ -89,12 +89,16 @@ class FlavorMappingService
     }
 
     /**
-     * Recalcular as frações de todos os sabores de um order_item
+     * Recalcular frações de TODOS os sabores de um order_item
+     * Isso é chamado quando um novo sabor é adicionado
+     * IMPORTANTE: Só recalcula sabores que JÁ foram classificados (têm ProductMapping tipo 'flavor')
      */
-    protected function recalculateFractionsForOrderItem(OrderItem $orderItem): void
+    protected function recalculateAllFlavorsForOrderItem(OrderItem $orderItem): void
     {
-        // Buscar sabores de pizza com auto_fraction ativado
+        // Buscar TODOS os mappings de sabores deste order_item
         $flavorMappings = OrderItemMapping::where('order_item_id', $orderItem->id)
+            ->where('mapping_type', 'addon')
+            ->where('option_type', 'pizza_flavor')
             ->where('auto_fraction', true)
             ->get();
 
@@ -102,11 +106,39 @@ class FlavorMappingService
             return;
         }
 
-        $totalFlavors = $flavorMappings->count();
+        // Filtrar apenas sabores que foram classificados (têm ProductMapping tipo 'flavor')
+        $classifiedFlavors = $flavorMappings->filter(function ($mapping) use ($orderItem) {
+            // Buscar o add-on para pegar o nome
+            $addOns = $orderItem->add_ons;
+            if (!is_array($addOns) || !isset($addOns[$mapping->external_reference])) {
+                return false;
+            }
+
+            $addOn = $addOns[$mapping->external_reference];
+            $addOnName = $addOn['name'] ?? '';
+            if (!$addOnName) {
+                return false;
+            }
+
+            // Verificar se este add-on tem ProductMapping do tipo 'flavor'
+            $addOnSku = 'addon_'.md5($addOnName);
+            $productMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
+                ->where('external_item_id', $addOnSku)
+                ->where('item_type', 'flavor')
+                ->first();
+
+            return $productMapping !== null;
+        });
+
+        if ($classifiedFlavors->isEmpty()) {
+            return;
+        }
+
+        $totalFlavors = $classifiedFlavors->count();
         $newFraction = 1.0 / $totalFlavors;
 
-        // Atualizar fração de cada sabor, mantendo a quantidade do add-on
-        foreach ($flavorMappings as $mapping) {
+        // Atualizar fração de cada sabor classificado, mantendo a quantidade do add-on
+        foreach ($classifiedFlavors as $mapping) {
             // Buscar o add-on original para pegar a quantidade
             $addOns = $orderItem->add_ons;
             $addOnQuantity = 1;
@@ -198,7 +230,6 @@ class FlavorMappingService
         }
 
         // Se nenhum sabor foi classificado ainda, retornar 1 para evitar divisão por zero
-        // Não devemos assumir que todos os add-ons são sabores
         return $flavorCount > 0 ? $flavorCount : 1;
     }
 
