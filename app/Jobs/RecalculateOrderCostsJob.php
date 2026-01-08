@@ -54,16 +54,29 @@ class RecalculateOrderCostsJob implements ShouldQueue
 
             // Se não encontrar mas temos tenantId (caso de exclusão), usar os dados passados
             if (! $costCommission && $this->tenantId) {
-                $query = Order::where('tenant_id', $this->tenantId);
+                // Para exclusão, buscar apenas pedidos que TÊM essa comissão no calculated_costs
+                if ($this->isDeleting) {
+                    $query = Order::where('tenant_id', $this->tenantId)
+                        ->whereNotNull('calculated_costs')
+                        ->whereRaw("JSON_SEARCH(calculated_costs, 'one', ?, NULL, '$**.id') IS NOT NULL", [$this->referenceId]);
+                } else {
+                    $query = Order::where('tenant_id', $this->tenantId);
 
-                if (! $this->applyToAll && $this->provider) {
-                    $query->where(function ($q) {
-                        $q->where('provider', $this->provider)
-                            ->orWhere(function ($q2) {
-                                $q2->where('provider', 'takeat')
-                                    ->where('origin', $this->provider);
+                    if (! $this->applyToAll && $this->provider) {
+                        // Se provider for takeat-{origin}, precisamos separar
+                        if (str_starts_with($this->provider, 'takeat-')) {
+                            $origin = str_replace('takeat-', '', $this->provider);
+                            $query->where('provider', 'takeat')->where('origin', $origin);
+                        } else {
+                            $query->where(function ($q) {
+                                $q->where('provider', $this->provider)
+                                    ->orWhere(function ($q2) {
+                                        $q2->where('provider', 'takeat')
+                                            ->where('origin', $this->provider);
+                                    });
                             });
-                    });
+                        }
+                    }
                 }
             } elseif (! $costCommission) {
                 \Log::error("CostCommission não encontrada e sem dados alternativos: {$this->referenceId}");
