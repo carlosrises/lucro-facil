@@ -459,17 +459,45 @@ class ItemTriageController extends Controller
      */
     private function recalculateOrdersWithItem(ProductMapping $mapping, int $tenantId): void
     {
-        // Buscar pedidos que têm este item (por SKU)
-        $orderIds = OrderItem::where('tenant_id', $tenantId)
+        // Buscar todos os order_items que têm este SKU
+        $orderItems = OrderItem::where('tenant_id', $tenantId)
             ->where('sku', $mapping->external_item_id)
-            ->distinct()
-            ->pluck('order_id');
+            ->get();
 
-        if ($orderIds->isEmpty()) {
+        if ($orderItems->isEmpty()) {
             return;
         }
 
-        // Buscar os pedidos e recalcular CMV
+        // Atualizar OrderItemMappings existentes com o novo internal_product_id
+        foreach ($orderItems as $orderItem) {
+            // Buscar mappings do tipo 'main' para este order_item
+            $itemMappings = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
+                ->where('mapping_type', 'main')
+                ->get();
+
+            if ($itemMappings->isNotEmpty()) {
+                // Atualizar mappings existentes
+                foreach ($itemMappings as $itemMapping) {
+                    $itemMapping->update([
+                        'internal_product_id' => $mapping->internal_product_id,
+                    ]);
+                }
+            } elseif ($mapping->internal_product_id) {
+                // Criar novo mapping se não existir e há produto vinculado
+                \App\Models\OrderItemMapping::create([
+                    'tenant_id' => $tenantId,
+                    'order_item_id' => $orderItem->id,
+                    'internal_product_id' => $mapping->internal_product_id,
+                    'quantity' => 1.0,
+                    'mapping_type' => 'main',
+                    'option_type' => 'regular',
+                    'auto_fraction' => false,
+                ]);
+            }
+        }
+
+        // Buscar pedidos únicos e recalcular CMV
+        $orderIds = $orderItems->pluck('order_id')->unique();
         $orders = Order::whereIn('id', $orderIds)->get();
         $costService = app(\App\Services\OrderCostService::class);
 
