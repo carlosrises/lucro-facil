@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 
 class FindOrphanTaxes extends Command
 {
-    protected $signature = 'orders:find-orphan-taxes 
+    protected $signature = 'orders:find-orphan-taxes
                             {--tenant= : ID do tenant para filtrar pedidos}
                             {--fix : Recalcular automaticamente pedidos com taxas órfãs}
                             {--include-inactive : Incluir taxas inativas (active=false) como órfãs}';
@@ -71,7 +71,7 @@ class FindOrphanTaxes extends Command
                                 if (! in_array($taxId, $activeTaxIds)) {
                                     // Não está ativo - pode estar inativo ou deletado
                                     $taxExists = CostCommission::where('id', $taxId)->exists();
-                                    
+
                                     if (! $taxExists) {
                                         $isOrphan = true; // Deletada
                                     } elseif ($includeInactive) {

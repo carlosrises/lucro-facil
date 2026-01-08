@@ -36,7 +36,7 @@ class RecalculateOneOrder extends Command
 
         // Recalcular
         $this->info('🔧 Recalculando custos...');
-        
+
         try {
             $costService->applyAndSaveCosts($order);
             $this->info('✅ Recálculo concluído!');

@@ -48,7 +48,7 @@ class RecalculatePizzaFractions extends Command
         }
 
         $mappings = $query->with(['orderItem.order'])->get();
-        
+
         if ($mappings->isEmpty()) {
             $this->info('✅ Nenhum mapping de pizza encontrado para recalcular');
             return 0;
@@ -58,7 +58,7 @@ class RecalculatePizzaFractions extends Command
 
         // Agrupar por order_item para processar juntos
         $mappingsByOrderItem = $mappings->groupBy('order_item_id');
-        
+
         $stats = [
             'order_items_processed' => 0,
             'mappings_updated' => 0,
@@ -70,7 +70,7 @@ class RecalculatePizzaFractions extends Command
 
         foreach ($mappingsByOrderItem as $orderItemId => $orderItemMappings) {
             $orderItem = OrderItem::find($orderItemId);
-            
+
             if (!$orderItem) {
                 $progressBar->advance();
                 continue;
@@ -169,7 +169,7 @@ class RecalculatePizzaFractions extends Command
             $this->info('💡 Execute sem --dry-run para aplicar as mudanças');
         } else {
             $this->info('✅ Recálculo concluído com sucesso!');
-            
+
             if ($stats['mappings_updated'] > 0) {
                 $this->info('💡 Os custos dos pedidos serão recalculados automaticamente na próxima visualização');
             }

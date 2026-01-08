@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 
 class RecalculateAllOrderCosts extends Command
 {
-    protected $signature = 'orders:recalculate-all-costs 
+    protected $signature = 'orders:recalculate-all-costs
                             {--tenant= : ID do tenant para filtrar pedidos}
                             {--provider= : Filtrar por provider específico}
                             {--debug : Mostrar informações de debug}

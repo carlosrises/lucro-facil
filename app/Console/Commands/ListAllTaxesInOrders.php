@@ -68,7 +68,7 @@ class ListAllTaxesInOrders extends Command
 
         // Verificar quais existem no banco
         $this->info('🔍 Verificando existência no banco de dados...');
-        
+
         $taxIds = array_keys($allTaxes);
         $existingIds = DB::table('cost_commissions')
             ->whereIn('id', $taxIds)
