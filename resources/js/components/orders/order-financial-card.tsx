@@ -39,36 +39,47 @@ import { QuickLinkDialog } from './quick-link-dialog';
  * Calcula o custo de um item considerando múltiplas associações
  */
 function calculateItemCost(item: OrderItem): number {
-    // Prioridade 1: Usar total_cost calculado pelo backend (mais confiável)
-    if (item.total_cost !== undefined && item.total_cost !== null) {
-        return parseFloat(String(item.total_cost));
-    }
-
-    // Prioridade 2: Calcular no frontend (fallback)
     const itemQuantity = item.qty || item.quantity || 0;
 
     // Novo sistema: usar mappings se existir
     if (item.mappings && item.mappings.length > 0) {
-        const mappingsCost = item.mappings.reduce(
-            (sum: number, mapping: OrderItemMapping) => {
-                if (mapping.internal_product?.unit_cost) {
-                    const unitCost = parseFloat(
-                        mapping.internal_product.unit_cost,
-                    );
-                    const mappingQuantity = mapping.quantity || 1;
-                    return sum + unitCost * mappingQuantity;
-                }
-                return sum;
-            },
-            0,
+        // Separar mappings do tipo 'main' (item principal) dos add-ons
+        const mainMappings = item.mappings.filter(
+            (m: OrderItemMapping) => m.mapping_type === 'main',
         );
-        return mappingsCost * itemQuantity;
+
+        // Se tem mapping 'main', calcular APENAS dele (ignorar add-ons aqui)
+        if (mainMappings.length > 0) {
+            const mappingsCost = mainMappings.reduce(
+                (sum: number, mapping: OrderItemMapping) => {
+                    if (mapping.internal_product?.unit_cost) {
+                        const unitCost = parseFloat(
+                            mapping.internal_product.unit_cost,
+                        );
+                        const mappingQuantity = mapping.quantity || 1;
+                        return sum + unitCost * mappingQuantity;
+                    }
+                    return sum;
+                },
+                0,
+            );
+            return mappingsCost * itemQuantity;
+        }
+
+        // Se NÃO tem mapping 'main', mas tem add-ons, retorna 0
+        // (os add-ons serão mostrados separadamente abaixo)
+        return 0;
     }
 
     // Fallback: sistema legado (internal_product direto)
     if (item.internal_product?.unit_cost) {
         const unitCost = parseFloat(item.internal_product.unit_cost);
         return unitCost * itemQuantity;
+    }
+
+    // Se não tem nada, usar total_cost do backend se existir
+    if (item.total_cost !== undefined && item.total_cost !== null) {
+        return parseFloat(String(item.total_cost));
     }
 
     return 0;
