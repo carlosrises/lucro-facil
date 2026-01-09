@@ -108,12 +108,16 @@ class DiagnoseOrderMappings extends Command
                     if ($pm->item_type === 'flavor' && $size) {
                         if ($product->cmv_by_size && isset($product->cmv_by_size[$size])) {
                             $cmvBySize = $product->cmv_by_size[$size];
-                            $this->line("      → unit_cost: R$ " . number_format($unitCost, 2, ',', '.'));
+                            $this->line("      → unit_cost genérico: R$ " . number_format($unitCost, 2, ',', '.'));
                             $this->line("      → CMV {$size}: R$ " . number_format($cmvBySize, 2, ',', '.'));
                             $this->line("      → Fração: 1/{$classifiedFlavors} = " . number_format($fraction * 100, 1) . "%");
                             $unitCost = $cmvBySize;
+                        } else {
+                            $this->warn("      ⚠️  cmv_by_size não configurado para {$size}");
+                            $this->line("      → Usando unit_cost: R$ " . number_format($unitCost, 2, ',', '.'));
                         }
                         $cost = $unitCost * $fraction * $qty;
+                        $this->line("      → Cálculo: R$ {$unitCost} × {$fraction} × {$qty} = R$ " . number_format($cost, 2, ',', '.'));
                     } else {
                         $this->line("      → unit_cost: R$ " . number_format($unitCost, 2, ',', '.'));
                         $cost = $unitCost * $qty;
