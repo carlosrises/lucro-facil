@@ -28,6 +28,20 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
+     * Indicates that the request should not be handled by Inertia middleware.
+     * This allows certain routes to return JSON or other responses.
+     */
+    protected function shouldHandle(Request $request): bool
+    {
+        // Excluir rota de status de recálculo (retorna JSON puro)
+        if ($request->is('recalculation-status')) {
+            return false;
+        }
+
+        return parent::shouldHandle($request);
+    }
+
+    /**
      * Define the props that are shared by default.
      *
      * @see https://inertiajs.com/shared-data
