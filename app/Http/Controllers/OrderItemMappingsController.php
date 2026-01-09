@@ -97,40 +97,43 @@ class OrderItemMappingsController extends Controller
             $mainProduct = InternalProduct::find($mainMapping['internal_product_id']);
             if ($mainProduct && $mainProduct->size) {
                 $pizzaSize = $mainProduct->size;
+                logger()->info('🍕 Tamanho do produto pai', [
+                    'product_id' => $mainProduct->id,
+                    'product_name' => $mainProduct->name,
+                    'size_field' => $mainProduct->size,
+                    'detected_size' => $pizzaSize,
+                ]);
             }
         }
         
         // Fallback: detectar do nome se produto pai não tiver size
         if (!$pizzaSize) {
             $pizzaSize = $this->detectPizzaSize($orderItem->name);
-        }
-
-        // Buscar mappings existentes antes de deletar (para preservar os que não foram enviados)
-        $existingMappings = $orderItem->mappings()->get();
-        
-        // Deletar apenas os mappings que estão sendo atualizados
-        $updatingIds = collect($validated['mappings'])->pluck('id')->filter();
+            logger()->info('🍕 Tamanho detectado do nome (fallback)', [
+                'item_name' => $orderItem->name,
+                'detected_size' => $pizzaSize,
+            ]);
         if ($updatingIds->isNotEmpty()) {
             $orderItem->mappings()->whereIn('id', $updatingIds)->delete();
         }
 
         // Mesclar: mappings novos + mappings existentes que não foram atualizados
         $mappingsToRecreate = collect($mappingsData);
-        
+
         foreach ($existingMappings as $existing) {
             $isBeingUpdated = collect($validated['mappings'])->contains('id', $existing->id);
             if (!$isBeingUpdated) {
                 // Recalcular CMV dos sabores existentes com o novo tamanho
                 $product = $existing->internalProduct;
                 $correctCMV = null;
-                
+
                 if ($product && $product->product_category === 'sabor_pizza' && $pizzaSize) {
                     $cmv = $product->calculateCMV($pizzaSize);
                     $correctCMV = $cmv > 0 ? $cmv : (float) $product->unit_cost;
                 } elseif ($product) {
                     $correctCMV = (float) $product->unit_cost;
                 }
-                
+
                 // Atualizar o override do mapping existente
                 $existing->update(['unit_cost_override' => $correctCMV]);
             }
@@ -139,21 +142,23 @@ class OrderItemMappingsController extends Controller
         // Criar novas associações com CMV correto
         foreach ($mappingsData as $mapping) {
             $product = InternalProduct::find($mapping['internal_product_id']);
-            
+
             // Calcular CMV correto: sabores de pizza usam tamanho do produto pai
             $correctCMV = null;
             if ($product) {
                 if ($product->product_category === 'sabor_pizza' && $pizzaSize) {
                     $cmv = $product->calculateCMV($pizzaSize);
-                    $correctCMV = $cmv > 0 ? $cmv : (float) $product->unit_cost;
-                } else {
-                    $correctCMV = (float) $product->unit_cost;
-                }
-            }
-
-            OrderItemMapping::create([
-                'tenant_id' => tenant_id(),
-                'order_item_id' => $orderItem->id,
+                    
+                    logger()->info('💰 CMV calculado para sabor', [
+                        'product_id' => $product->id,
+                        'product_name' => $product->name,
+                        'product_category' => $product->product_category,
+                        'size' => $pizzaSize,
+                        'cmv_calculated' => $cmv,
+                        'unit_cost' => $product->unit_cost,
+                        'has_costs' => $product->costs()->exists(),
+                    ]);
+                    
                 'internal_product_id' => $mapping['internal_product_id'],
                 'quantity' => $mapping['quantity'],
                 'mapping_type' => $mapping['mapping_type'],

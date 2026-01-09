@@ -108,7 +108,7 @@ class OrderItem extends Model
                     $addOnQty = $flavor['quantity'];
 
                     // Calcular CMV dinamicamente pelo tamanho detectado
-                    $unitCost = $pizzaSize 
+                    $unitCost = $pizzaSize
                         ? $product->calculateCMV($pizzaSize)
                         : (float) $product->unit_cost;
 

@@ -107,7 +107,7 @@ class DiagnoseOrderMappings extends Command
                     // Sabor de pizza: calcular CMV dinamicamente pelo tamanho
                     if ($pm->item_type === 'flavor' && $size) {
                         $cmvBySize = $product->calculateCMV($size);
-                        
+
                         if ($cmvBySize > 0) {
                             $this->line("      → unit_cost genérico: R$ " . number_format($unitCost, 2, ',', '.'));
                             $this->line("      → CMV {$size}: R$ " . number_format($cmvBySize, 2, ',', '.'));
