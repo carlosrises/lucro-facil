@@ -1034,43 +1034,64 @@ export function OrderFinancialCard({
                                                                         }
 
                                                                         // Calcular custo do add-on
-                                                                        let baseAddonCost = 0;
-                                                                        const internalProduct =
-                                                                            addOn
-                                                                                .product_mapping
-                                                                                ?.internal_product;
+                                                                        let addonCost = 0;
 
+                                                                        // PRIORIDADE 1: Usar unit_cost_override se existir (valor do OrderItemMapping)
                                                                         if (
-                                                                            internalProduct
+                                                                            addOn.unit_cost_override !==
+                                                                                undefined &&
+                                                                            addOn.unit_cost_override !==
+                                                                                null
                                                                         ) {
-                                                                            // Se for sabor de pizza e tiver CMV por tamanho, usar o CMV do tamanho detectado
+                                                                            addonCost =
+                                                                                parseFloat(
+                                                                                    String(
+                                                                                        addOn.unit_cost_override,
+                                                                                    ),
+                                                                                );
+                                                                        } else {
+                                                                            // FALLBACK: Sistema legado
+                                                                            const internalProduct =
+                                                                                addOn
+                                                                                    .product_mapping
+                                                                                    ?.internal_product;
+
+                                                                            let baseAddonCost = 0;
                                                                             if (
-                                                                                isFlavor &&
-                                                                                pizzaSize &&
-                                                                                internalProduct.cmv_by_size &&
-                                                                                internalProduct
-                                                                                    .cmv_by_size[
-                                                                                    pizzaSize
-                                                                                ]
-                                                                            ) {
-                                                                                baseAddonCost =
-                                                                                    parseFloat(
-                                                                                        internalProduct
-                                                                                            .cmv_by_size[
-                                                                                            pizzaSize
-                                                                                        ],
-                                                                                    );
-                                                                            } else if (
-                                                                                internalProduct.unit_cost
+                                                                                internalProduct?.unit_cost
                                                                             ) {
                                                                                 baseAddonCost =
                                                                                     parseFloat(
                                                                                         internalProduct.unit_cost,
                                                                                     );
                                                                             }
+
+                                                                            // Contar total de sabores no item para calcular denominador
+                                                                            const totalFlavors =
+                                                                                isFlavor
+                                                                                    ? addOnsEnriched.filter(
+                                                                                          (
+                                                                                              a,
+                                                                                          ) =>
+                                                                                              a
+                                                                                                  .product_mapping
+                                                                                                  ?.item_type ===
+                                                                                              'flavor',
+                                                                                      )
+                                                                                          .length
+                                                                                    : 0;
+
+                                                                            // Aplicar fração ao custo se for sabor
+                                                                            addonCost =
+                                                                                isFlavor &&
+                                                                                totalFlavors >
+                                                                                    1
+                                                                                    ? baseAddonCost /
+                                                                                      totalFlavors
+                                                                                    : baseAddonCost;
                                                                         }
 
-                                                                        // Contar total de sabores no item para calcular denominador
+                                                                        // Calcular fração para exibição
                                                                         const totalFlavors =
                                                                             isFlavor
                                                                                 ? addOnsEnriched.filter(
@@ -1092,16 +1113,11 @@ export function OrderFinancialCard({
                                                                                 ? `1/${totalFlavors}`
                                                                                 : null;
 
-                                                                        // Aplicar fração ao custo se for sabor
-                                                                        const addonCost =
-                                                                            isFlavor &&
-                                                                            totalFlavors >
-                                                                                1
-                                                                                ? baseAddonCost /
-                                                                                  totalFlavors
-                                                                                : baseAddonCost;
-
                                                                         // Tooltip para add-on
+                                                                        const internalProduct =
+                                                                            addOn
+                                                                                .product_mapping
+                                                                                ?.internal_product;
                                                                         const addonTooltipText =
                                                                             internalProduct?.name
                                                                                 ? `${internalProduct.name} (100% - Complemento)`
