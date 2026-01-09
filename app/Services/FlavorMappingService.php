@@ -10,6 +10,70 @@ use App\Models\ProductMapping;
 class FlavorMappingService
 {
     /**
+     * Detectar tamanho da pizza a partir do nome do item
+     */
+    protected function detectPizzaSize(string $itemName): ?string
+    {
+        $itemNameLower = mb_strtolower($itemName);
+
+        // Broto
+        if (preg_match('/\bbroto\b/', $itemNameLower)) {
+            return 'broto';
+        }
+
+        // Grande
+        if (preg_match('/\bgrande\b/', $itemNameLower)) {
+            return 'grande';
+        }
+
+        // Família (incluindo variações como big, don, 70x35, etc)
+        if (preg_match('/\b(familia|big|don|70x35)\b/', $itemNameLower)) {
+            return 'familia';
+        }
+
+        // Média (deve vir por último pois é o mais genérico)
+        if (preg_match('/\b(media|média|m\b)/', $itemNameLower)) {
+            return 'media';
+        }
+
+        return null;
+    }
+
+    /**
+     * Calcular o CMV correto do produto baseado no tamanho
+     */
+    protected function calculateCorrectCMV(InternalProduct $product, OrderItem $orderItem): float
+    {
+        // Se não for sabor de pizza, usar unit_cost normal
+        if ($product->product_category !== 'sabor_pizza') {
+            return (float) $product->unit_cost;
+        }
+
+        // Detectar o tamanho do item pai
+        $size = $this->detectPizzaSize($orderItem->name);
+
+        // Se não detectou tamanho, usar unit_cost genérico
+        if (!$size) {
+            return (float) $product->unit_cost;
+        }
+
+        // Verificar se o produto tem ficha técnica
+        $hasCosts = $product->costs()->exists();
+
+        // Se tem ficha técnica, calcular CMV pelo tamanho
+        if ($hasCosts) {
+            return $product->calculateCMV($size);
+        }
+
+        // Se não tem ficha técnica mas tem cmv_by_size, usar ele
+        if ($product->cmv_by_size && is_array($product->cmv_by_size) && isset($product->cmv_by_size[$size])) {
+            return (float) $product->cmv_by_size[$size];
+        }
+
+        // Fallback: unit_cost genérico
+        return (float) $product->unit_cost;
+    }
+    /**
      * Aplicar mapeamento de sabor a todos os add_ons com o mesmo nome
      */
     public function mapFlavorToAllOccurrences(
@@ -65,7 +129,11 @@ class FlavorMappingService
                 // Obter quantidade do add-on (quantas unidades deste add-on no pedido)
                 $addOnQuantity = $addOn['quantity'] ?? $addOn['qty'] ?? 1;
 
-                // Criar o mapeamento
+                // Calcular CMV correto baseado no tamanho
+                $product = InternalProduct::find($mapping->internal_product_id);
+                $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : 0;
+
+                // Criar o mapeamento com CMV correto
                 OrderItemMapping::create([
                     'tenant_id' => $tenantId,
                     'order_item_id' => $orderItem->id,
@@ -76,6 +144,7 @@ class FlavorMappingService
                     'auto_fraction' => true,
                     'external_reference' => (string) $index,
                     'external_name' => $addOnName,
+                    'unit_cost_override' => $correctCMV, // CMV calculado por tamanho
                 ]);
 
                 $mappedCount++;
