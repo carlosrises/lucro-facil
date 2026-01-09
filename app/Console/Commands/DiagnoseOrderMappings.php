@@ -99,7 +99,8 @@ class DiagnoseOrderMappings extends Command
                         continue;
                     }
 
-                    $product = $pm->internalProduct;
+                    // IMPORTANTE: Recarregar produto para pegar cmv_by_size atualizado
+                    $product = \App\Models\InternalProduct::find($pm->internal_product_id);
                     $this->line("      → {$product->name}");
 
                     $unitCost = (float) $product->unit_cost;
