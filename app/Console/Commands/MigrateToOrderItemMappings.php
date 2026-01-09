@@ -51,7 +51,7 @@ class MigrateToOrderItemMappings extends Command
         foreach ($orderItems as $orderItem) {
             try {
                 $productMapping = $orderItem->productMapping;
-                
+
                 if (!$productMapping || !$productMapping->internal_product_id) {
                     $skipped++;
                     continue;
