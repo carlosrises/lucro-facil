@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FinanceEntry;
 use App\Models\Order;
 use App\Models\Store;
 use Carbon\Carbon;
@@ -40,18 +41,31 @@ class DashboardController extends Controller
         $totalAdditionalTax = 0; // Impostos adicionais
         $totalCommissions = 0;
         $totalPaymentMethodFees = 0;
-        $totalCosts = 0; // Custos operacionais
+        $totalCosts = 0; // Custos operacionais (despesas operacionais)
+        $totalDiscounts = 0;
+        $totalSubsidies = 0;
 
         foreach ($orders as $order) {
-            // Total do pedido: iFood usa raw.total.orderAmount, Takeat usa gross_total
+            // Total do pedido: mesma lógica do DRE
             $orderRevenue = 0;
-            if (isset($order->raw['total']['orderAmount'])) {
+
+            if ($order->provider === 'takeat') {
+                // Takeat: usar total_delivery_price (inclui entrega e subsídios)
+                if (isset($order->raw['session']['total_delivery_price'])) {
+                    $orderRevenue = (float) $order->raw['session']['total_delivery_price'];
+                } elseif (isset($order->raw['session']['total_price'])) {
+                    $orderRevenue = (float) $order->raw['session']['total_price'];
+                } else {
+                    $orderRevenue = (float) ($order->gross_total ?? 0);
+                }
+            } elseif (isset($order->raw['total']['orderAmount'])) {
                 // iFood: orderAmount inclui produtos + entrega + taxas
                 $orderRevenue = (float) $order->raw['total']['orderAmount'];
             } else {
-                // Takeat ou outros: usar gross_total
+                // Fallback: usar gross_total
                 $orderRevenue = (float) ($order->gross_total ?? 0);
             }
+
             $totalRevenue += $orderRevenue;
 
             // Taxa de entrega
@@ -110,23 +124,69 @@ class DashboardController extends Controller
 
             // Custos operacionais (do campo total_costs do pedido)
             $totalCosts += (float) ($order->total_costs ?? 0);
+
+            // Descontos e Subsídios (mesma lógica do DRE)
+            $discountTotal = (float) ($order->discount_total ?? 0);
+
+            // Extrair subsídios dos pagamentos da sessão
+            $sessionPayments = $order->raw['session']['payments'] ?? [];
+            $subsidy = 0;
+
+            foreach ($sessionPayments as $payment) {
+                $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+                $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
+
+                // Verificar se é subsídio (contém "subsid" ou "cupom")
+                if (str_contains($paymentName, 'subsid') ||
+                    str_contains($paymentName, 'cupom') ||
+                    str_contains($paymentKeyword, 'subsid') ||
+                    str_contains($paymentKeyword, 'cupom')) {
+                    $subsidy += (float) ($payment['payment_value'] ?? 0);
+                }
+            }
+
+            // Desconto da loja = discount_total - subsídio
+            $discount = $discountTotal - $subsidy;
+
+            $totalDiscounts += $discount;
+            $totalSubsidies += $subsidy;
         }
 
         // Total de impostos = impostos dos produtos + impostos adicionais
         $totalTaxes = $totalProductTax + $totalAdditionalTax;
 
-        // Cálculos principais
-        // Líquido Pós Venda = Faturamento - CMV
-        $netPostSale = $totalRevenue - $totalCmv;
+        // Buscar movimentações financeiras do período
+        $startDateParsed = Carbon::parse($startDate);
+        $endDateParsed = Carbon::parse($endDate);
 
-        // Lucro Bruto (Margem de Contribuição) = Faturamento - CMV
-        $grossProfit = $totalRevenue - $totalCmv;
+        // Receitas extras (movimentações financeiras)
+        $extraIncome = (float) FinanceEntry::where('tenant_id', $tenantId)
+            ->whereBetween('occurred_on', [$startDateParsed, $endDateParsed])
+            ->whereHas('category', function ($q) {
+                $q->where('type', 'income');
+            })
+            ->sum('amount');
 
-        // Custos Fixos = Comissões + Custos Operacionais + Taxas de Pagamento
-        $fixedCosts = $totalCommissions + $totalCosts + $totalPaymentMethodFees;
+        // Despesas extras (movimentações financeiras) - ESTAS SÃO OS CUSTOS FIXOS
+        $extraExpenses = (float) FinanceEntry::where('tenant_id', $tenantId)
+            ->whereBetween('occurred_on', [$startDateParsed, $endDateParsed])
+            ->whereHas('category', function ($q) {
+                $q->where('type', 'expense');
+            })
+            ->sum('amount');
 
-        // Lucro Líquido = Faturamento - CMV - Impostos - Custos Fixos
-        $netProfit = $totalRevenue - $totalCmv - $totalTaxes - $fixedCosts;
+        // Cálculos principais (mesma lógica do DRE)
+        // 1. Receita pós Dedução = Faturamento - (Taxa Pagamento + Comissão + Descontos) + Subsídios
+        $revenueAfterDeductions = $totalRevenue - $totalPaymentMethodFees - $totalCommissions - $totalDiscounts + $totalSubsidies;
+
+        // 2. Margem de Contribuição (Lucro Bruto) = Receita pós Dedução - CMV - Despesas Operacionais - Impostos
+        $contributionMargin = $revenueAfterDeductions - $totalCmv - $totalCosts - $totalTaxes;
+
+        // 3. Custos Fixos = Movimentações Financeiras (despesas)
+        $fixedCosts = $extraExpenses;
+
+        // 4. Lucro Líquido = Margem de Contribuição - Despesas Financeiras + Receitas Financeiras
+        $netProfit = $contributionMargin - $extraExpenses + $extraIncome;
 
         // Margem líquida %
         $marginPercent = $totalRevenue > 0 ? ($netProfit / $totalRevenue) * 100 : 0;
@@ -154,15 +214,27 @@ class DashboardController extends Controller
         $previousCommissions = 0;
         $previousCosts = 0;
         $previousPaymentFees = 0;
+        $previousDiscounts = 0;
+        $previousSubsidies = 0;
 
         foreach ($previousOrders as $order) {
-            // Total do pedido: iFood usa raw.total.orderAmount, Takeat usa gross_total
+            // Total do pedido: mesma lógica do DRE
             $orderRevenue = 0;
-            if (isset($order->raw['total']['orderAmount'])) {
+
+            if ($order->provider === 'takeat') {
+                if (isset($order->raw['session']['total_delivery_price'])) {
+                    $orderRevenue = (float) $order->raw['session']['total_delivery_price'];
+                } elseif (isset($order->raw['session']['total_price'])) {
+                    $orderRevenue = (float) $order->raw['session']['total_price'];
+                } else {
+                    $orderRevenue = (float) ($order->gross_total ?? 0);
+                }
+            } elseif (isset($order->raw['total']['orderAmount'])) {
                 $orderRevenue = (float) $order->raw['total']['orderAmount'];
             } else {
                 $orderRevenue = (float) ($order->gross_total ?? 0);
             }
+
             $previousRevenue += $orderRevenue;
             $previousDeliveryFee += (float) ($order->delivery_fee ?? 0);
 
@@ -215,25 +287,64 @@ class DashboardController extends Controller
             // Comissões e custos dos campos do pedido
             $previousCommissions += (float) ($order->total_commissions ?? 0);
             $previousCosts += (float) ($order->total_costs ?? 0);
+
+            // Descontos e Subsídios (mesma lógica do DRE)
+            $discountTotal = (float) ($order->discount_total ?? 0);
+            $sessionPayments = $order->raw['session']['payments'] ?? [];
+            $subsidy = 0;
+
+            foreach ($sessionPayments as $payment) {
+                $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+                $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
+
+                if (str_contains($paymentName, 'subsid') ||
+                    str_contains($paymentName, 'cupom') ||
+                    str_contains($paymentKeyword, 'subsid') ||
+                    str_contains($paymentKeyword, 'cupom')) {
+                    $subsidy += (float) ($payment['payment_value'] ?? 0);
+                }
+            }
+
+            $discount = $discountTotal - $subsidy;
+            $previousDiscounts += $discount;
+            $previousSubsidies += $subsidy;
         }
 
         // Total de impostos do período anterior
         $previousTaxes = $previousProductTax + $previousAdditionalTax;
 
-        // Cálculos do mês anterior
-        $previousNetPostSale = $previousRevenue - $previousCmv;
-        $previousGrossProfit = $previousRevenue - $previousCmv;
-        $previousFixedCosts = $previousCommissions + $previousCosts + $previousPaymentFees;
-        $previousNetProfit = $previousRevenue - $previousCmv - $previousTaxes - $previousFixedCosts;
+        // Movimentações financeiras do período anterior
+        $previousStartDateParsed = Carbon::parse($previousStartDate);
+        $previousEndDateParsed = Carbon::parse($previousEndDate);
+
+        $previousExtraIncome = (float) FinanceEntry::where('tenant_id', $tenantId)
+            ->whereBetween('occurred_on', [$previousStartDateParsed, $previousEndDateParsed])
+            ->whereHas('category', function ($q) {
+                $q->where('type', 'income');
+            })
+            ->sum('amount');
+
+        $previousExtraExpenses = (float) FinanceEntry::where('tenant_id', $tenantId)
+            ->whereBetween('occurred_on', [$previousStartDateParsed, $previousEndDateParsed])
+            ->whereHas('category', function ($q) {
+                $q->where('type', 'expense');
+            })
+            ->sum('amount');
+
+        // Cálculos do período anterior (mesma lógica do DRE)
+        $previousRevenueAfterDeductions = $previousRevenue - $previousPaymentFees - $previousCommissions - $previousDiscounts + $previousSubsidies;
+        $previousContributionMargin = $previousRevenueAfterDeductions - $previousCmv - $previousCosts - $previousTaxes;
+        $previousFixedCosts = $previousExtraExpenses;
+        $previousNetProfit = $previousContributionMargin - $previousExtraExpenses + $previousExtraIncome;
 
         // Variações percentuais
         $revenueChange = $previousRevenue > 0 ? (($totalRevenue - $previousRevenue) / $previousRevenue) * 100 : 0;
-        $netPostSaleChange = $previousNetPostSale > 0 ? (($netPostSale - $previousNetPostSale) / $previousNetPostSale) * 100 : 0;
+        $revenueAfterDeductionsChange = $previousRevenueAfterDeductions > 0 ? (($revenueAfterDeductions - $previousRevenueAfterDeductions) / $previousRevenueAfterDeductions) * 100 : 0;
         $cmvChange = $previousCmv > 0 ? (($totalCmv - $previousCmv) / $previousCmv) * 100 : 0;
         $deliveryChange = $previousDeliveryFee > 0 ? (($totalDeliveryFee - $previousDeliveryFee) / $previousDeliveryFee) * 100 : 0;
         $taxesChange = $previousTaxes > 0 ? (($totalTaxes - $previousTaxes) / $previousTaxes) * 100 : 0;
         $fixedCostsChange = $previousFixedCosts > 0 ? (($fixedCosts - $previousFixedCosts) / $previousFixedCosts) * 100 : 0;
-        $grossProfitChange = $previousGrossProfit > 0 ? (($grossProfit - $previousGrossProfit) / $previousGrossProfit) * 100 : 0;
+        $contributionMarginChange = $previousContributionMargin > 0 ? (($contributionMargin - $previousContributionMargin) / $previousContributionMargin) * 100 : 0;
         $netProfitChange = $previousNetProfit > 0 ? (($netProfit - $previousNetProfit) / $previousNetProfit) * 100 : 0;
 
         // Gerar dados do gráfico (agrupados por dia no horário de Brasília)
@@ -391,20 +502,20 @@ class DashboardController extends Controller
             'dashboardData' => [
                 'revenue' => round($totalRevenue, 2),
                 'revenueChange' => round($revenueChange, 1),
-                'netTotal' => round($grossProfit, 2),
-                'netChange' => round($grossProfitChange, 1),
+                'revenueAfterDeductions' => round($revenueAfterDeductions, 2), // Líquido Pós Venda
+                'revenueAfterDeductionsChange' => round($revenueAfterDeductionsChange, 1),
                 'cmv' => round($totalCmv, 2),
                 'cmvChange' => round($cmvChange, 1),
                 'deliveryFee' => round($totalDeliveryFee, 2),
                 'deliveryChange' => round($deliveryChange, 1),
                 'taxes' => round($totalTaxes, 2),
                 'taxesChange' => round($taxesChange, 1),
-                'fixedCosts' => round($fixedCosts, 2),
+                'fixedCosts' => round($fixedCosts, 2), // Movimentações financeiras (despesas)
                 'fixedCostsChange' => round($fixedCostsChange, 1),
-                'grossProfit' => round($grossProfit, 2),
-                'grossProfitChange' => round($grossProfitChange, 1),
-                'margin' => round($netProfit, 2),
-                'marginChange' => round($netProfitChange, 1),
+                'contributionMargin' => round($contributionMargin, 2), // Lucro Bruto (MC)
+                'contributionMarginChange' => round($contributionMarginChange, 1),
+                'netProfit' => round($netProfit, 2), // Lucro Líquido
+                'netProfitChange' => round($netProfitChange, 1),
                 'orderCount' => $orders->count(),
             ],
             'chartData' => $chartData,
