@@ -26,8 +26,22 @@ class RecalculateMappingsCMV extends Command
             $this->newLine();
         }
 
+        // Se foi passado order ID, verificar se o pedido existe
+        if ($orderId) {
+            $order = \App\Models\Order::find($orderId);
+            if (!$order) {
+                $this->error("❌ Pedido ID {$orderId} não encontrado!");
+                return 1;
+            }
+
+            $this->info("📦 Pedido encontrado: {$order->code} | Provider: {$order->provider}");
+            $itemsCount = $order->items()->count();
+            $this->line("   Itens no pedido: {$itemsCount}");
+            $this->newLine();
+        }
+
         // Buscar mappings
-        $query = OrderItemMapping::with(['orderItem', 'internalProduct']);
+        $query = OrderItemMapping::with(['orderItem.order', 'internalProduct']);
 
         if ($orderId) {
             $query->whereHas('orderItem', function ($q) use ($orderId) {
@@ -38,7 +52,13 @@ class RecalculateMappingsCMV extends Command
         }
 
         $mappings = $query->get();
-        $this->info("📦 Encontrados {$mappings->count()} mappings para processar");
+
+        $this->info("🔍 Encontrados {$mappings->count()} mappings para processar");
+
+        if ($mappings->isEmpty() && $orderId) {
+            $this->warn("⚠️  O pedido existe mas não tem mappings ainda (produtos não foram associados)");
+        }
+
         $this->newLine();
 
         $updated = 0;
