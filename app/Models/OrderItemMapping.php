@@ -37,10 +37,12 @@ class OrderItemMapping extends Model
         'notes',
         'external_reference',
         'external_name',
+        'unit_cost_override',
     ];
 
     protected $casts = [
         'quantity' => 'decimal:4',
+        'unit_cost_override' => 'decimal:4',
         'auto_fraction' => 'boolean',
     ];
 
@@ -70,8 +72,8 @@ class OrderItemMapping extends Model
 
     /**
      * Calcular custo total desta associação
-     * IMPORTANTE: Não faz queries complexas para evitar estouro de memória
-     * O CMV por tamanho é aplicado no momento do recálculo (comando)
+     * Usa unit_cost_override se disponível (CMV calculado por tamanho)
+     * Senão usa unit_cost do produto
      */
     public function calculateCost(): float
     {
@@ -80,8 +82,14 @@ class OrderItemMapping extends Model
         }
 
         $quantity = (float) $this->quantity;
-        $unitCost = (float) $this->internalProduct->unit_cost;
 
+        // Prioridade 1: usar unit_cost_override se foi calculado
+        if ($this->unit_cost_override !== null) {
+            return (float) $this->unit_cost_override * $quantity;
+        }
+
+        // Prioridade 2: usar unit_cost do produto
+        $unitCost = (float) $this->internalProduct->unit_cost;
         return $unitCost * $quantity;
     }
 
