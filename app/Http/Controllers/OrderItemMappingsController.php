@@ -105,7 +105,7 @@ class OrderItemMappingsController extends Controller
                 ]);
             }
         }
-        
+
         // Fallback: detectar do nome se produto pai não tiver size
         if (!$pizzaSize) {
             $pizzaSize = $this->detectPizzaSize($orderItem->name);
@@ -113,6 +113,13 @@ class OrderItemMappingsController extends Controller
                 'item_name' => $orderItem->name,
                 'detected_size' => $pizzaSize,
             ]);
+        }
+
+        // Buscar mappings existentes antes de deletar (para preservar os que não foram enviados)
+        $existingMappings = $orderItem->mappings()->get();
+        
+        // Deletar apenas os mappings que estão sendo atualizados
+        $updatingIds = collect($validated['mappings'])->pluck('id')->filter();
         if ($updatingIds->isNotEmpty()) {
             $orderItem->mappings()->whereIn('id', $updatingIds)->delete();
         }
@@ -148,7 +155,7 @@ class OrderItemMappingsController extends Controller
             if ($product) {
                 if ($product->product_category === 'sabor_pizza' && $pizzaSize) {
                     $cmv = $product->calculateCMV($pizzaSize);
-                    
+
                     logger()->info('💰 CMV calculado para sabor', [
                         'product_id' => $product->id,
                         'product_name' => $product->name,
@@ -158,7 +165,16 @@ class OrderItemMappingsController extends Controller
                         'unit_cost' => $product->unit_cost,
                         'has_costs' => $product->costs()->exists(),
                     ]);
-                    
+
+                    $correctCMV = $cmv > 0 ? $cmv : (float) $product->unit_cost;
+                } else {
+                    $correctCMV = (float) $product->unit_cost;
+                }
+            }
+
+            OrderItemMapping::create([
+                'tenant_id' => tenant_id(),
+                'order_item_id' => $orderItem->id,
                 'internal_product_id' => $mapping['internal_product_id'],
                 'quantity' => $mapping['quantity'],
                 'mapping_type' => $mapping['mapping_type'],
