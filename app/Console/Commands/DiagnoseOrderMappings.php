@@ -99,22 +99,22 @@ class DiagnoseOrderMappings extends Command
                         continue;
                     }
 
-                    // IMPORTANTE: Recarregar produto para pegar cmv_by_size atualizado
-                    $product = \App\Models\InternalProduct::find($pm->internal_product_id);
+                    $product = $pm->internalProduct;
                     $this->line("      → {$product->name}");
 
                     $unitCost = (float) $product->unit_cost;
 
-                    // Sabor de pizza: usar CMV por tamanho
+                    // Sabor de pizza: calcular CMV dinamicamente pelo tamanho
                     if ($pm->item_type === 'flavor' && $size) {
-                        if ($product->cmv_by_size && isset($product->cmv_by_size[$size])) {
-                            $cmvBySize = $product->cmv_by_size[$size];
+                        $cmvBySize = $product->calculateCMV($size);
+                        
+                        if ($cmvBySize > 0) {
                             $this->line("      → unit_cost genérico: R$ " . number_format($unitCost, 2, ',', '.'));
                             $this->line("      → CMV {$size}: R$ " . number_format($cmvBySize, 2, ',', '.'));
                             $this->line("      → Fração: 1/{$classifiedFlavors} = " . number_format($fraction * 100, 1) . "%");
                             $unitCost = $cmvBySize;
                         } else {
-                            $this->warn("      ⚠️  cmv_by_size não configurado para {$size}");
+                            $this->warn("      ⚠️  Produto sem ficha técnica para {$size}");
                             $this->line("      → Usando unit_cost: R$ " . number_format($unitCost, 2, ',', '.'));
                         }
                         $cost = $unitCost * $fraction * $qty;

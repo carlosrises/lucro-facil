@@ -107,11 +107,10 @@ class OrderItem extends Model
                     $product = $flavor['product'];
                     $addOnQty = $flavor['quantity'];
 
-                    // Usar CMV por tamanho se disponível
-                    $unitCost = (float) $product->unit_cost;
-                    if ($pizzaSize && $product->cmv_by_size && is_array($product->cmv_by_size)) {
-                        $unitCost = $product->cmv_by_size[$pizzaSize] ?? $unitCost;
-                    }
+                    // Calcular CMV dinamicamente pelo tamanho detectado
+                    $unitCost = $pizzaSize 
+                        ? $product->calculateCMV($pizzaSize)
+                        : (float) $product->unit_cost;
 
                     $totalCost += $unitCost * $fraction * $addOnQty;
                 }
