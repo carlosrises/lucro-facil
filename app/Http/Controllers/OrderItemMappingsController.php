@@ -117,7 +117,7 @@ class OrderItemMappingsController extends Controller
 
         // Buscar mappings existentes antes de deletar (para preservar os que não foram enviados)
         $existingMappings = $orderItem->mappings()->get();
-        
+
         // Deletar apenas os mappings que estão sendo atualizados
         $updatingIds = collect($validated['mappings'])->pluck('id')->filter();
         if ($updatingIds->isNotEmpty()) {
@@ -150,6 +150,14 @@ class OrderItemMappingsController extends Controller
         foreach ($mappingsData as $mapping) {
             $product = InternalProduct::find($mapping['internal_product_id']);
 
+            logger()->info('🔍 Processando mapping', [
+                'product_id' => $product?->id,
+                'product_name' => $product?->name,
+                'product_category' => $product?->product_category,
+                'mapping_type' => $mapping['mapping_type'],
+                'pizza_size' => $pizzaSize,
+            ]);
+
             // Calcular CMV correto: sabores de pizza usam tamanho do produto pai
             $correctCMV = null;
             if ($product) {
@@ -169,6 +177,11 @@ class OrderItemMappingsController extends Controller
                     $correctCMV = $cmv > 0 ? $cmv : (float) $product->unit_cost;
                 } else {
                     $correctCMV = (float) $product->unit_cost;
+                    
+                    logger()->info('💰 Usando unit_cost (não é sabor)', [
+                        'product_category' => $product->product_category,
+                        'unit_cost' => $correctCMV,
+                    ]);
                 }
             }
 

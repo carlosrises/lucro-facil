@@ -43,13 +43,46 @@ class ItemTriageController extends Controller
             return (float) $product->unit_cost;
         }
 
-        $size = $this->detectPizzaSize($orderItem->name);
-        if (!$size) {
+        // Buscar o produto pai através do mapping principal
+        $pizzaSize = null;
+        $mainMapping = $orderItem->mappings()->where('mapping_type', 'main')->first();
+        if ($mainMapping && $mainMapping->internalProduct) {
+            $pizzaSize = $mainMapping->internalProduct->size;
+            
+            logger()->info('🍕 Triagem - Tamanho do produto pai via mapping', [
+                'order_item_id' => $orderItem->id,
+                'order_item_name' => $orderItem->name,
+                'main_product_id' => $mainMapping->internalProduct->id,
+                'main_product_name' => $mainMapping->internalProduct->name,
+                'main_product_size' => $pizzaSize,
+            ]);
+        }
+        
+        // Fallback: detectar do nome do item se produto pai não tiver size
+        if (!$pizzaSize) {
+            $pizzaSize = $this->detectPizzaSize($orderItem->name);
+            
+            logger()->info('🍕 Triagem - Tamanho detectado do nome (fallback)', [
+                'order_item_name' => $orderItem->name,
+                'detected_size' => $pizzaSize,
+            ]);
+        }
+        
+        if (!$pizzaSize) {
             return (float) $product->unit_cost;
         }
 
         // Calcular CMV dinamicamente pela ficha técnica
-        $cmv = $product->calculateCMV($size);
+        $cmv = $product->calculateCMV($pizzaSize);
+        
+        logger()->info('💰 Triagem - CMV calculado', [
+            'product_name' => $product->name,
+            'size' => $pizzaSize,
+            'cmv_calculated' => $cmv,
+            'unit_cost' => $product->unit_cost,
+            'has_costs' => $product->costs()->exists(),
+        ]);
+        
         return $cmv > 0 ? $cmv : (float) $product->unit_cost;
     }
 
@@ -486,6 +519,17 @@ class ItemTriageController extends Controller
         foreach ($orderItems as $orderItem) {
             $product = InternalProduct::find($mapping->internal_product_id);
             $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
+
+            logger()->info('🏷️ Triagem - Associando produto', [
+                'order_item_id' => $orderItem->id,
+                'order_item_name' => $orderItem->name,
+                'product_id' => $product?->id,
+                'product_name' => $product?->name,
+                'product_category' => $product?->product_category,
+                'product_size' => $product?->size,
+                'cmv_calculated' => $correctCMV,
+                'unit_cost' => $product?->unit_cost,
+            ]);
 
             \App\Models\OrderItemMapping::create([
                 'tenant_id' => $tenantId,
