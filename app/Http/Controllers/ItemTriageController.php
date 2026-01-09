@@ -51,18 +51,19 @@ class ItemTriageController extends Controller
             \Log::info('💰 Não é sabor_pizza, usando unit_cost', [
                 'unit_cost' => $product->unit_cost,
             ]);
+
             return (float) $product->unit_cost;
         }
 
         // Buscar o produto pai através do mapping principal
         $pizzaSize = null;
         $mainMapping = $orderItem->mappings()->where('mapping_type', 'main')->first();
-        
+
         \Log::info('🔍 Buscando produto pai', [
             'has_main_mapping' => $mainMapping !== null,
             'main_product_id' => $mainMapping?->internal_product_id,
         ]);
-        
+
         if ($mainMapping && $mainMapping->internalProduct) {
             $pizzaSize = $mainMapping->internalProduct->size;
 
@@ -76,7 +77,7 @@ class ItemTriageController extends Controller
         }
 
         // Fallback: detectar do nome do item se produto pai não tiver size
-        if (!$pizzaSize) {
+        if (! $pizzaSize) {
             $pizzaSize = $this->detectPizzaSize($orderItem->name);
 
             \Log::info('🍕 Triagem - Tamanho detectado do nome (fallback)', [
@@ -85,10 +86,11 @@ class ItemTriageController extends Controller
             ]);
         }
 
-        if (!$pizzaSize) {
+        if (! $pizzaSize) {
             \Log::info('⚠️ Tamanho não detectado, usando unit_cost', [
                 'unit_cost' => $product->unit_cost,
             ]);
+
             return (float) $product->unit_cost;
         }
 
@@ -579,10 +581,21 @@ class ItemTriageController extends Controller
      */
     private function recalculateOrdersWithItem(ProductMapping $mapping, int $tenantId): void
     {
+        \Log::info('🔄 recalculateOrdersWithItem - INÍCIO', [
+            'mapping_id' => $mapping->id,
+            'external_item_id' => $mapping->external_item_id,
+            'internal_product_id' => $mapping->internal_product_id,
+        ]);
+
         // Buscar todos os order_items que têm este SKU
         $orderItems = OrderItem::where('tenant_id', $tenantId)
             ->where('sku', $mapping->external_item_id)
             ->get();
+
+        \Log::info('🔍 OrderItems encontrados', [
+            'count' => $orderItems->count(),
+            'order_item_ids' => $orderItems->pluck('id')->toArray(),
+        ]);
 
         if ($orderItems->isEmpty()) {
             return;
@@ -590,10 +603,21 @@ class ItemTriageController extends Controller
 
         // Atualizar OrderItemMappings existentes com o novo internal_product_id
         foreach ($orderItems as $orderItem) {
+            \Log::info('🔄 Processando OrderItem', [
+                'order_item_id' => $orderItem->id,
+                'order_item_name' => $orderItem->name,
+                'sku' => $orderItem->sku,
+            ]);
+
             // Buscar mappings do tipo 'main' para este order_item
             $itemMappings = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
                 ->where('mapping_type', 'main')
                 ->get();
+
+            \Log::info('🔍 Mappings encontrados', [
+                'count' => $itemMappings->count(),
+                'mapping_ids' => $itemMappings->pluck('id')->toArray(),
+            ]);
 
             if ($itemMappings->isNotEmpty()) {
                 // Atualizar mappings existentes
