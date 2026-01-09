@@ -48,7 +48,7 @@ class ItemTriageController extends Controller
         $mainMapping = $orderItem->mappings()->where('mapping_type', 'main')->first();
         if ($mainMapping && $mainMapping->internalProduct) {
             $pizzaSize = $mainMapping->internalProduct->size;
-            
+
             logger()->info('🍕 Triagem - Tamanho do produto pai via mapping', [
                 'order_item_id' => $orderItem->id,
                 'order_item_name' => $orderItem->name,
@@ -57,24 +57,24 @@ class ItemTriageController extends Controller
                 'main_product_size' => $pizzaSize,
             ]);
         }
-        
+
         // Fallback: detectar do nome do item se produto pai não tiver size
         if (!$pizzaSize) {
             $pizzaSize = $this->detectPizzaSize($orderItem->name);
-            
+
             logger()->info('🍕 Triagem - Tamanho detectado do nome (fallback)', [
                 'order_item_name' => $orderItem->name,
                 'detected_size' => $pizzaSize,
             ]);
         }
-        
+
         if (!$pizzaSize) {
             return (float) $product->unit_cost;
         }
 
         // Calcular CMV dinamicamente pela ficha técnica
         $cmv = $product->calculateCMV($pizzaSize);
-        
+
         logger()->info('💰 Triagem - CMV calculado', [
             'product_name' => $product->name,
             'size' => $pizzaSize,
@@ -82,7 +82,7 @@ class ItemTriageController extends Controller
             'unit_cost' => $product->unit_cost,
             'has_costs' => $product->costs()->exists(),
         ]);
-        
+
         return $cmv > 0 ? $cmv : (float) $product->unit_cost;
     }
 

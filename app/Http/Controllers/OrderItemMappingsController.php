@@ -177,7 +177,7 @@ class OrderItemMappingsController extends Controller
                     $correctCMV = $cmv > 0 ? $cmv : (float) $product->unit_cost;
                 } else {
                     $correctCMV = (float) $product->unit_cost;
-                    
+
                     logger()->info('💰 Usando unit_cost (não é sabor)', [
                         'product_category' => $product->product_category,
                         'unit_cost' => $correctCMV,
