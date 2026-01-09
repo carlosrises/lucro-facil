@@ -48,16 +48,9 @@ class ItemTriageController extends Controller
             return (float) $product->unit_cost;
         }
 
-        $hasCosts = $product->costs()->exists();
-        if ($hasCosts) {
-            return $product->calculateCMV($size);
-        }
-
-        if ($product->cmv_by_size && is_array($product->cmv_by_size) && isset($product->cmv_by_size[$size])) {
-            return (float) $product->cmv_by_size[$size];
-        }
-
-        return (float) $product->unit_cost;
+        // Calcular CMV dinamicamente pela ficha técnica
+        $cmv = $product->calculateCMV($size);
+        return $cmv > 0 ? $cmv : (float) $product->unit_cost;
     }
 
     public function index(Request $request)
@@ -491,6 +484,9 @@ class ItemTriageController extends Controller
             ->get();
 
         foreach ($orderItems as $orderItem) {
+            $product = InternalProduct::find($mapping->internal_product_id);
+            $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
+
             \App\Models\OrderItemMapping::create([
                 'tenant_id' => $tenantId,
                 'order_item_id' => $orderItem->id,
@@ -499,6 +495,7 @@ class ItemTriageController extends Controller
                 'mapping_type' => 'main',
                 'option_type' => 'regular',
                 'auto_fraction' => false,
+                'unit_cost_override' => $correctCMV,
             ]);
         }
     }

@@ -11,6 +11,48 @@ use Inertia\Inertia;
 
 class ProductMappingController extends Controller
 {
+    /**
+     * Detectar tamanho da pizza a partir do nome do item
+     */
+    private function detectPizzaSize(string $itemName): ?string
+    {
+        $itemNameLower = mb_strtolower($itemName);
+
+        if (preg_match('/\bbroto\b/', $itemNameLower)) {
+            return 'broto';
+        }
+        if (preg_match('/\bgrande\b/', $itemNameLower)) {
+            return 'grande';
+        }
+        if (preg_match('/\b(familia|big|don|70x35)\b/', $itemNameLower)) {
+            return 'familia';
+        }
+        if (preg_match('/\b(media|média|m\b)/', $itemNameLower)) {
+            return 'media';
+        }
+
+        return null;
+    }
+
+    /**
+     * Calcular o CMV correto do produto baseado no tamanho
+     */
+    private function calculateCorrectCMV(InternalProduct $product, OrderItem $orderItem): float
+    {
+        if ($product->product_category !== 'sabor_pizza') {
+            return (float) $product->unit_cost;
+        }
+
+        $size = $this->detectPizzaSize($orderItem->name);
+        if (!$size) {
+            return (float) $product->unit_cost;
+        }
+
+        // Calcular CMV dinamicamente pela ficha técnica
+        $cmv = $product->calculateCMV($size);
+        return $cmv > 0 ? $cmv : (float) $product->unit_cost;
+    }
+
     public function index(Request $request)
     {
         $tenantId = $request->user()->tenant_id;
@@ -190,6 +232,9 @@ class ProductMappingController extends Controller
         $mappedCount = 0;
 
         foreach ($orderItems as $orderItem) {
+            $product = InternalProduct::find($mapping->internal_product_id);
+            $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
+
             // Criar OrderItemMapping principal
             OrderItemMapping::create([
                 'tenant_id' => $tenantId,
@@ -199,6 +244,7 @@ class ProductMappingController extends Controller
                 'mapping_type' => 'main',
                 'option_type' => 'regular',
                 'auto_fraction' => false,
+                'unit_cost_override' => $correctCMV,
             ]);
 
             // Auto-mapear complementos (add_ons) se houverem
@@ -226,6 +272,9 @@ class ProductMappingController extends Controller
                         $isPizzaFlavor = stripos($addOn['name'] ?? '', 'pizza') !== false
                             || stripos($mapping->external_item_name ?? '', 'pizza') !== false;
 
+                        $addonProduct = InternalProduct::find($addonMapping->internal_product_id);
+                        $addonCMV = $addonProduct ? $this->calculateCorrectCMV($addonProduct, $orderItem) : null;
+
                         OrderItemMapping::create([
                             'tenant_id' => $tenantId,
                             'order_item_id' => $orderItem->id,
@@ -236,6 +285,7 @@ class ProductMappingController extends Controller
                             'auto_fraction' => $isPizzaFlavor,
                             'external_reference' => (string) $index,
                             'external_name' => $addonName,
+                            'unit_cost_override' => $addonCMV,
                         ]);
                     }
                 }
