@@ -478,12 +478,21 @@ class ItemTriageController extends Controller
             if ($itemMappings->isNotEmpty()) {
                 // Atualizar mappings existentes
                 foreach ($itemMappings as $itemMapping) {
+                    // Calcular CMV correto baseado no tamanho
+                    $product = InternalProduct::find($mapping->internal_product_id);
+                    $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
+
                     $itemMapping->update([
                         'internal_product_id' => $mapping->internal_product_id,
+                        'unit_cost_override' => $correctCMV, // CMV calculado por tamanho
                     ]);
                 }
             } elseif ($mapping->internal_product_id) {
                 // Criar novo mapping se não existir e há produto vinculado
+                // Calcular CMV correto baseado no tamanho
+                $product = InternalProduct::find($mapping->internal_product_id);
+                $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
+
                 \App\Models\OrderItemMapping::create([
                     'tenant_id' => $tenantId,
                     'order_item_id' => $orderItem->id,
@@ -492,6 +501,7 @@ class ItemTriageController extends Controller
                     'mapping_type' => 'main',
                     'option_type' => 'regular',
                     'auto_fraction' => false,
+                    'unit_cost_override' => $correctCMV, // CMV calculado por tamanho
                 ]);
             }
         }
