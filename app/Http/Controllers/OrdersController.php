@@ -127,12 +127,12 @@ class OrdersController extends Controller
 
         $orders = $query->paginate($perPage)->withQueryString();
 
-        // Enriquecer add-ons com seus ProductMappings
+        // Enriquecer add-ons com seus ProductMappings e unit_cost_override dos OrderItemMappings
         foreach ($orders->items() as $order) {
             foreach ($order->items as $item) {
                 if (! empty($item->add_ons) && is_array($item->add_ons)) {
                     $addOnsWithMappings = [];
-                    foreach ($item->add_ons as $addOn) {
+                    foreach ($item->add_ons as $index => $addOn) {
                         $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
                         $addOnSku = 'addon_'.md5($addOnName);
 
@@ -142,10 +142,25 @@ class OrdersController extends Controller
                             ->with('internalProduct:id,name,unit_cost,product_category')
                             ->first();
 
+                        // CRÍTICO: Buscar OrderItemMapping do add-on para obter unit_cost_override
+                        $orderItemMapping = \App\Models\OrderItemMapping::where('order_item_id', $item->id)
+                            ->where('mapping_type', 'addon')
+                            ->where('external_reference', (string) $index)
+                            ->first();
+
+                        // Usar unit_cost_override do OrderItemMapping se existir, senão fallback para unit_cost do produto
+                        $unitCost = null;
+                        if ($orderItemMapping && $orderItemMapping->unit_cost_override !== null) {
+                            $unitCost = (float) $orderItemMapping->unit_cost_override;
+                        } elseif ($mapping && $mapping->internalProduct) {
+                            $unitCost = (float) $mapping->internalProduct->unit_cost;
+                        }
+
                         $addOnsWithMappings[] = [
                             'name' => $addOnName,
                             'sku' => $addOnSku,
                             'external_code' => $addOnSku,
+                            'unit_cost_override' => $unitCost, // NOVO: unit_cost real do OrderItemMapping
                             'product_mapping' => $mapping ? [
                                 'id' => $mapping->id,
                                 'item_type' => $mapping->item_type,
@@ -155,13 +170,6 @@ class OrdersController extends Controller
                                     'name' => $mapping->internalProduct->name,
                                     'unit_cost' => $mapping->internalProduct->unit_cost,
                                     'product_category' => $mapping->internalProduct->product_category,
-                                    // Se for sabor de pizza, incluir CMVs por tamanho
-                                    'cmv_by_size' => $mapping->internalProduct->product_category === 'sabor_pizza' ? [
-                                        'broto' => $mapping->internalProduct->calculateCMV('broto'),
-                                        'media' => $mapping->internalProduct->calculateCMV('media'),
-                                        'grande' => $mapping->internalProduct->calculateCMV('grande'),
-                                        'familia' => $mapping->internalProduct->calculateCMV('familia'),
-                                    ] : null,
                                 ] : null,
                             ] : null,
                         ];

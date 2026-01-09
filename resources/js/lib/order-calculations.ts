@@ -14,6 +14,7 @@ type OrderItem = {
     add_ons_enriched?: Array<{
         name: string;
         sku: string;
+        unit_cost_override?: number | null; // CMV real do OrderItemMapping
         product_mapping?: {
             id: number;
             item_type?: string;
@@ -22,12 +23,6 @@ type OrderItem = {
                 name: string;
                 unit_cost: string;
                 product_category?: string;
-                cmv_by_size?: {
-                    broto?: number;
-                    media?: number;
-                    grande?: number;
-                    familia?: number;
-                };
             };
         };
     }>;
@@ -133,32 +128,24 @@ export function calculateOrderCMV(items: OrderItem[]): number {
 
             const addOnsCost = item.add_ons_enriched.reduce(
                 (addOnSum: number, addOn: any) => {
-                    const internalProduct =
-                        addOn.product_mapping?.internal_product;
                     const isFlavor =
                         addOn.product_mapping?.item_type === 'flavor';
 
-                    let baseAddonCost = 0;
-
-                    if (internalProduct) {
-                        // Se for sabor de pizza e tiver CMV por tamanho, usar o CMV do tamanho detectado
-                        if (
-                            isFlavor &&
-                            pizzaSize &&
-                            internalProduct.cmv_by_size &&
-                            internalProduct.cmv_by_size[pizzaSize]
-                        ) {
-                            baseAddonCost = parseFloat(
-                                String(internalProduct.cmv_by_size[pizzaSize]),
-                            );
-                        } else if (internalProduct.unit_cost) {
-                            baseAddonCost = parseFloat(
-                                internalProduct.unit_cost,
-                            );
-                        }
+                    // PRIORIDADE 1: Usar unit_cost_override se existir (valor do OrderItemMapping)
+                    if (addOn.unit_cost_override !== undefined && addOn.unit_cost_override !== null) {
+                        // Se for sabor, já vem com a fração aplicada do backend
+                        return addOnSum + parseFloat(String(addOn.unit_cost_override));
                     }
 
-                    // Aplicar fração se for sabor
+                    // FALLBACK: Usar unit_cost do produto (sistema legado)
+                    const internalProduct = addOn.product_mapping?.internal_product;
+                    let baseAddonCost = 0;
+
+                    if (internalProduct?.unit_cost) {
+                        baseAddonCost = parseFloat(internalProduct.unit_cost);
+                    }
+
+                    // Aplicar fração se for sabor (apenas no fallback)
                     const addonCost =
                         isFlavor && totalFlavors > 1
                             ? baseAddonCost / totalFlavors
