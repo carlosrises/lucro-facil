@@ -93,24 +93,6 @@ class OrderItemMapping extends Model
         return $unitCost * $quantity;
     }
 
-        // Padrões de grande
-        if (preg_match('/\b(grande|gd|g)\b/i', $nameLower)) {
-            return 'grande';
-        }
-
-        // Padrões de média
-        if (preg_match('/\b(media|média|md|m)\b/i', $nameLower)) {
-            return 'media';
-        }
-
-        // Padrões de broto
-        if (preg_match('/\b(broto|brotinho|bt|b)\b/i', $nameLower)) {
-            return 'broto';
-        }
-
-        return null;
-    }
-
     /**
      * Verificar se é um sabor de pizza
      */
