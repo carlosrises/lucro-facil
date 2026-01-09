@@ -512,7 +512,7 @@ class ItemTriageController extends Controller
             // Se for add-on (sabor), usar FlavorMappingService
             if (str_starts_with($validated['sku'], 'addon_') && $validated['item_type'] === 'flavor' && $validated['internal_product_id']) {
                 \Log::info('🍕 É add-on flavor, usando FlavorMappingService');
-                
+
                 $flavorService = new \App\Services\FlavorMappingService;
                 $mappedCount = $flavorService->mapFlavorToAllOccurrences($mapping, $tenantId);
 
@@ -669,17 +669,8 @@ class ItemTriageController extends Controller
             }
         }
 
-        // Buscar pedidos únicos e recalcular CMV
-        $orderIds = $orderItems->pluck('order_id')->unique();
-        $orders = Order::whereIn('id', $orderIds)->get();
-        $costService = app(\App\Services\OrderCostService::class);
-
-        foreach ($orders as $order) {
-            try {
-                $costService->applyAndSaveCosts($order);
-            } catch (\Exception $e) {
-                \Log::error("Erro ao recalcular custos do pedido {$order->id} após atualizar mapping: ".$e->getMessage());
-            }
-        }
+        \Log::info('✅ OrderItemMappings atualizados', [
+            'order_items_count' => $orderItems->count(),
+        ]);
     }
 }

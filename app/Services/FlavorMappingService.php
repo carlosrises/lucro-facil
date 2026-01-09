@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\InternalProduct;
-use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderItemMapping;
 use App\Models\ProductMapping;
@@ -142,7 +141,6 @@ class FlavorMappingService
         }
 
         $mappedCount = 0;
-        $affectedOrderIds = collect();
 
         // Buscar todos os order_items que contêm este sabor nos add_ons
         $orderItems = OrderItem::where('tenant_id', $tenantId)
@@ -207,9 +205,6 @@ class FlavorMappingService
                     ]);
 
                     $mappedCount++;
-                    
-                    // Marcar pedido para recalcular
-                    $affectedOrderIds->push($orderItem->order_id);
                     continue;
                 }
 
@@ -242,9 +237,6 @@ class FlavorMappingService
 
                 $mappedCount++;
 
-                // Marcar pedido para recalcular
-                $affectedOrderIds->push($orderItem->order_id);
-
                 // NOVO: Recalcular frações de todos os sabores deste order_item
                 $this->recalculateAllFlavorsForOrderItem($orderItem);
             }
@@ -252,46 +244,9 @@ class FlavorMappingService
 
         \Log::info('✅ FlavorMappingService - Mappings concluídos', [
             'mapped_count' => $mappedCount,
-            'affected_orders' => $affectedOrderIds->unique()->count(),
         ]);
-
-        // CRÍTICO: Recalcular custos de todos os pedidos afetados
-        if ($affectedOrderIds->isNotEmpty()) {
-            $this->recalculateAffectedOrders($affectedOrderIds->unique());
-        }
 
         return $mappedCount;
-    }
-
-    /**
-     * Recalcular custos de todos os pedidos afetados
-     */
-    protected function recalculateAffectedOrders($orderIds): void
-    {
-        \Log::info('🔄 Recalculando custos dos pedidos afetados', [
-            'order_count' => $orderIds->count(),
-        ]);
-
-        $orders = Order::whereIn('id', $orderIds)->get();
-        $costService = app(\App\Services\OrderCostService::class);
-
-        foreach ($orders as $order) {
-            try {
-                $costService->applyAndSaveCosts($order);
-                
-                \Log::info('✅ Pedido recalculado', [
-                    'order_id' => $order->id,
-                    'new_total_cost' => $order->total_cost,
-                ]);
-            } catch (\Exception $e) {
-                \Log::error('❌ Erro ao recalcular pedido', [
-                    'order_id' => $order->id,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        \Log::info('✅ Recálculo de pedidos concluído');
     }
 
     /**
