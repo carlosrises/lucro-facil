@@ -26,7 +26,6 @@ import { type NavGroup, NavItem, type SharedData } from '@/types';
 
 import { Link, usePage } from '@inertiajs/react';
 import {
-    Boxes,
     ChartBarBig,
     ClipboardList,
     CreditCard,
@@ -91,43 +90,43 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
             },
         ],
     },
-    {
-        title: 'Fluxo de Caixa',
-        href: '#',
-        icon: Wallet,
-        locked: true,
-    },
-    {
-        title: 'Estoque',
-        icon: Boxes,
-        items: [
-            {
-                title: 'Inventário',
-                href: '#',
-                locked: true,
-            },
-            {
-                title: 'Compras',
-                href: '#',
-                locked: true,
-            },
-            {
-                title: 'Análise',
-                href: '#',
-                locked: true,
-            },
-            {
-                title: 'Lista de Produção',
-                href: '#',
-                locked: true,
-            },
-            {
-                title: 'Movimentação',
-                href: '#',
-                locked: true,
-            },
-        ],
-    },
+    // {
+    //     title: 'Fluxo de Caixa',
+    //     href: '#',
+    //     icon: Wallet,
+    //     locked: true,
+    // },
+    // {
+    //     title: 'Estoque',
+    //     icon: Boxes,
+    //     items: [
+    //         {
+    //             title: 'Inventário',
+    //             href: '#',
+    //             locked: true,
+    //         },
+    //         {
+    //             title: 'Compras',
+    //             href: '#',
+    //             locked: true,
+    //         },
+    //         {
+    //             title: 'Análise',
+    //             href: '#',
+    //             locked: true,
+    //         },
+    //         {
+    //             title: 'Lista de Produção',
+    //             href: '#',
+    //             locked: true,
+    //         },
+    //         {
+    //             title: 'Movimentação',
+    //             href: '#',
+    //             locked: true,
+    //         },
+    //     ],
+    // },
     {
         title: 'Cadastros IPC',
         icon: ClipboardList,
@@ -140,11 +139,11 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
                 title: 'Produtos',
                 href: '/products',
             },
-            {
-                title: 'Mapeamento',
-                href: '/product-mappings',
-                locked: true,
-            },
+            // {
+            //     title: 'Mapeamento',
+            //     href: '/product-mappings',
+            //     locked: true,
+            // },
             {
                 title: 'Categorias',
                 href: '/categories',
@@ -153,11 +152,11 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
                 title: 'Categorias Fiscais',
                 href: '/tax-categories',
             },
-            {
-                title: 'Combos',
-                href: '#',
-                locked: true,
-            },
+            // {
+            //     title: 'Combos',
+            //     href: '#',
+            //     locked: true,
+            // },
         ],
     },
     {
@@ -168,11 +167,11 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
                 title: 'Curva ABC',
                 href: '/abc-curve',
             },
-            {
-                title: 'DRE',
-                href: '#',
-                locked: true,
-            },
+            // {
+            //     title: 'DRE',
+            //     href: '#',
+            //     locked: true,
+            // },
             {
                 title: 'Análise CMV',
                 href: '#',
@@ -215,12 +214,12 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
             },
         ],
     },
-    {
-        title: 'Custos Fixos',
-        href: '#',
-        icon: Wallet,
-        locked: true,
-    },
+    // {
+    //     title: 'Custos Fixos',
+    //     href: '#',
+    //     icon: Wallet,
+    //     locked: true,
+    // },
     {
         title: 'Relatórios',
         href: '#',
