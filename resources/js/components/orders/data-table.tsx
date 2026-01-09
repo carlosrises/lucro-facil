@@ -1141,7 +1141,9 @@ export function DataTable({
                                                                                         {(item.internal_product ||
                                                                                             (item.mappings &&
                                                                                                 item.mappings.some(
-                                                                                                    (m) =>
+                                                                                                    (
+                                                                                                        m,
+                                                                                                    ) =>
                                                                                                         m.mapping_type ===
                                                                                                         'main',
                                                                                                 ))) && (

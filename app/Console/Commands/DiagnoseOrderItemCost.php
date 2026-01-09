@@ -73,7 +73,7 @@ class DiagnoseOrderItemCost extends Command
         }
 
         $this->newLine();
-        
+
         $this->line("📋 1. ProductMapping (SKU → Produto Interno):");
         $productMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
             ->where('external_item_id', $orderItem->sku)
@@ -176,25 +176,25 @@ class DiagnoseOrderItemCost extends Command
         if ($orderItem->add_ons && is_array($orderItem->add_ons)) {
             $this->newLine();
             $this->line("📎 5. Add-ons no JSON do pedido:");
-            
+
             $detectedSize = $this->detectPizzaSize($orderItem->name);
-            
+
             foreach ($orderItem->add_ons as $index => $addOn) {
                 $addOnName = $addOn['name'] ?? 'N/A';
                 $addOnQty = $addOn['quantity'] ?? $addOn['qty'] ?? 1;
                 $this->line("   [{$index}] {$addOnName} ({$addOnQty}x)");
-                
+
                 // Verificar se este add-on tem ProductMapping
                 $addOnSku = 'addon_'.md5($addOnName);
                 $productMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
                     ->where('external_item_id', $addOnSku)
                     ->where('item_type', 'flavor')
                     ->first();
-                
+
                 if ($productMapping && $productMapping->internalProduct) {
                     $product = $productMapping->internalProduct;
                     $this->line("      → Produto: {$product->name}");
-                    
+
                     // Verificar se tem CMV por tamanho
                     if ($product->cmv_by_size && is_array($product->cmv_by_size)) {
                         $this->line("      → CMV por tamanho:");
@@ -202,7 +202,7 @@ class DiagnoseOrderItemCost extends Command
                             $marker = ($detectedSize && $size === $detectedSize) ? ' ← TAMANHO ATUAL' : '';
                             $this->line("         • {$size}: R$ " . number_format($cost, 2, ',', '.') . $marker);
                         }
-                        
+
                         // Verificar se o custo usado está correto
                         $unitCost = floatval($product->unit_cost);
                         if ($detectedSize && isset($product->cmv_by_size[$detectedSize])) {
@@ -224,31 +224,31 @@ class DiagnoseOrderItemCost extends Command
             }
         }
     }
-    
+
     /**
      * Detectar tamanho da pizza a partir do nome
      */
     protected function detectPizzaSize(string $itemName): ?string
     {
         $itemNameLower = strtolower($itemName);
-        
+
         // Broto
         if (str_contains($itemNameLower, 'broto')) {
             return 'broto';
         }
-        
+
         // Média
         if (str_contains($itemNameLower, 'média') || str_contains($itemNameLower, 'media')) {
             return 'media';
         }
-        
+
         // Grande
         if (str_contains($itemNameLower, 'grande')) {
             return 'grande';
         }
-        
+
         // Família (vários padrões)
-        if (str_contains($itemNameLower, 'família') || 
+        if (str_contains($itemNameLower, 'família') ||
             str_contains($itemNameLower, 'familia') ||
             str_contains($itemNameLower, 'big') ||
             str_contains($itemNameLower, 'don') ||
@@ -257,7 +257,7 @@ class DiagnoseOrderItemCost extends Command
             str_contains($itemNameLower, 'super')) {
             return 'familia';
         }
-        
+
         return null;
     }
 }
