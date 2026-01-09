@@ -142,7 +142,7 @@ class OrdersController extends Controller
                             ->with('internalProduct:id,name,unit_cost,product_category')
                             ->first();
 
-                        // CRÍTICO: Buscar OrderItemMapping do add-on para obter unit_cost_override
+                        // CRÍTICO: Buscar OrderItemMapping do add-on para obter unit_cost_override e quantity (fração)
                         $orderItemMapping = \App\Models\OrderItemMapping::where('order_item_id', $item->id)
                             ->where('mapping_type', 'addon')
                             ->where('external_reference', (string) $index)
@@ -150,17 +150,21 @@ class OrdersController extends Controller
 
                         // Usar unit_cost_override do OrderItemMapping se existir, senão fallback para unit_cost do produto
                         $unitCost = null;
+                        $mappingQuantity = null;
                         if ($orderItemMapping && $orderItemMapping->unit_cost_override !== null) {
                             $unitCost = (float) $orderItemMapping->unit_cost_override;
+                            $mappingQuantity = (float) $orderItemMapping->quantity; // Fração do sabor (ex: 0.25 para 1/4)
                         } elseif ($mapping && $mapping->internalProduct) {
                             $unitCost = (float) $mapping->internalProduct->unit_cost;
+                            $mappingQuantity = 1.0; // Sem fração
                         }
 
                         $addOnsWithMappings[] = [
                             'name' => $addOnName,
                             'sku' => $addOnSku,
                             'external_code' => $addOnSku,
-                            'unit_cost_override' => $unitCost, // NOVO: unit_cost real do OrderItemMapping
+                            'unit_cost_override' => $unitCost, // CMV unitário do OrderItemMapping
+                            'mapping_quantity' => $mappingQuantity, // Fração do sabor (0.25 = 1/4)
                             'product_mapping' => $mapping ? [
                                 'id' => $mapping->id,
                                 'item_type' => $mapping->item_type,

@@ -14,7 +14,8 @@ type OrderItem = {
     add_ons_enriched?: Array<{
         name: string;
         sku: string;
-        unit_cost_override?: number | null; // CMV real do OrderItemMapping
+        unit_cost_override?: number | null; // CMV unitário do OrderItemMapping
+        mapping_quantity?: number | null; // Fração do sabor (ex: 0.25 = 1/4)
         product_mapping?: {
             id: number;
             item_type?: string;
@@ -133,8 +134,9 @@ export function calculateOrderCMV(items: OrderItem[]): number {
 
                     // PRIORIDADE 1: Usar unit_cost_override se existir (valor do OrderItemMapping)
                     if (addOn.unit_cost_override !== undefined && addOn.unit_cost_override !== null) {
-                        // Se for sabor, já vem com a fração aplicada do backend
-                        return addOnSum + parseFloat(String(addOn.unit_cost_override));
+                        // Aplicar a fração (mapping_quantity) se existir
+                        const quantity = addOn.mapping_quantity || 1.0;
+                        return addOnSum + (parseFloat(String(addOn.unit_cost_override)) * quantity);
                     }
 
                     // FALLBACK: Usar unit_cost do produto (sistema legado)

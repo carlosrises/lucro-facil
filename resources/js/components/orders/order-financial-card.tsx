@@ -1043,12 +1043,17 @@ export function OrderFinancialCard({
                                                                             addOn.unit_cost_override !==
                                                                                 null
                                                                         ) {
+                                                                            // Aplicar a fração (mapping_quantity) se existir
+                                                                            const quantity =
+                                                                                addOn.mapping_quantity ||
+                                                                                1.0;
                                                                             addonCost =
                                                                                 parseFloat(
                                                                                     String(
                                                                                         addOn.unit_cost_override,
                                                                                     ),
-                                                                                );
+                                                                                ) *
+                                                                                quantity;
                                                                         } else {
                                                                             // FALLBACK: Sistema legado
                                                                             const internalProduct =
