@@ -93,11 +93,23 @@ class OrderItemMappingsController extends Controller
         // Deletar associações antigas
         $orderItem->mappings()->delete();
 
+        // Detectar tamanho da pizza uma vez
+        $pizzaSize = $this->detectPizzaSize($orderItem->name);
+
         // Criar novas associações
         foreach ($mappingsData as $mapping) {
-            // Calcular CMV correto baseado no tamanho
             $product = InternalProduct::find($mapping['internal_product_id']);
-            $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
+            
+            // Calcular CMV correto: sabores de pizza usam tamanho detectado
+            $correctCMV = null;
+            if ($product) {
+                if ($product->product_category === 'sabor_pizza' && $pizzaSize) {
+                    $cmv = $product->calculateCMV($pizzaSize);
+                    $correctCMV = $cmv > 0 ? $cmv : (float) $product->unit_cost;
+                } else {
+                    $correctCMV = (float) $product->unit_cost;
+                }
+            }
 
             OrderItemMapping::create([
                 'tenant_id' => tenant_id(),
@@ -110,7 +122,7 @@ class OrderItemMappingsController extends Controller
                 'notes' => $mapping['notes'] ?? null,
                 'external_reference' => $mapping['external_reference'] ?? null,
                 'external_name' => $mapping['external_name'] ?? null,
-                'unit_cost_override' => $correctCMV, // CMV calculado por tamanho
+                'unit_cost_override' => $correctCMV,
             ]);
         }
 
