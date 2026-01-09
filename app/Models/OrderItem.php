@@ -77,19 +77,19 @@ class OrderItem extends Model
         if ($this->add_ons && is_array($this->add_ons)) {
             // Detectar tamanho da pizza
             $pizzaSize = $this->detectPizzaSize($this->name);
-            
+
             // Contar sabores classificados
             $classifiedFlavors = [];
             foreach ($this->add_ons as $index => $addOn) {
                 $addOnName = $addOn['name'] ?? '';
                 if (!$addOnName) continue;
-                
+
                 $addOnSku = 'addon_'.md5($addOnName);
                 $productMapping = ProductMapping::where('tenant_id', $this->tenant_id)
                     ->where('external_item_id', $addOnSku)
                     ->where('item_type', 'flavor')
                     ->first();
-                
+
                 if ($productMapping && $productMapping->internalProduct) {
                     $classifiedFlavors[] = [
                         'product' => $productMapping->internalProduct,
@@ -97,22 +97,22 @@ class OrderItem extends Model
                     ];
                 }
             }
-            
+
             // Calcular custo dos sabores
             $totalFlavors = count($classifiedFlavors);
             if ($totalFlavors > 0) {
                 $fraction = 1.0 / $totalFlavors;
-                
+
                 foreach ($classifiedFlavors as $flavor) {
                     $product = $flavor['product'];
                     $addOnQty = $flavor['quantity'];
-                    
+
                     // Usar CMV por tamanho se disponível
                     $unitCost = (float) $product->unit_cost;
                     if ($pizzaSize && $product->cmv_by_size && is_array($product->cmv_by_size)) {
                         $unitCost = $product->cmv_by_size[$pizzaSize] ?? $unitCost;
                     }
-                    
+
                     $totalCost += $unitCost * $fraction * $addOnQty;
                 }
             }

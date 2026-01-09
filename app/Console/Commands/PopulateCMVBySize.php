@@ -39,14 +39,14 @@ class PopulateCMVBySize extends Command
 
         foreach ($products as $product) {
             $this->line("🍕 {$product->name}");
-            
+
             $sizes = ['broto', 'media', 'grande', 'familia'];
             $cmvBySize = [];
             $hasAnyCost = false;
 
             foreach ($sizes as $size) {
                 $cmv = $product->calculateCMV($size);
-                
+
                 if ($cmv > 0) {
                     $cmvBySize[$size] = $cmv;
                     $hasAnyCost = true;

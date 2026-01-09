@@ -29,6 +29,7 @@ class InternalProduct extends Model
         'default_margin_value',
         'active',
         'is_ingredient',
+        'cmv_by_size',
     ];
 
     protected $casts = [
@@ -38,6 +39,7 @@ class InternalProduct extends Model
         'default_margin_percent' => 'decimal:2',
         'default_margin_value' => 'decimal:2',
         'active' => 'boolean',
+        'cmv_by_size' => 'array',
     ];
 
     public function costs(): HasMany
