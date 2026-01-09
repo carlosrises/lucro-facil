@@ -572,6 +572,15 @@ class ItemTriageController extends Controller
                     $product = InternalProduct::find($mapping->internal_product_id);
                     $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
 
+                    logger()->info('🔄 Triagem - Recalculando mapping existente', [
+                        'order_item_id' => $orderItem->id,
+                        'order_item_name' => $orderItem->name,
+                        'product_id' => $product?->id,
+                        'product_name' => $product?->name,
+                        'product_category' => $product?->product_category,
+                        'cmv_calculated' => $correctCMV,
+                    ]);
+
                     $itemMapping->update([
                         'internal_product_id' => $mapping->internal_product_id,
                         'unit_cost_override' => $correctCMV, // CMV calculado por tamanho
