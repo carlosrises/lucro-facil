@@ -148,15 +148,34 @@ class OrdersController extends Controller
                             ->where('external_reference', (string) $index)
                             ->first();
 
+                        \Log::info('🔍 OrdersController - Buscando OrderItemMapping', [
+                            'order_item_id' => $item->id,
+                            'addon_name' => $addOnName,
+                            'index' => $index,
+                            'found_mapping' => $orderItemMapping !== null,
+                            'unit_cost_override' => $orderItemMapping?->unit_cost_override,
+                            'quantity' => $orderItemMapping?->quantity,
+                        ]);
+
                         // Usar unit_cost_override do OrderItemMapping se existir, senão fallback para unit_cost do produto
                         $unitCost = null;
                         $mappingQuantity = null;
                         if ($orderItemMapping && $orderItemMapping->unit_cost_override !== null) {
                             $unitCost = (float) $orderItemMapping->unit_cost_override;
                             $mappingQuantity = (float) $orderItemMapping->quantity; // Fração do sabor (ex: 0.25 para 1/4)
+                            
+                            \Log::info('✅ Usando OrderItemMapping', [
+                                'unit_cost' => $unitCost,
+                                'quantity' => $mappingQuantity,
+                            ]);
                         } elseif ($mapping && $mapping->internalProduct) {
                             $unitCost = (float) $mapping->internalProduct->unit_cost;
                             $mappingQuantity = 1.0; // Sem fração
+                            
+                            \Log::info('⚠️ Fallback para ProductMapping', [
+                                'unit_cost' => $unitCost,
+                                'quantity' => $mappingQuantity,
+                            ]);
                         }
 
                         $addOnsWithMappings[] = [

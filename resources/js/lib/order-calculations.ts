@@ -136,7 +136,18 @@ export function calculateOrderCMV(items: OrderItem[]): number {
                     if (addOn.unit_cost_override !== undefined && addOn.unit_cost_override !== null) {
                         // Aplicar a fração (mapping_quantity) se existir
                         const quantity = addOn.mapping_quantity || 1.0;
-                        return addOnSum + (parseFloat(String(addOn.unit_cost_override)) * quantity);
+                        const cost = parseFloat(String(addOn.unit_cost_override)) * quantity;
+                        
+                        console.log('🍕 CMV Add-on:', {
+                            name: addOn.name,
+                            unit_cost_override: addOn.unit_cost_override,
+                            mapping_quantity: addOn.mapping_quantity,
+                            quantity: quantity,
+                            calculated_cost: cost,
+                            is_flavor: isFlavor
+                        });
+                        
+                        return addOnSum + cost;
                     }
 
                     // FALLBACK: Usar unit_cost do produto (sistema legado)
