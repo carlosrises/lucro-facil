@@ -251,34 +251,27 @@ class FlavorMappingService
 
     /**
      * Recalcular frações de TODOS os sabores de um order_item
-     * Isso é chamado quando um novo sabor é adicionado
-     * IMPORTANTE: Só recalcula sabores que JÁ foram classificados (têm ProductMapping tipo 'flavor')
+     * Cria mappings para sabores classificados que ainda não têm, e atualiza frações de todos
      */
     protected function recalculateAllFlavorsForOrderItem(OrderItem $orderItem): void
     {
-        // Buscar TODOS os mappings de sabores deste order_item
-        $flavorMappings = OrderItemMapping::where('order_item_id', $orderItem->id)
-            ->where('mapping_type', 'addon')
-            ->where('option_type', 'pizza_flavor')
-            ->where('auto_fraction', true)
-            ->get();
+        \Log::info('🔄 recalculateAllFlavorsForOrderItem', [
+            'order_item_id' => $orderItem->id,
+            'order_item_name' => $orderItem->name,
+        ]);
 
-        if ($flavorMappings->isEmpty()) {
+        // Buscar todos os add-ons que são sabores (têm ProductMapping tipo 'flavor')
+        $addOns = $orderItem->add_ons;
+        if (!is_array($addOns) || empty($addOns)) {
             return;
         }
 
-        // Filtrar apenas sabores que foram classificados (têm ProductMapping tipo 'flavor')
-        $classifiedFlavors = $flavorMappings->filter(function ($mapping) use ($orderItem) {
-            // Buscar o add-on para pegar o nome
-            $addOns = $orderItem->add_ons;
-            if (!is_array($addOns) || !isset($addOns[$mapping->external_reference])) {
-                return false;
-            }
-
-            $addOn = $addOns[$mapping->external_reference];
+        $classifiedFlavors = [];
+        
+        foreach ($addOns as $index => $addOn) {
             $addOnName = $addOn['name'] ?? '';
             if (!$addOnName) {
-                return false;
+                continue;
             }
 
             // Verificar se este add-on tem ProductMapping do tipo 'flavor'
@@ -288,29 +281,73 @@ class FlavorMappingService
                 ->where('item_type', 'flavor')
                 ->first();
 
-            return $productMapping !== null;
-        });
+            if ($productMapping && $productMapping->internal_product_id) {
+                $classifiedFlavors[] = [
+                    'index' => $index,
+                    'name' => $addOnName,
+                    'product_mapping' => $productMapping,
+                    'quantity' => $addOn['quantity'] ?? $addOn['qty'] ?? 1,
+                ];
+            }
+        }
 
-        if ($classifiedFlavors->isEmpty()) {
+        if (empty($classifiedFlavors)) {
+            \Log::info('⚠️ Nenhum sabor classificado encontrado');
             return;
         }
 
-        $totalFlavors = $classifiedFlavors->count();
+        $totalFlavors = count($classifiedFlavors);
         $newFraction = 1.0 / $totalFlavors;
 
-        // Atualizar fração de cada sabor classificado, mantendo a quantidade do add-on
-        foreach ($classifiedFlavors as $mapping) {
-            // Buscar o add-on original para pegar a quantidade
-            $addOns = $orderItem->add_ons;
-            $addOnQuantity = 1;
+        \Log::info('📊 Frações calculadas', [
+            'total_flavors' => $totalFlavors,
+            'fraction' => $newFraction,
+        ]);
 
-            if (is_array($addOns) && isset($addOns[$mapping->external_reference])) {
-                $addOn = $addOns[$mapping->external_reference];
-                $addOnQuantity = $addOn['quantity'] ?? $addOn['qty'] ?? 1;
+        // Para cada sabor classificado, criar ou atualizar OrderItemMapping
+        foreach ($classifiedFlavors as $flavor) {
+            $existingMapping = OrderItemMapping::where('order_item_id', $orderItem->id)
+                ->where('mapping_type', 'addon')
+                ->where('external_reference', (string) $flavor['index'])
+                ->first();
+
+            // Calcular CMV correto baseado no tamanho
+            $product = InternalProduct::find($flavor['product_mapping']->internal_product_id);
+            $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
+
+            if ($existingMapping) {
+                // Atualizar mapping existente
+                $existingMapping->update([
+                    'quantity' => $newFraction * $flavor['quantity'],
+                    'unit_cost_override' => $correctCMV,
+                ]);
+
+                \Log::info('✅ Mapping atualizado', [
+                    'index' => $flavor['index'],
+                    'name' => $flavor['name'],
+                    'new_quantity' => $newFraction * $flavor['quantity'],
+                ]);
+            } else {
+                // Criar novo mapping
+                OrderItemMapping::create([
+                    'tenant_id' => $orderItem->tenant_id,
+                    'order_item_id' => $orderItem->id,
+                    'internal_product_id' => $flavor['product_mapping']->internal_product_id,
+                    'quantity' => $newFraction * $flavor['quantity'],
+                    'mapping_type' => 'addon',
+                    'option_type' => 'pizza_flavor',
+                    'auto_fraction' => true,
+                    'external_reference' => (string) $flavor['index'],
+                    'external_name' => $flavor['name'],
+                    'unit_cost_override' => $correctCMV,
+                ]);
+
+                \Log::info('✨ Mapping criado', [
+                    'index' => $flavor['index'],
+                    'name' => $flavor['name'],
+                    'quantity' => $newFraction * $flavor['quantity'],
+                ]);
             }
-
-            // Atualizar: nova fração x quantidade do add-on
-            $mapping->update(['quantity' => $newFraction * $addOnQuantity]);
         }
     }
 
