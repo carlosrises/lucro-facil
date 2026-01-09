@@ -509,7 +509,17 @@ class ItemTriageController extends Controller
                 'internal_product_id' => $validated['internal_product_id'],
             ]);
 
-            // Recalcular CMV dos pedidos que têm este item
+            // Se for add-on (sabor), usar FlavorMappingService
+            if (str_starts_with($validated['sku'], 'addon_') && $validated['item_type'] === 'flavor' && $validated['internal_product_id']) {
+                \Log::info('🍕 É add-on flavor, usando FlavorMappingService');
+                
+                $flavorService = new \App\Services\FlavorMappingService;
+                $mappedCount = $flavorService->mapFlavorToAllOccurrences($mapping, $tenantId);
+
+                return back()->with('success', "Sabor atualizado e aplicado a {$mappedCount} ocorrências!");
+            }
+
+            // Recalcular CMV dos pedidos que têm este item (apenas para itens principais)
             $this->recalculateOrdersWithItem($mapping, $tenantId);
         } else {
             // Criar novo mapping
