@@ -1137,32 +1137,6 @@ export function DataTable({
                                                                                                 <Pencil className="h-3 w-3" />
                                                                                             </Button> */}
                                                                                         </div>
-                                                                                        {/* Mostrar custo apenas se tem mapping 'main' ou internal_product direto */}
-                                                                                        {(item.internal_product ||
-                                                                                            (item.mappings &&
-                                                                                                item.mappings.some(
-                                                                                                    (
-                                                                                                        m,
-                                                                                                    ) =>
-                                                                                                        m.mapping_type ===
-                                                                                                        'main',
-                                                                                                ))) && (
-                                                                                            <div className="mt-1 text-xs font-semibold text-emerald-600">
-                                                                                                Custo:{' '}
-                                                                                                {new Intl.NumberFormat(
-                                                                                                    'pt-BR',
-                                                                                                    {
-                                                                                                        style: 'currency',
-                                                                                                        currency:
-                                                                                                            'BRL',
-                                                                                                    },
-                                                                                                ).format(
-                                                                                                    calculateItemCost(
-                                                                                                        item,
-                                                                                                    ),
-                                                                                                )}
-                                                                                            </div>
-                                                                                        )}
                                                                                         {item.observations && (
                                                                                             <div className="mt-1 text-xs text-muted-foreground italic">
                                                                                                 Obs:{' '}

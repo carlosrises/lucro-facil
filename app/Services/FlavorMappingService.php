@@ -267,7 +267,7 @@ class FlavorMappingService
         }
 
         $classifiedFlavors = [];
-        
+
         foreach ($addOns as $index => $addOn) {
             $addOnName = $addOn['name'] ?? '';
             if (!$addOnName) {
