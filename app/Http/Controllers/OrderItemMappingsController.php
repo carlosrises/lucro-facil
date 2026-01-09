@@ -90,17 +90,57 @@ class OrderItemMappingsController extends Controller
             $validated['mappings']
         );
 
-        // Deletar associações antigas
-        $orderItem->mappings()->delete();
+        // Detectar tamanho da pizza do produto pai (main)
+        $pizzaSize = null;
+        $mainMapping = collect($mappingsData)->firstWhere('mapping_type', 'main');
+        if ($mainMapping) {
+            $mainProduct = InternalProduct::find($mainMapping['internal_product_id']);
+            if ($mainProduct && $mainProduct->size) {
+                $pizzaSize = $mainProduct->size;
+            }
+        }
+        
+        // Fallback: detectar do nome se produto pai não tiver size
+        if (!$pizzaSize) {
+            $pizzaSize = $this->detectPizzaSize($orderItem->name);
+        }
 
-        // Detectar tamanho da pizza uma vez
-        $pizzaSize = $this->detectPizzaSize($orderItem->name);
+        // Buscar mappings existentes antes de deletar (para preservar os que não foram enviados)
+        $existingMappings = $orderItem->mappings()->get();
+        
+        // Deletar apenas os mappings que estão sendo atualizados
+        $updatingIds = collect($validated['mappings'])->pluck('id')->filter();
+        if ($updatingIds->isNotEmpty()) {
+            $orderItem->mappings()->whereIn('id', $updatingIds)->delete();
+        }
 
-        // Criar novas associações
+        // Mesclar: mappings novos + mappings existentes que não foram atualizados
+        $mappingsToRecreate = collect($mappingsData);
+        
+        foreach ($existingMappings as $existing) {
+            $isBeingUpdated = collect($validated['mappings'])->contains('id', $existing->id);
+            if (!$isBeingUpdated) {
+                // Recalcular CMV dos sabores existentes com o novo tamanho
+                $product = $existing->internalProduct;
+                $correctCMV = null;
+                
+                if ($product && $product->product_category === 'sabor_pizza' && $pizzaSize) {
+                    $cmv = $product->calculateCMV($pizzaSize);
+                    $correctCMV = $cmv > 0 ? $cmv : (float) $product->unit_cost;
+                } elseif ($product) {
+                    $correctCMV = (float) $product->unit_cost;
+                }
+                
+                // Atualizar o override do mapping existente
+                $existing->update(['unit_cost_override' => $correctCMV]);
+            }
+        }
+
+        // Criar novas associações com CMV correto
         foreach ($mappingsData as $mapping) {
             $product = InternalProduct::find($mapping['internal_product_id']);
             
-            // Calcular CMV correto: sabores de pizza usam tamanho detectado
+            // Calcular CMV correto: sabores de pizza usam tamanho do produto pai
             $correctCMV = null;
             if ($product) {
                 if ($product->product_category === 'sabor_pizza' && $pizzaSize) {
