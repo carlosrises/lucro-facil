@@ -40,19 +40,20 @@ interface Provider {
 interface DashboardData {
     revenue: number;
     revenueChange: number;
-    netTotal: number;
-    netChange: number;
+    revenueAfterDeductions: number; // Líquido Pós Venda (novo nome)
+    revenueAfterDeductionsChange: number;
     cmv: number;
     cmvChange: number;
     deliveryFee: number;
     deliveryChange: number;
     taxes: number;
     taxesChange: number;
-    fixedCosts: number;
+    fixedCosts: number; // Agora vem de movimentações financeiras
     fixedCostsChange: number;
-    grossProfit: number;
-    grossProfitChange: number;
-    margin: number;
+    contributionMargin: number; // Lucro Bruto (MC)
+    contributionMarginChange: number;
+    netProfit: number; // Lucro Líquido
+    netProfitChange: number;
     orderCount: number;
 }
 

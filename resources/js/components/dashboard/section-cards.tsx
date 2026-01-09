@@ -12,20 +12,20 @@ import {
 interface DashboardData {
     revenue: number;
     revenueChange: number;
-    netTotal: number;
-    netChange: number;
+    revenueAfterDeductions: number; // Líquido Pós Venda
+    revenueAfterDeductionsChange: number;
     cmv: number;
     cmvChange: number;
     deliveryFee: number;
     deliveryChange: number;
     taxes: number;
     taxesChange: number;
-    fixedCosts: number;
+    fixedCosts: number; // Custos Fixos (movimentações)
     fixedCostsChange: number;
-    grossProfit: number;
-    grossProfitChange: number;
-    margin: number;
-    marginChange: number;
+    contributionMargin: number; // Lucro Bruto (MC)
+    contributionMarginChange: number;
+    netProfit: number; // Lucro Líquido
+    netProfitChange: number;
     orderCount: number;
 }
 
@@ -50,13 +50,15 @@ const getTrendVariant = (value: number): 'outline' | 'default' => {
 
 export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
     const RevenueIcon = getTrendIcon(data.revenueChange);
-    const NetIcon = getTrendIcon(data.netChange);
+    const RevenueAfterDeductionsIcon = getTrendIcon(
+        data.revenueAfterDeductionsChange,
+    );
     const CmvIcon = getTrendIcon(data.cmvChange);
     const DeliveryIcon = getTrendIcon(data.deliveryChange);
     const TaxesIcon = getTrendIcon(data.taxesChange);
     const FixedCostsIcon = getTrendIcon(data.fixedCostsChange);
-    const GrossProfitIcon = getTrendIcon(data.grossProfitChange);
-    const MarginIcon = getTrendIcon(data.marginChange);
+    const ContributionMarginIcon = getTrendIcon(data.contributionMarginChange);
+    const NetProfitIcon = getTrendIcon(data.netProfitChange);
 
     return (
         <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card">
@@ -84,22 +86,24 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
             </Card>
             <Card className="@container/card">
                 <CardHeader>
-                    <CardDescription>Líquido Pós Venda</CardDescription>
+                    <CardDescription>Receita pós Dedução</CardDescription>
                     <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                        {formatCurrency(data.netTotal)}
+                        {formatCurrency(data.revenueAfterDeductions)}
                     </CardTitle>
                     <CardAction>
                         <Badge
-                            variant={getTrendVariant(data.netChange)}
+                            variant={getTrendVariant(
+                                data.revenueAfterDeductionsChange,
+                            )}
                             className={
-                                data.netChange >= 0
+                                data.revenueAfterDeductionsChange >= 0
                                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                     : 'border-red-200 bg-red-50 text-red-700'
                             }
                         >
-                            <NetIcon className="h-3 w-3" />
-                            {data.netChange >= 0 ? '+' : ''}
-                            {data.netChange.toFixed(1)}%
+                            <RevenueAfterDeductionsIcon className="h-3 w-3" />
+                            {data.revenueAfterDeductionsChange >= 0 ? '+' : ''}
+                            {data.revenueAfterDeductionsChange.toFixed(1)}%
                         </Badge>
                     </CardAction>
                 </CardHeader>
@@ -172,6 +176,30 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
             </Card>
             <Card className="@container/card">
                 <CardHeader>
+                    <CardDescription>Lucro Bruto (MC)</CardDescription>
+                    <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+                        {formatCurrency(data.contributionMargin)}
+                    </CardTitle>
+                    <CardAction>
+                        <Badge
+                            variant={getTrendVariant(
+                                data.contributionMarginChange,
+                            )}
+                            className={
+                                data.contributionMarginChange >= 0
+                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                    : 'border-red-200 bg-red-50 text-red-700'
+                            }
+                        >
+                            <ContributionMarginIcon className="h-3 w-3" />
+                            {data.contributionMarginChange >= 0 ? '+' : ''}
+                            {data.contributionMarginChange.toFixed(1)}%
+                        </Badge>
+                    </CardAction>
+                </CardHeader>
+            </Card>
+            <Card className="@container/card">
+                <CardHeader>
                     <CardDescription>Custos Fixos</CardDescription>
                     <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                         {formatCurrency(data.fixedCosts)}
@@ -194,52 +222,30 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
             </Card>
             <Card className="@container/card">
                 <CardHeader>
-                    <CardDescription>Lucro Bruto (MC)</CardDescription>
-                    <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                        {formatCurrency(data.grossProfit)}
-                    </CardTitle>
-                    <CardAction>
-                        <Badge
-                            variant={getTrendVariant(data.grossProfitChange)}
-                            className={
-                                data.grossProfitChange >= 0
-                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                    : 'border-red-200 bg-red-50 text-red-700'
-                            }
-                        >
-                            <GrossProfitIcon className="h-3 w-3" />
-                            {data.grossProfitChange >= 0 ? '+' : ''}
-                            {data.grossProfitChange.toFixed(1)}%
-                        </Badge>
-                    </CardAction>
-                </CardHeader>
-            </Card>
-            <Card className="@container/card">
-                <CardHeader>
                     <CardDescription>Lucro Líquido</CardDescription>
                     <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                        {formatCurrency(data.margin)}
+                        {formatCurrency(data.netProfit)}
                     </CardTitle>
                     <div className="flex items-center justify-between gap-2">
                         <CardDescription className="text-sm">
                             Margem:{' '}
                             {(data.revenue > 0
-                                ? (data.margin / data.revenue) * 100
+                                ? (data.netProfit / data.revenue) * 100
                                 : 0
                             ).toFixed(1)}
                             %
                         </CardDescription>
                         <Badge
-                            variant={getTrendVariant(data.marginChange)}
+                            variant={getTrendVariant(data.netProfitChange)}
                             className={
-                                data.marginChange >= 0
+                                data.netProfitChange >= 0
                                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                     : 'border-red-200 bg-red-50 text-red-700'
                             }
                         >
-                            <MarginIcon className="h-3 w-3" />
-                            {data.marginChange >= 0 ? '+' : ''}
-                            {data.marginChange.toFixed(1)}%
+                            <NetProfitIcon className="h-3 w-3" />
+                            {data.netProfitChange >= 0 ? '+' : ''}
+                            {data.netProfitChange.toFixed(1)}%
                         </Badge>
                     </div>
                 </CardHeader>
