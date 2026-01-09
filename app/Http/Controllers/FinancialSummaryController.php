@@ -36,19 +36,32 @@ class FinancialSummaryController extends Controller
         $totalCommissions = 0;
         $totalCosts = 0;
         $totalPaymentFees = 0;
+        $totalDiscounts = 0;
+        $totalSubsidies = 0;
         $revenueByStore = [];
 
         // 3. Processar cada pedido
         foreach ($orders as $order) {
-            // Total do pedido: iFood usa raw.total.orderAmount, Takeat usa gross_total
+            // Total do pedido: mesma lógica do detalhamento financeiro
             $revenue = 0;
-            if (isset($order->raw['total']['orderAmount'])) {
+
+            if ($order->provider === 'takeat') {
+                // Takeat: usar total_delivery_price (inclui entrega e subsídios)
+                if (isset($order->raw['session']['total_delivery_price'])) {
+                    $revenue = (float) $order->raw['session']['total_delivery_price'];
+                } elseif (isset($order->raw['session']['total_price'])) {
+                    $revenue = (float) $order->raw['session']['total_price'];
+                } else {
+                    $revenue = (float) ($order->gross_total ?? 0);
+                }
+            } elseif (isset($order->raw['total']['orderAmount'])) {
                 // iFood: orderAmount inclui produtos + entrega + taxas
                 $revenue = (float) $order->raw['total']['orderAmount'];
             } else {
-                // Takeat ou outros: usar gross_total
+                // Fallback: usar gross_total
                 $revenue = (float) ($order->gross_total ?? 0);
             }
+
             $totalRevenue += $revenue;
 
             // Agrupar por loja
@@ -109,6 +122,32 @@ class FinancialSummaryController extends Controller
 
             // Custos operacionais
             $totalCosts += (float) ($order->total_costs ?? 0);
+
+            // Descontos e Subsídios (mesma lógica do frontend)
+            $discountTotal = (float) ($order->discount_total ?? 0);
+
+            // Extrair subsídios dos pagamentos da sessão
+            $sessionPayments = $order->raw['session']['payments'] ?? [];
+            $subsidy = 0;
+
+            foreach ($sessionPayments as $payment) {
+                $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+                $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
+
+                // Verificar se é subsídio (contém "subsid" ou "cupom")
+                if (str_contains($paymentName, 'subsid') ||
+                    str_contains($paymentName, 'cupom') ||
+                    str_contains($paymentKeyword, 'subsid') ||
+                    str_contains($paymentKeyword, 'cupom')) {
+                    $subsidy += (float) ($payment['payment_value'] ?? 0);
+                }
+            }
+
+            // Desconto da loja = discount_total - subsídio
+            $discount = $discountTotal - $subsidy;
+
+            $totalDiscounts += $discount;
+            $totalSubsidies += $subsidy;
         }
 
         // 4. Total de impostos
@@ -145,44 +184,46 @@ class FinancialSummaryController extends Controller
             ->sum('amount');
 
         // 8. Cálculos DRE
-        // Receita Bruta
+        // Faturamento
         $grossRevenue = $totalRevenue;
 
-        // (-) CMV
+        // Deduções
+        $paymentFees = $totalPaymentFees;
+        $commissions = $totalCommissions;
+        $discounts = $totalDiscounts;
+        $subsidies = $totalSubsidies;
+
+        // Receita pós Dedução = Faturamento - (Taxa de pagamento + Comissão Marketplace + Descontos) + Subsídios
+        $revenueAfterDeductions = $grossRevenue - $paymentFees - $commissions - $discounts + $subsidies;
+        $revenueAfterDeductionsPercent = $grossRevenue > 0 ? ($revenueAfterDeductions / $grossRevenue) * 100 : 0;
+
+        // Custos
         $cmv = $totalCmv;
-
-        // (=) Lucro Bruto (Margem de Contribuição)
-        $grossProfit = $grossRevenue - $cmv;
-        $grossProfitPercent = $grossRevenue > 0 ? ($grossProfit / $grossRevenue) * 100 : 0;
-
-        // (-) Impostos
+        $orderCosts = $totalCosts; // Despesas Operacionais
         $taxes = $totalTaxes;
 
-        // (=) Resultado após impostos
-        $resultAfterTaxes = $grossProfit - $taxes;
+        // Margem de Contribuição = Receita pós Dedução - CMV - Despesas Operacionais - Impostos
+        $contributionMargin = $revenueAfterDeductions - $cmv - $orderCosts - $taxes;
+        $contributionMarginPercent = $grossRevenue > 0 ? ($contributionMargin / $grossRevenue) * 100 : 0;
 
-        // (-) Comissões
-        $commissions = $totalCommissions;
+        // Movimentações financeiras
+        $extraIncome = $extraRevenue; // Receitas (Movimentações Financeiras)
+        $extraExpenses = $operationalExpenses; // Despesas (Movimentações Financeiras)
 
-        // (-) Taxas de pagamento
-        $paymentFees = $totalPaymentFees;
-
-        // (-) Custos operacionais dos pedidos
-        $orderCosts = $totalCosts;
-
-        // (=) Lucro Operacional dos Pedidos (antes de receitas/despesas extras)
-        $operationalProfit = $resultAfterTaxes - $commissions - $paymentFees - $orderCosts;
-        $operationalProfitPercent = $grossRevenue > 0 ? ($operationalProfit / $grossRevenue) * 100 : 0;
-
-        // (+) Receitas extras
-        $extraIncome = $extraRevenue;
-
-        // (-) Despesas operacionais extras
-        $extraExpenses = $operationalExpenses;
-
-        // (=) Lucro Líquido Final
-        $netProfit = $operationalProfit + $extraIncome - $extraExpenses;
+        // Lucro Líquido = Margem de Contribuição - Despesas + Receitas
+        $netProfit = $contributionMargin - $extraExpenses + $extraIncome;
         $netProfitPercent = $grossRevenue > 0 ? ($netProfit / $grossRevenue) * 100 : 0;
+
+        // Calcular porcentagens individuais
+        $paymentFeesPercent = $grossRevenue > 0 ? ($paymentFees / $grossRevenue) * 100 : 0;
+        $commissionsPercent = $grossRevenue > 0 ? ($commissions / $grossRevenue) * 100 : 0;
+        $discountsPercent = $grossRevenue > 0 ? ($discounts / $grossRevenue) * 100 : 0;
+        $subsidiesPercent = $grossRevenue > 0 ? ($subsidies / $grossRevenue) * 100 : 0;
+        $cmvPercent = $grossRevenue > 0 ? ($cmv / $grossRevenue) * 100 : 0;
+        $orderCostsPercent = $grossRevenue > 0 ? ($orderCosts / $grossRevenue) * 100 : 0;
+        $taxesPercent = $grossRevenue > 0 ? ($taxes / $grossRevenue) * 100 : 0;
+        $extraIncomePercent = $grossRevenue > 0 ? ($extraIncome / $grossRevenue) * 100 : 0;
+        $extraExpensesPercent = $grossRevenue > 0 ? ($extraExpenses / $grossRevenue) * 100 : 0;
 
         return Inertia::render('financial/summary', [
             'data' => [
@@ -190,23 +231,39 @@ class FinancialSummaryController extends Controller
                 'grossRevenue' => $grossRevenue,
                 'revenueByMarketplace' => $revenueByMarketplace,
 
+                // Deduções
+                'paymentFees' => $paymentFees,
+                'paymentFeesPercent' => $paymentFeesPercent,
+                'commissions' => $commissions,
+                'commissionsPercent' => $commissionsPercent,
+                'discounts' => $discounts,
+                'discountsPercent' => $discountsPercent,
+                'subsidies' => $subsidies,
+                'subsidiesPercent' => $subsidiesPercent,
+
+                // Resultado Intermediário
+                'revenueAfterDeductions' => $revenueAfterDeductions,
+                'revenueAfterDeductionsPercent' => $revenueAfterDeductionsPercent,
+
                 // Custos
                 'cmv' => $cmv,
+                'cmvPercent' => $cmvPercent,
+                'orderCosts' => $orderCosts, // Despesas Operacionais
+                'orderCostsPercent' => $orderCostsPercent,
                 'taxes' => $taxes,
-                'commissions' => $commissions,
-                'paymentFees' => $paymentFees,
-                'orderCosts' => $orderCosts,
+                'taxesPercent' => $taxesPercent,
 
-                // Operacionais
+                // Margem
+                'contributionMargin' => $contributionMargin,
+                'contributionMarginPercent' => $contributionMarginPercent,
+
+                // Movimentações Financeiras
                 'extraIncome' => $extraIncome,
+                'extraIncomePercent' => $extraIncomePercent,
                 'extraExpenses' => $extraExpenses,
+                'extraExpensesPercent' => $extraExpensesPercent,
 
-                // Resultados
-                'grossProfit' => $grossProfit,
-                'grossProfitPercent' => $grossProfitPercent,
-                'resultAfterTaxes' => $resultAfterTaxes,
-                'operationalProfit' => $operationalProfit,
-                'operationalProfitPercent' => $operationalProfitPercent,
+                // Resultado Final
                 'netProfit' => $netProfit,
                 'netProfitPercent' => $netProfitPercent,
             ],
