@@ -11,6 +11,55 @@ use Inertia\Inertia;
 
 class ItemTriageController extends Controller
 {
+    /**
+     * Detectar tamanho da pizza a partir do nome do item
+     */
+    private function detectPizzaSize(string $itemName): ?string
+    {
+        $itemNameLower = mb_strtolower($itemName);
+
+        if (preg_match('/\bbroto\b/', $itemNameLower)) {
+            return 'broto';
+        }
+        if (preg_match('/\bgrande\b/', $itemNameLower)) {
+            return 'grande';
+        }
+        if (preg_match('/\b(familia|big|don|70x35)\b/', $itemNameLower)) {
+            return 'familia';
+        }
+        if (preg_match('/\b(media|média|m\b)/', $itemNameLower)) {
+            return 'media';
+        }
+
+        return null;
+    }
+
+    /**
+     * Calcular o CMV correto do produto baseado no tamanho
+     */
+    private function calculateCorrectCMV(InternalProduct $product, OrderItem $orderItem): float
+    {
+        if ($product->product_category !== 'sabor_pizza') {
+            return (float) $product->unit_cost;
+        }
+
+        $size = $this->detectPizzaSize($orderItem->name);
+        if (!$size) {
+            return (float) $product->unit_cost;
+        }
+
+        $hasCosts = $product->costs()->exists();
+        if ($hasCosts) {
+            return $product->calculateCMV($size);
+        }
+
+        if ($product->cmv_by_size && is_array($product->cmv_by_size) && isset($product->cmv_by_size[$size])) {
+            return (float) $product->cmv_by_size[$size];
+        }
+
+        return (float) $product->unit_cost;
+    }
+
     public function index(Request $request)
     {
         $tenantId = $request->user()->tenant_id;
