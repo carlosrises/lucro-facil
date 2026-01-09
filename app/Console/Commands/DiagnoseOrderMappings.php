@@ -22,7 +22,8 @@ class DiagnoseOrderMappings extends Command
         }
 
         $this->info("📦 Pedido: {$order->code} | Provider: {$order->provider}");
-        $this->info("🏪 Loja: {$order->store->name ?? 'N/A'}");
+        $storeName = $order->store ? $order->store->name : 'N/A';
+        $this->info("🏪 Loja: {$storeName}");
         $this->newLine();
 
         foreach ($order->items as $orderItem) {
