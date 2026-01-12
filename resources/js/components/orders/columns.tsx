@@ -878,23 +878,38 @@ export const columns: ColumnDef<Order>[] = [
             const status = row.original.status;
             const provider = row.original.provider;
 
-            // Usar a mesma lógica do "Total do Pedido"
-            // Para Takeat: prioridade total_delivery_price > total_price (não usar old_total_price)
-            let orderTotal = 0;
-            if (raw?.total?.orderAmount) {
-                orderTotal = parseFloat(String(raw.total.orderAmount));
-            } else if (provider === 'takeat') {
-                if (raw?.session?.total_delivery_price) {
-                    orderTotal = parseFloat(
-                        String(raw.session.total_delivery_price),
-                    );
+            // Usar a mesma lógica do order-financial-card
+            let orderTotal =
+                parseFloat(String(row.original.gross_total || '0')) || 0;
+
+            if (provider === 'takeat') {
+                // Para Takeat: usar old_total_price ou total_price (valor dos itens)
+                if (raw?.session?.old_total_price) {
+                    orderTotal =
+                        parseFloat(String(raw.session.old_total_price)) || 0;
                 } else if (raw?.session?.total_price) {
-                    orderTotal = parseFloat(String(raw.session.total_price));
-                } else {
-                    orderTotal = parseFloat(row.original.gross_total || '0');
+                    orderTotal =
+                        parseFloat(String(raw.session.total_price)) || 0;
                 }
-            } else {
-                orderTotal = parseFloat(row.original.gross_total || '0');
+            } else if (raw?.total?.orderAmount) {
+                // Para iFood: usar orderAmount se disponível
+                orderTotal = parseFloat(String(raw.total.orderAmount)) || 0;
+            }
+
+            // grossTotal para cálculo do subtotal (usado na margem)
+            let grossTotal =
+                parseFloat(String(row.original.gross_total || '0')) || 0;
+
+            if (provider === 'takeat') {
+                // Prioridade: total_delivery_price > total_price
+                if (raw?.session?.total_delivery_price) {
+                    grossTotal =
+                        parseFloat(String(raw.session.total_delivery_price)) ||
+                        0;
+                } else if (raw?.session?.total_price) {
+                    grossTotal =
+                        parseFloat(String(raw.session.total_price)) || 0;
+                }
             }
 
             // Pega marginSettings do table.options.meta
@@ -921,7 +936,11 @@ export const columns: ColumnDef<Order>[] = [
                 );
             }
 
-            if (!orderTotal || orderTotal <= 0)
+            // Verificar se tem valor válido (orderTotal ou grossTotal)
+            if (
+                (!orderTotal || orderTotal <= 0) &&
+                (!grossTotal || grossTotal <= 0)
+            )
                 return (
                     <div className="text-right">
                         <span className="text-muted-foreground">--</span>
@@ -1006,10 +1025,10 @@ export const columns: ColumnDef<Order>[] = [
             }
 
             // Base de cálculo para margem (mesmo cálculo do card)
-            // orderTotal já é total_delivery_price (se houver) ou total_price
-            let subtotal = orderTotal;
+            // Usar grossTotal (que tem total_delivery_price) ou orderTotal como fallback
+            let subtotal = grossTotal > 0 ? grossTotal : orderTotal;
 
-            // Para Takeat: verificar se orderTotal já é total_delivery_price
+            // Para Takeat: verificar se usou total_delivery_price
             // Se for, NÃO precisa somar nada (já inclui delivery e subsídio)
             // Se não for, precisa somar subsídio e delivery
             const usedTotalDeliveryPrice =
