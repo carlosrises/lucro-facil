@@ -1534,7 +1534,78 @@ export function DataTable({
                                                             </CardContent>
                                                         </Card>
 
-                                                        {/* Card: Dados do Cliente */}
+                                                        {/* Card: Dados do Cliente Takeat */}
+                                                        {row.original
+                                                            .provider ===
+                                                            'takeat' &&
+                                                            row.original.raw
+                                                                ?.session
+                                                                ?.bills?.[0]
+                                                                ?.buyer && (
+                                                                <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+                                                                    <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                                                                        <CardTitle className="flex h-[18px] items-center font-semibold">
+                                                                            Dados
+                                                                            do
+                                                                            Cliente
+                                                                        </CardTitle>
+                                                                    </CardHeader>
+                                                                    <CardContent className="rounded-md bg-card p-0">
+                                                                        <ul className="m-0 flex w-full flex-col ps-0">
+                                                                            {row
+                                                                                .original
+                                                                                .raw
+                                                                                .session
+                                                                                .bills[0]
+                                                                                .buyer
+                                                                                .name && (
+                                                                                <li className="flex flex-row items-center justify-between gap-2 border-b border-border px-3 py-4 last:border-b-0">
+                                                                                    <span className="text-sm leading-4 font-normal text-muted-foreground">
+                                                                                        Nome
+                                                                                    </span>
+                                                                                    <span className="text-sm leading-4 font-medium whitespace-nowrap">
+                                                                                        {
+                                                                                            row
+                                                                                                .original
+                                                                                                .raw
+                                                                                                .session
+                                                                                                .bills[0]
+                                                                                                .buyer
+                                                                                                .name
+                                                                                        }
+                                                                                    </span>
+                                                                                </li>
+                                                                            )}
+                                                                            {row
+                                                                                .original
+                                                                                .raw
+                                                                                .session
+                                                                                .bills[0]
+                                                                                .buyer
+                                                                                .phone && (
+                                                                                <li className="flex flex-row items-center justify-between gap-2 px-3 py-4">
+                                                                                    <span className="text-sm leading-4 font-normal text-muted-foreground">
+                                                                                        Telefone
+                                                                                    </span>
+                                                                                    <span className="font-mono text-sm leading-4 font-medium whitespace-nowrap">
+                                                                                        {
+                                                                                            row
+                                                                                                .original
+                                                                                                .raw
+                                                                                                .session
+                                                                                                .bills[0]
+                                                                                                .buyer
+                                                                                                .phone
+                                                                                        }
+                                                                                    </span>
+                                                                                </li>
+                                                                            )}
+                                                                        </ul>
+                                                                    </CardContent>
+                                                                </Card>
+                                                            )}
+
+                                                        {/* Card: Dados do Cliente iFood */}
                                                         {row.original.raw
                                                             ?.customer && (
                                                             <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
@@ -2077,6 +2148,19 @@ export function DataTable({
                                                                                     },
                                                                                 )}
                                                                             </ul>
+                                                                        </div>
+                                                                    )}
+                                                                
+                                                                {/* Mensagem quando não há pagamentos */}
+                                                                {!row.original.raw?.payments?.methods?.length &&
+                                                                    !row.original.raw?.session?.payments?.length && (
+                                                                        <div className="flex flex-col items-center justify-center px-3 py-6 text-center">
+                                                                            <p className="text-sm text-muted-foreground">
+                                                                                Nenhum pagamento registrado
+                                                                            </p>
+                                                                            <p className="mt-1 text-xs text-muted-foreground">
+                                                                                Informações de pagamento não disponíveis para este pedido
+                                                                            </p>
                                                                         </div>
                                                                     )}
                                                             </CardContent>
