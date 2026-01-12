@@ -16,6 +16,7 @@ use App\Http\Controllers\ProductsController;
 use App\Http\Controllers\RecalculationStatusController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\StoresController;
+use App\Http\Controllers\TakeatSyncController;
 use App\Http\Controllers\TaxCategoriesController;
 use App\Http\Controllers\UsersController;
 use Illuminate\Support\Facades\Route;
@@ -41,7 +42,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('orders/{id}/ready', [OrdersController::class, 'ready'])->name('orders.ready');
     Route::post('orders/{id}/cancel', [OrdersController::class, 'cancel'])->name('orders.cancel');
     Route::post('orders/{id}/recalculate-costs', [OrdersController::class, 'recalculateCosts'])->name('orders.recalculateCosts');
+    Route::post('orders/{id}/link-payment-fee', [OrdersController::class, 'linkPaymentFee'])->name('orders.linkPaymentFee');
     Route::get('orders/{id}/cancellation-reasons', [OrdersController::class, 'cancellationReasons'])->name('orders.cancellationReasons');
+    Route::get('orders/{id}/available-payment-fees', [OrdersController::class, 'availablePaymentFees'])->name('orders.availablePaymentFees');
 
     // Handshake Platform - Dispute actions (customer-initiated cancellation)
     Route::post('orders/{id}/dispute/{disputeId}/accept', [OrdersController::class, 'acceptDispute'])->name('orders.acceptDispute');
@@ -139,6 +142,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('financial/entries', [FinanceEntriesController::class, 'store'])->name('financial.entries.store');
     Route::put('financial/entries/{entry}', [FinanceEntriesController::class, 'update'])->name('financial.entries.update');
     Route::delete('financial/entries/{entry}', [FinanceEntriesController::class, 'destroy'])->name('financial.entries.destroy');
+
+    // Takeat Sync
+    Route::post('takeat/sync/today', [TakeatSyncController::class, 'syncToday'])->name('takeat.sync.today');
+    Route::post('takeat/sync/date', [TakeatSyncController::class, 'syncDate'])->name('takeat.sync.date');
 });
 
 require __DIR__.'/settings.php';
