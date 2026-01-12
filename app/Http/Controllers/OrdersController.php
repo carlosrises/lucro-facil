@@ -311,9 +311,11 @@ class OrdersController extends Controller
         return Inertia::render('orders', [
             'orders' => $orders,
             'filters' => [
+                'search' => $request->input('search'),
                 'status' => $request->input('status'),
                 'store_id' => $request->input('store_id'),
                 'provider' => $request->input('provider'),
+                'payment_method' => $request->input('payment_method'),
                 'order_type' => $request->input('order_type'),
                 'start_date' => $request->input('start_date', now()->startOfMonth()->format('Y-m-d')),
                 'end_date' => $request->input('end_date', now()->endOfMonth()->format('Y-m-d')),
