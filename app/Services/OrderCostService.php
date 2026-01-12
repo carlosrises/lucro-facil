@@ -8,11 +8,23 @@ use Illuminate\Support\Collection;
 
 class OrderCostService
 {
+    protected PaymentFeeLinkService $linkService;
+
+    public function __construct(PaymentFeeLinkService $linkService)
+    {
+        $this->linkService = $linkService;
+    }
+
     /**
      * Calcular custos e comissões de um pedido
      */
     public function calculateCosts(Order $order): array
     {
+        // Primeiro, vincular automaticamente taxas de pagamento se ainda não estiver vinculado
+        if (!$this->linkService->hasLinkedPaymentFees($order)) {
+            $this->linkService->linkPaymentFeesToOrder($order);
+        }
+
         // Buscar taxas ativas para o provider do pedido
         // Para pedidos Takeat, considerar também o origin (99food, keeta, etc)
         $origin = $order->provider === 'takeat' ? $order->origin : null;
@@ -72,10 +84,9 @@ class OrderCostService
                 $paymentFees = $this->calculatePaymentMethodTaxes($tax, $order, $revenueBase, $taxBase);
 
                 foreach ($paymentFees as $paymentFee) {
-                    if ($paymentFee['calculated_value'] > 0) {
-                        $paymentMethods[] = $paymentFee;
-                        $totalPaymentMethods += $paymentFee['calculated_value'];
-                    }
+                    // Permitir taxas com valor 0 (para identificação/vínculo)
+                    $paymentMethods[] = $paymentFee;
+                    $totalPaymentMethods += $paymentFee['calculated_value'];
                 }
             } else {
                 // Para outras taxas (custos, comissões, impostos), manter comportamento atual
@@ -169,6 +180,7 @@ class OrderCostService
 
     /**
      * Calcular taxas de pagamento proporcionalmente para cada forma de pagamento
+     * Usa vínculos estruturados (payment_fee_links) quando disponível
      */
     private function calculatePaymentMethodTaxes(
         CostCommission $tax,
@@ -188,16 +200,66 @@ class OrderCostService
         // Obter subtotal para cálculo correto das taxas
         $subtotal = $this->getOrderSubtotal($order);
 
-        // Verificar se ALGUM pagamento atende à condição (aplicar taxa UMA VEZ)
+        // Verificar se esta taxa está vinculada a algum pagamento através de payment_fee_links
+        $paymentFeeLinks = $order->payment_fee_links ?? [];
+        $taxIsLinked = in_array($tax->id, $paymentFeeLinks);
+
+        // Se a taxa está vinculada, aplicar apenas para os métodos vinculados
+        if ($taxIsLinked) {
+            foreach ($paymentFeeLinks as $method => $linkedTaxId) {
+                if ($linkedTaxId !== $tax->id) {
+                    continue;
+                }
+
+                // IMPORTANTE: Encontrar TODOS os pagamentos do método, não apenas o primeiro
+                $matchedPayments = collect($payments)->where('method', $method);
+
+                if ($matchedPayments->isEmpty()) {
+                    continue;
+                }
+
+                // Aplicar taxa para CADA pagamento individual do método
+                foreach ($matchedPayments as $matchedPayment) {
+                    $paymentName = $matchedPayment['name'] ?? 'Pagamento';
+                    $paymentValue = $matchedPayment['value'] ?? 0;
+                    $calculatedValue = 0;
+
+                    // Para taxas percentuais, aplicar sobre o valor do pagamento individual
+                    if ($tax->type === 'percentage') {
+                        $calculatedValue = ($paymentValue * $tax->value) / 100;
+                    } else {
+                        // Para taxas fixas, aplicar valor fixo para cada pagamento
+                        $calculatedValue = (float) $tax->value;
+                    }
+
+                    // Para vínculos manuais, permitir taxas com valor 0 (identificação apenas)
+                    // Isso evita que pedidos vinculados apareçam como "sem taxa de pagamento"
+                    $result[] = [
+                        'id' => $tax->id,
+                        'name' => "{$tax->name} ({$paymentName})",
+                        'type' => $tax->type,
+                        'value' => $tax->value,
+                        'calculated_value' => round($calculatedValue, 2),
+                        'category' => $tax->category,
+                        'payment_method' => $method,
+                        'payment_value' => $paymentValue,
+                        'is_linked' => true, // Marcar que é vínculo estruturado
+                    ];
+                }
+            }
+
+            return $result;
+        }
+
+        // Se não está vinculada, usar lógica de matching por características (comportamento anterior)
         $matchedPayment = null;
         foreach ($payments as $payment) {
             if ($this->shouldApplyTaxToPayment($tax, $payment, $order)) {
                 $matchedPayment = $payment;
-                break; // Encontrou um match, não precisa continuar
+                break;
             }
         }
 
-        // Se nenhum pagamento match, não aplicar taxa
         if (! $matchedPayment) {
             return $result;
         }
@@ -210,10 +272,8 @@ class OrderCostService
         $baseForCalculation = $tax->enters_tax_base ? $taxBase : $subtotal;
 
         if ($tax->type === 'percentage') {
-            // Para percentual, aplicar sobre o subtotal
             $calculatedValue = ($baseForCalculation * $tax->value) / 100;
         } else {
-            // Para valor fixo
             $calculatedValue = (float) $tax->value;
         }
 
@@ -226,6 +286,7 @@ class OrderCostService
                 'calculated_value' => round($calculatedValue, 2),
                 'category' => $tax->category,
                 'payment_method' => $paymentMethod,
+                'is_linked' => false, // Matching por características
             ];
         }
 
@@ -234,19 +295,20 @@ class OrderCostService
 
     /**
      * Obter lista de pagamentos do pedido com valores
+     * IMPORTANTE: Usa normalização do PaymentFeeLinkService para garantir consistência
      */
     private function getOrderPayments(Order $order): array
     {
         $payments = [];
 
-        // Para pedidos Takeat
+        // Para pedidos Takeat - usar normalização do PaymentFeeLinkService
         if ($order->provider === 'takeat') {
             $rawPayments = $order->raw['session']['payments'] ?? [];
 
             foreach ($rawPayments as $payment) {
-                $method = $payment['payment_method']['method'] ?? $payment['payment_method']['keyword'] ?? null;
-                $name = $payment['payment_method']['name'] ?? 'Pagamento';
-                $keyword = $payment['payment_method']['keyword'] ?? '';
+                $paymentMethod = $payment['payment_method'] ?? [];
+                $keyword = $paymentMethod['keyword'] ?? '';
+                $name = $paymentMethod['name'] ?? 'Pagamento';
                 $value = (float) ($payment['payment_value'] ?? 0);
 
                 // Pular subsídios e cupons (não aplicar taxas sobre eles)
@@ -264,44 +326,18 @@ class OrderCostService
                     continue;
                 }
 
-                // Identificar método se for genérico "others"
-                if ($method === 'others' || empty($method) || $method === 'N/A') {
-                    if (str_contains($lowerName, 'pix')) {
-                        $method = 'PIX';
-                    } elseif (str_contains($lowerName, 'crédito') || str_contains($lowerName, 'credit')) {
-                        $method = 'CREDIT_CARD';
-                    } elseif (str_contains($lowerName, 'débito') || str_contains($lowerName, 'debit')) {
-                        $method = 'DEBIT_CARD';
-                    } elseif (str_contains($lowerName, 'dinheiro') || str_contains($lowerName, 'cash') || str_contains($lowerName, 'money')) {
-                        $method = 'MONEY';
-                    } elseif (str_contains($lowerName, 'vale') || str_contains($lowerName, 'voucher')) {
-                        $method = 'VOUCHER';
-                    }
-                }
+                // IMPORTANTE: Usar mesma normalização do PaymentFeeLinkService
+                $method = $this->linkService->normalizePaymentMethodForOrder($order, $keyword);
 
-                // Normalizar métodos do Takeat para o padrão esperado
-                if ($method === 'DEBIT') {
-                    $method = 'DEBIT_CARD';
-                } elseif ($method === 'CREDIT') {
-                    $method = 'CREDIT_CARD';
-                } elseif ($method === 'CASH') {
-                    $method = 'MONEY';
-                }
-
-                // Se ainda estiver vazio ou N/A, usar keyword como fallback ou 'others'
-                if (empty($method) || $method === 'N/A') {
-                    $method = ! empty($keyword) ? strtoupper($keyword) : 'others';
-                }
-
-                if ($method && $value > 0) {
-                    $payments[] = [
-                        'method' => $method,
-                        'name' => $name,
-                        'keyword' => $keyword,
-                        'value' => $value,
-                    ];
-                }
+                $payments[] = [
+                    'method' => $method,
+                    'name' => $name,
+                    'keyword' => $keyword,
+                    'value' => $value,
+                ];
             }
+
+            return $payments;
         }
 
         // Para iFood direto

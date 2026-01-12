@@ -90,6 +90,46 @@ class RecalculateOrderCostsJob implements ShouldQueue
                 // Registro encontrado, usar seus dados
                 $query = Order::where('tenant_id', $costCommission->tenant_id);
 
+                // FILTRO ESPECIAL: Para taxas de pagamento, recalcular APENAS pedidos com aquele método
+                if ($costCommission->category === 'payment_method' && $costCommission->condition_values) {
+                    // condition_values contém os métodos normalizados (ex: ['CASH', 'CREDIT_CARD'])
+                    // Precisamos buscar pedidos cujos pagamentos, após normalização, correspondam a esses métodos
+
+                    // Para otimizar, vamos buscar TODAS as keywords que normalizam para os métodos desejados
+                    $linkService = app(\App\Services\PaymentFeeLinkService::class);
+                    $targetMethods = $costCommission->condition_values;
+
+                    // Mapeamento reverso: quais keywords normalizam para cada método alvo
+                    $keywordsToSearch = [];
+                    $keywordMap = [
+                        'CASH' => ['dinheiro', 'money', 'cash'],
+                        'CREDIT_CARD' => ['others'], // "others" + nome contendo "crédito"
+                        'DEBIT_CARD' => ['stone_debit', 'neemo_débito'],
+                        'PIX' => ['others', 'pix_auto'], // "others" + nome contendo "pix"
+                        'VOUCHER' => ['alelo_refeicao', 'sodexo_refeicao', 'ticket'],
+                        'ONLINE' => ['99food_pagamento_online', 'online_ifood', 'ifood_online'],
+                        'CASHBACK' => ['clube'],
+                    ];
+
+                    foreach ($targetMethods as $method) {
+                        if (isset($keywordMap[$method])) {
+                            $keywordsToSearch = array_merge($keywordsToSearch, $keywordMap[$method]);
+                        }
+                    }
+
+                    if (!empty($keywordsToSearch)) {
+                        $query->where(function ($q) use ($keywordsToSearch) {
+                            foreach ($keywordsToSearch as $keyword) {
+                                // Para Takeat: verificar raw->session->payments->payment_method->keyword
+                                $q->orWhere(function ($subQ) use ($keyword) {
+                                    $subQ->where('provider', 'takeat')
+                                        ->whereRaw("JSON_SEARCH(raw, 'one', ?, NULL, '$.session.payments[*].payment_method.keyword') IS NOT NULL", [$keyword]);
+                                });
+                            }
+                        });
+                    }
+                }
+
                 if (! $this->applyToAll && $costCommission->provider) {
                     // Se provider for takeat-{origin}, precisamos separar
                     if (str_starts_with($costCommission->provider, 'takeat-')) {
