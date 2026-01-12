@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { CreatePaymentFeeDialog } from './create-payment-fee-dialog';
+import { LinkPaymentFeeDialog } from './link-payment-fee-dialog';
 import { QuickLinkDialog } from './quick-link-dialog';
 
 /**
@@ -118,6 +119,11 @@ export function OrderFinancialCard({
         method: string;
         name: string;
     } | null>(null);
+
+    // Estado para controlar o dialog de vinculação de taxa existente
+    const [isLinkFeeDialogOpen, setIsLinkFeeDialogOpen] = useState(false);
+    const [availableFees, setAvailableFees] = useState<any[]>([]);
+    const [loadingFees, setLoadingFees] = useState(false);
 
     // Estado para controlar o dialog de vinculação rápida
     const [isQuickLinkDialogOpen, setIsQuickLinkDialogOpen] = useState(false);
@@ -1618,16 +1624,51 @@ export function OrderFinancialCard({
                                                                     variant="ghost"
                                                                     size="sm"
                                                                     className="h-6 w-6 p-0"
-                                                                    onClick={() => {
+                                                                    title="Vincular taxa de pagamento"
+                                                                    onClick={async () => {
                                                                         setSelectedPayment(
                                                                             {
                                                                                 method: paymentMethod,
                                                                                 name: paymentName,
                                                                             },
                                                                         );
-                                                                        setIsCreateFeeDialogOpen(
-                                                                            true,
-                                                                        );
+
+                                                                        // Carregar taxas disponíveis
+                                                                        if (
+                                                                            order
+                                                                        ) {
+                                                                            setLoadingFees(
+                                                                                true,
+                                                                            );
+                                                                            try {
+                                                                                // Passar paymentMethod e paymentType para obter análise de compatibilidade
+                                                                                const response =
+                                                                                    await fetch(
+                                                                                        `/orders/${order.id}/available-payment-fees?payment_method=${paymentMethod}&payment_type=offline`,
+                                                                                    );
+                                                                                const fees =
+                                                                                    await response.json();
+                                                                                setAvailableFees(
+                                                                                    fees,
+                                                                                );
+                                                                                setIsLinkFeeDialogOpen(
+                                                                                    true,
+                                                                                );
+                                                                            } catch (error) {
+                                                                                console.error(
+                                                                                    'Erro ao carregar taxas:',
+                                                                                    error,
+                                                                                );
+                                                                                // Fallback: abrir dialog de criação
+                                                                                setIsCreateFeeDialogOpen(
+                                                                                    true,
+                                                                                );
+                                                                            } finally {
+                                                                                setLoadingFees(
+                                                                                    false,
+                                                                                );
+                                                                            }
+                                                                        }
                                                                     }}
                                                                 >
                                                                     <Plus className="h-3 w-3" />
@@ -1664,6 +1705,24 @@ export function OrderFinancialCard({
                         </ul>
                     </CardContent>
                 </Card>
+
+                {/* Dialog para vincular taxa existente */}
+                {order && selectedPayment && (
+                    <LinkPaymentFeeDialog
+                        open={isLinkFeeDialogOpen}
+                        onOpenChange={setIsLinkFeeDialogOpen}
+                        orderId={order.id}
+                        paymentMethod={selectedPayment.method}
+                        paymentMethodName={selectedPayment.name}
+                        provider={order.provider}
+                        origin={order.origin}
+                        availableFees={availableFees}
+                        onCreateNew={() => {
+                            setIsLinkFeeDialogOpen(false);
+                            setIsCreateFeeDialogOpen(true);
+                        }}
+                    />
+                )}
 
                 {/* Dialog para criar taxa de pagamento */}
                 {selectedPayment && order && (

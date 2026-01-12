@@ -214,45 +214,67 @@ export const columns: ColumnDef<Order>[] = [
             const raw = row.original.raw;
             const orderTotal = raw?.total?.orderAmount ?? 0;
             const status = row.original.status;
+            const provider = row.original.provider;
 
             let color = 'bg-yellow-500';
             let label = 'Não faturado';
 
-            if (status === 'CANCELLED') {
-                color = 'bg-red-500';
-                label = 'Cancelado';
-            } else if (orderTotal > 0) {
-                // Calcular custo total
-                const totalCost = items.reduce((sum, item) => {
-                    return sum + calculateItemCost(item);
-                }, 0);
+            // Para pedidos Takeat, verificar se tem pagamento
+            if (provider === 'takeat') {
+                const payments = (raw as any)?.session?.payments ?? [];
+                const hasPayment = payments.length > 0;
 
-                // Calcular impostos totais
-                const totalTax = items.reduce((sum, item) => {
-                    if (
-                        item.internal_product?.tax_category?.total_tax_rate !==
-                            undefined &&
-                        item.internal_product?.tax_category?.total_tax_rate !==
-                            null
-                    ) {
-                        const quantity = item.qty || item.quantity || 0;
-                        const unitPrice = item.unit_price || item.price || 0;
-                        const itemTotal = quantity * unitPrice;
-                        const taxRate =
-                            item.internal_product.tax_category.total_tax_rate /
-                            100;
-                        return sum + itemTotal * taxRate;
-                    }
-                    return sum;
-                }, 0);
-
-                const profit = orderTotal - totalCost - totalTax;
-                if (profit > 0) {
+                if (status === 'CANCELLED') {
+                    color = 'bg-red-500';
+                    label = 'Cancelado';
+                } else if (hasPayment) {
+                    // Com pagamento = Faturado (verde)
                     color = 'bg-green-500';
                     label = 'Faturado';
                 } else {
-                    color = 'bg-yellow-500';
-                    label = 'Sem lucro';
+                    // Sem pagamento
+                    color = 'bg-gray-400';
+                    label = 'Sem pagamento';
+                }
+            } else {
+                // Para outros providers (iFood, etc), manter lógica original
+                if (status === 'CANCELLED') {
+                    color = 'bg-red-500';
+                    label = 'Cancelado';
+                } else if (orderTotal > 0) {
+                    // Calcular custo total
+                    const totalCost = items.reduce((sum, item) => {
+                        return sum + calculateItemCost(item);
+                    }, 0);
+
+                    // Calcular impostos totais
+                    const totalTax = items.reduce((sum, item) => {
+                        if (
+                            item.internal_product?.tax_category
+                                ?.total_tax_rate !== undefined &&
+                            item.internal_product?.tax_category
+                                ?.total_tax_rate !== null
+                        ) {
+                            const quantity = item.qty || item.quantity || 0;
+                            const unitPrice =
+                                item.unit_price || item.price || 0;
+                            const itemTotal = quantity * unitPrice;
+                            const taxRate =
+                                item.internal_product.tax_category
+                                    .total_tax_rate / 100;
+                            return sum + itemTotal * taxRate;
+                        }
+                        return sum;
+                    }, 0);
+
+                    const profit = orderTotal - totalCost - totalTax;
+                    if (profit > 0) {
+                        color = 'bg-green-500';
+                        label = 'Faturado';
+                    } else {
+                        color = 'bg-yellow-500';
+                        label = 'Sem lucro';
+                    }
                 }
             }
 
