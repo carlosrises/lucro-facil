@@ -72,19 +72,20 @@ class OrdersController extends Controller
                 });
             })
             ->when($request->input('no_payment_method'), function ($q) {
-                // Filtrar pedidos sem taxa de pagamento vinculada
-                // Inclui tanto pedidos sem método quanto pedidos com método mas sem taxa aplicada
+                // Filtrar pedidos com método mas sem taxa aplicada
                 $q->where(function ($query) {
-                    // 1. Pedidos sem método de pagamento (Takeat: session.payments vazio)
-                    $query->where(function ($q) {
-                        $q->where('provider', 'takeat')
-                            ->whereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) = 0 OR JSON_EXTRACT(raw, '$.session.payments') IS NULL");
-                    })
-                    // 2. OU pedidos com método mas sem taxa aplicada (calculated_costs->payment_methods vazio/null)
-                        ->orWhere(function ($q) {
-                            $q->whereRaw("JSON_LENGTH(JSON_EXTRACT(calculated_costs, '$.payment_methods')) = 0 OR JSON_EXTRACT(calculated_costs, '$.payment_methods') IS NULL");
-                        });
+                    $query->whereRaw("JSON_LENGTH(JSON_EXTRACT(calculated_costs, '$.payment_methods')) = 0 OR JSON_EXTRACT(calculated_costs, '$.payment_methods') IS NULL");
+                })
+                // Excluir pedidos Takeat sem pagamento (não têm como ter taxa)
+                ->where(function ($query) {
+                    $query->where('provider', '!=', 'takeat')
+                        ->orWhereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) > 0");
                 });
+            })
+            ->when($request->input('no_payment_info'), function ($q) {
+                // Filtrar pedidos Takeat sem informação de pagamento
+                $q->where('provider', 'takeat')
+                    ->whereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) = 0 OR JSON_EXTRACT(raw, '$.session.payments') IS NULL");
             })
             ->when($request->input('order_type'), function ($q, $orderType) {
                 // Filtrar por tipo de pedido
@@ -223,18 +224,30 @@ class OrdersController extends Controller
 
         // Contar pedidos sem taxa de pagamento vinculada
         // Inclui pedidos sem método OU com método mas sem taxa aplicada
+        // IMPORTANTE: Aplicar MESMO filtro de data da query principal
+        $startDate = $request->input('start_date', now()->startOfMonth()->format('Y-m-d'));
+        $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
+        $startDateUtc = \Carbon\Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+        $endDateUtc = \Carbon\Carbon::parse($endDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+
         $noPaymentMethodCount = Order::where('tenant_id', tenant_id())
+            ->whereBetween('placed_at', [$startDateUtc, $endDateUtc])
             ->where(function ($query) {
-                // 1. Sem método de pagamento
-                $query->where(function ($q) {
-                    $q->where('provider', 'takeat')
-                        ->whereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) = 0 OR JSON_EXTRACT(raw, '$.session.payments') IS NULL");
-                })
-                // 2. OU com método mas sem taxa aplicada
-                    ->orWhere(function ($q) {
-                        $q->whereRaw("JSON_LENGTH(JSON_EXTRACT(calculated_costs, '$.payment_methods')) = 0 OR JSON_EXTRACT(calculated_costs, '$.payment_methods') IS NULL");
-                    });
+                // Com método mas sem taxa aplicada
+                $query->whereRaw("JSON_LENGTH(JSON_EXTRACT(calculated_costs, '$.payment_methods')) = 0 OR JSON_EXTRACT(calculated_costs, '$.payment_methods') IS NULL");
             })
+            // Excluir pedidos Takeat sem pagamento (não têm como ter taxa)
+            ->where(function ($query) {
+                $query->where('provider', '!=', 'takeat')
+                    ->orWhereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) > 0");
+            })
+            ->count();
+
+        // Contador de pedidos sem informação de pagamento (apenas Takeat)
+        $noPaymentInfoCount = Order::where('tenant_id', tenant_id())
+            ->whereBetween('placed_at', [$startDateUtc, $endDateUtc])
+            ->where('provider', 'takeat')
+            ->whereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) = 0 OR JSON_EXTRACT(raw, '$.session.payments') IS NULL")
             ->count();
 
         // Buscar produtos internos para associação
@@ -306,12 +319,14 @@ class OrdersController extends Controller
                 'end_date' => $request->input('end_date', now()->endOfMonth()->format('Y-m-d')),
                 'unmapped_only' => $request->input('unmapped_only'),
                 'no_payment_method' => $request->input('no_payment_method'),
+                'no_payment_info' => $request->input('no_payment_info'),
                 'per_page' => $perPage,
             ],
             'stores' => $stores,
             'providerOptions' => $providerOptions,
             'unmappedProductsCount' => $unmappedProductsCount,
             'noPaymentMethodCount' => $noPaymentMethodCount,
+            'noPaymentInfoCount' => $noPaymentInfoCount,
             'internalProducts' => $internalProducts,
             'marginSettings' => [
                 'margin_excellent' => (float) ($tenant->margin_excellent ?? 100.00),
@@ -727,5 +742,97 @@ class OrdersController extends Controller
         ]);
 
         return back();
+    }
+
+    /**
+     * Vincular uma taxa de pagamento existente a um pedido (VÍNCULO MANUAL - sem restrições)
+     * Suporta vínculo individual OU em massa (todos os pedidos com mesmo método de pagamento)
+     */
+    public function linkPaymentFee($id, Request $request)
+    {
+        $order = Order::where('tenant_id', tenant_id())->findOrFail($id);
+
+        $validated = $request->validate([
+            'payment_method' => 'required|string',
+            'cost_commission_id' => 'required|exists:cost_commissions,id',
+            'apply_to_all' => 'nullable|boolean', // Nova opção: aplicar a todos os pedidos
+        ]);
+
+        $linkService = app(\App\Services\PaymentFeeLinkService::class);
+
+        // IMPORTANTE: Normalizar o método antes de vincular
+        // O frontend envia o método "bruto" (ex: "others"), mas precisamos do normalizado (ex: "CREDIT_CARD")
+        $rawMethod = $validated['payment_method'];
+        $normalizedMethod = $linkService->normalizePaymentMethodForOrder($order, $rawMethod);
+
+        // Se apply_to_all = true, aplicar para TODOS os pedidos do tenant com este método de pagamento
+        if ($validated['apply_to_all'] ?? false) {
+            $affectedCount = $linkService->bulkLinkPaymentFeeByMethod(
+                tenant_id(),
+                $normalizedMethod,
+                $validated['cost_commission_id']
+            );
+
+            return redirect()->back()->with('success', "Taxa vinculada a {$affectedCount} pedido(s) com sucesso!");
+        }
+
+        // Vínculo individual (comportamento padrão)
+        $success = $linkService->manuallyLinkPaymentFee(
+            $order,
+            $normalizedMethod,
+            $validated['cost_commission_id']
+        );
+
+        if (!$success) {
+            return redirect()->back()->with('error', 'Erro: Taxa não encontrada ou não pertence a este tenant.');
+        }
+
+        // Recalcular custos do pedido com o novo vínculo
+        $service = app(\App\Services\OrderCostService::class);
+        $result = $service->calculateCosts($order);
+
+        $order->update([
+            'calculated_costs' => $result,
+            'total_costs' => $result['total_costs'] ?? 0,
+            'total_commissions' => $result['total_commissions'] ?? 0,
+            'net_revenue' => $result['net_revenue'] ?? 0,
+            'costs_calculated_at' => now(),
+        ]);
+
+        return redirect()->back()->with('success', 'Taxa vinculada manualmente com sucesso!');
+    }
+
+    /**
+     * Listar TODAS as taxas de pagamento para vínculo MANUAL (sem filtros restritivos)
+     */
+    public function availablePaymentFees($id, Request $request)
+    {
+        $order = Order::where('tenant_id', tenant_id())->findOrFail($id);
+
+        $linkService = app(\App\Services\PaymentFeeLinkService::class);
+
+        // Para vínculo manual, listar TODAS as taxas sem filtros
+        $fees = $linkService->listAllPaymentFeesForManualLink(tenant_id());
+
+        // Se foi passado paymentMethod e paymentType, adicionar informações de compatibilidade
+        $paymentMethod = $request->query('payment_method');
+        $paymentType = $request->query('payment_type', 'offline');
+
+        if ($paymentMethod) {
+            $fees = $fees->map(function ($fee) use ($linkService, $paymentMethod, $paymentType, $order) {
+                $compatibility = $linkService->checkFeeCompatibility(
+                    $fee,
+                    $paymentMethod,
+                    $paymentType,
+                    $order
+                );
+
+                return array_merge($fee->toArray(), [
+                    'compatibility' => $compatibility,
+                ]);
+            });
+        }
+
+        return response()->json($fees);
     }
 }
