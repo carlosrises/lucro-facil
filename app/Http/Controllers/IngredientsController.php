@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Category;
 use App\Models\Ingredient;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class IngredientsController extends Controller
@@ -46,7 +47,15 @@ class IngredientsController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('ingredients')->where(function ($query) use ($request) {
+                    return $query->where('tenant_id', tenant_id())
+                        ->where('unit', $request->input('unit'));
+                }),
+            ],
             'category_id' => ['nullable', 'exists:categories,id'],
             'unit' => ['required', 'in:unit,kg,g,l,ml'],
             'unit_price' => ['required', 'numeric', 'min:0'],
@@ -70,7 +79,15 @@ class IngredientsController extends Controller
         }
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('ingredients')->where(function ($query) use ($request, $ingredient) {
+                    return $query->where('tenant_id', tenant_id())
+                        ->where('unit', $request->input('unit'));
+                })->ignore($ingredient->id),
+            ],
             'category_id' => ['nullable', 'exists:categories,id'],
             'unit' => ['required', 'in:unit,kg,g,l,ml'],
             'unit_price' => ['required', 'numeric', 'min:0'],
