@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 type OrderExpandedDetailsProps = {
     order: {
+        provider?: string;
         raw?: {
             payments?: {
                 methods?: Array<{
@@ -85,10 +86,13 @@ type OrderExpandedDetailsProps = {
 export function OrderExpandedDetails({ order }: OrderExpandedDetailsProps) {
     const benefitsList = order.raw?.benefits || [];
     const totalBenefits = order.raw?.total?.benefits || 0;
+
+    // Dados do cliente para iFood Direto
     // Suporta tanto taxPayerIdentificationNumber quanto documentNumber
     const cpfCnpj =
         order.raw?.customer?.taxPayerIdentificationNumber ||
         order.raw?.customer?.documentNumber;
+
     const orderTiming = order.raw?.orderTiming;
     // Busca o campo de agendamento em múltiplos locais
     const scheduledTo =
@@ -169,66 +173,6 @@ export function OrderExpandedDetails({ order }: OrderExpandedDetailsProps) {
 
     return (
         <>
-            {/* Pagamento */}
-            <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
-                <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
-                    <CardTitle className="flex h-[18px] items-center font-semibold">
-                        Pagamento
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="rounded-md bg-card p-0">
-                    {(() => {
-                        const paymentMethods =
-                            order.raw?.payments?.methods || [];
-
-                        if (paymentMethods.length === 0) {
-                            return (
-                                <div className="flex flex-col items-center justify-center px-3 py-6 text-center">
-                                    <p className="text-sm text-muted-foreground">
-                                        Nenhum pagamento registrado
-                                    </p>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                        Informações de pagamento não disponíveis
-                                        para este pedido
-                                    </p>
-                                </div>
-                            );
-                        }
-
-                        return (
-                            <ul className="m-0 flex w-full flex-col ps-0">
-                                {paymentMethods.map((payment, index) => (
-                                    <li
-                                        key={index}
-                                        className="flex flex-col gap-2 border-b-1 px-3 py-4 last:border-b-0"
-                                    >
-                                        <div className="flex w-full flex-row items-center justify-between gap-2">
-                                            <div className="flex-1">
-                                                <div className="text-sm leading-4 font-medium">
-                                                    {payment.method ||
-                                                        'Pagamento'}
-                                                </div>
-                                                {payment.card?.brand && (
-                                                    <div className="mt-1 text-xs leading-4 font-normal text-muted-foreground">
-                                                        {payment.card.brand}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <span className="text-sm leading-4 font-semibold whitespace-nowrap">
-                                                R${' '}
-                                                {(payment.value || 0).toFixed(
-                                                    2,
-                                                )}
-                                            </span>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        );
-                    })()}
-                </CardContent>
-            </Card>
-
             {/* Cupons/Descontos */}
             {benefitsList.length > 0 && (
                 <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
