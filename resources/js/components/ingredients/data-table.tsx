@@ -3,7 +3,6 @@ import {
     flexRender,
     getCoreRowModel,
     getFilteredRowModel,
-    getPaginationRowModel,
     getSortedRowModel,
     SortingState,
     useReactTable,
@@ -178,11 +177,12 @@ export function DataTable({
         onSortingChange: setSorting,
         onColumnFiltersChange: setColumnFilters,
         getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
         onColumnVisibilityChange: setColumnVisibility,
         onRowSelectionChange: setRowSelection,
+        manualPagination: true,
+        pageCount: pagination.last_page,
         state: {
             sorting,
             columnFilters,
@@ -191,20 +191,28 @@ export function DataTable({
         },
     });
 
-    const updateFilters = (newFilters: Partial<IngredientsFilters>) => {
-        const updatedFilters = { ...filters, ...newFilters };
+    const updateFilters = (
+        newFilters: Partial<IngredientsFilters>,
+        resetPage = true,
+    ) => {
+        const merged = {
+            ...filters,
+            per_page: filters?.per_page ?? pagination?.per_page ?? 10,
+            ...newFilters,
+            ...(resetPage ? { page: 1 } : {}),
+        };
 
-        // Remove valores vazios/null/undefined
-        const cleanFilters = Object.fromEntries(
-            Object.entries(updatedFilters).filter(
-                ([, value]) =>
-                    value !== '' && value !== null && value !== undefined,
-            ),
-        );
+        // Remover chaves com valores undefined
+        Object.keys(merged).forEach((key) => {
+            if (merged[key as keyof IngredientsFilters] === undefined) {
+                delete merged[key as keyof IngredientsFilters];
+            }
+        });
 
-        router.get('/ingredients', cleanFilters, {
+        router.get('/ingredients', merged, {
             preserveState: true,
             preserveScroll: true,
+            replace: true,
         });
     };
 
@@ -405,17 +413,15 @@ export function DataTable({
                                 Linhas por página
                             </p>
                             <Select
-                                value={filters.per_page.toString()}
+                                value={`${filters?.per_page ?? pagination?.per_page ?? 10}`}
                                 onValueChange={(value) =>
                                     updateFilters({
-                                        per_page: parseInt(value),
+                                        per_page: Number(value),
                                     })
                                 }
                             >
                                 <SelectTrigger className="h-8 w-[70px]">
-                                    <SelectValue
-                                        placeholder={filters.per_page}
-                                    />
+                                    <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent side="top">
                                     {[10, 20, 30, 40, 50].map((pageSize) => (
@@ -438,9 +444,12 @@ export function DataTable({
                                 variant="outline"
                                 className="hidden h-8 w-8 p-0 lg:flex"
                                 onClick={() =>
-                                    updateFilters({
-                                        page: 1,
-                                    })
+                                    updateFilters(
+                                        {
+                                            page: 1,
+                                        },
+                                        false,
+                                    )
                                 }
                                 disabled={pagination.current_page === 1}
                             >
@@ -453,9 +462,12 @@ export function DataTable({
                                 variant="outline"
                                 className="h-8 w-8 p-0"
                                 onClick={() =>
-                                    updateFilters({
-                                        page: pagination.current_page - 1,
-                                    })
+                                    updateFilters(
+                                        {
+                                            page: pagination.current_page - 1,
+                                        },
+                                        false,
+                                    )
                                 }
                                 disabled={pagination.current_page === 1}
                             >
@@ -468,9 +480,12 @@ export function DataTable({
                                 variant="outline"
                                 className="h-8 w-8 p-0"
                                 onClick={() =>
-                                    updateFilters({
-                                        page: pagination.current_page + 1,
-                                    })
+                                    updateFilters(
+                                        {
+                                            page: pagination.current_page + 1,
+                                        },
+                                        false,
+                                    )
                                 }
                                 disabled={
                                     pagination.current_page ===
@@ -486,9 +501,12 @@ export function DataTable({
                                 variant="outline"
                                 className="hidden h-8 w-8 p-0 lg:flex"
                                 onClick={() =>
-                                    updateFilters({
-                                        page: pagination.last_page,
-                                    })
+                                    updateFilters(
+                                        {
+                                            page: pagination.last_page,
+                                        },
+                                        false,
+                                    )
                                 }
                                 disabled={
                                     pagination.current_page ===
