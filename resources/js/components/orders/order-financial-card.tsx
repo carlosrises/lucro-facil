@@ -250,7 +250,7 @@ export function OrderFinancialCard({
         // Subtotal para cálculo de receita líquida
         // Se usar total_delivery_price, NÃO somar subsídio (já está incluído)
         // Se usar old_total_price ou total_price, SOMAR subsídio
-        let subtotal = grossTotal;
+        let subtotal = grossTotal > 0 ? grossTotal : orderTotal;
 
         // Verifica se usou total_delivery_price (que já inclui subsídio e delivery)
         const usedTotalDeliveryPrice =
