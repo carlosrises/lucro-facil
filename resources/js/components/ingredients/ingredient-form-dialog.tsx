@@ -235,7 +235,8 @@ export function IngredientFormDialog({
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="current_stock">
-                                    Estoque Atual
+                                    Estoque Atual{' '}
+                                    <span className="text-red-500">*</span>
                                 </Label>
                                 <Input
                                     id="current_stock"
@@ -246,6 +247,7 @@ export function IngredientFormDialog({
                                         setData('current_stock', e.target.value)
                                     }
                                     placeholder="0.000"
+                                    required
                                 />
                                 {errors.current_stock && (
                                     <p className="text-sm text-red-500">
@@ -256,7 +258,8 @@ export function IngredientFormDialog({
 
                             <div className="grid gap-2">
                                 <Label htmlFor="ideal_stock">
-                                    Estoque Ideal
+                                    Estoque Ideal{' '}
+                                    <span className="text-red-500">*</span>
                                 </Label>
                                 <Input
                                     id="ideal_stock"
@@ -267,6 +270,7 @@ export function IngredientFormDialog({
                                         setData('ideal_stock', e.target.value)
                                     }
                                     placeholder="0.000"
+                                    required
                                 />
                                 {errors.ideal_stock && (
                                     <p className="text-sm text-red-500">
