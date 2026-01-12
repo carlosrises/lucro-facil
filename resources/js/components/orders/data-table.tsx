@@ -334,7 +334,7 @@ export function DataTable({
         const timer = setTimeout(() => {
             const normalizedSearch = searchValue || undefined;
             const currentSearch = filters?.search || undefined;
-            
+
             if (normalizedSearch !== currentSearch) {
                 updateFilters({ search: normalizedSearch });
             }
