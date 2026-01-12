@@ -143,15 +143,6 @@ export function calculateOrderCMV(items: OrderItem[]): number {
                             parseFloat(String(addOn.unit_cost_override)) *
                             quantity;
 
-                        console.log('🍕 CMV Add-on:', {
-                            name: addOn.name,
-                            unit_cost_override: addOn.unit_cost_override,
-                            mapping_quantity: addOn.mapping_quantity,
-                            quantity: quantity,
-                            calculated_cost: cost,
-                            is_flavor: isFlavor,
-                        });
-
                         return addOnSum + cost;
                     }
 
