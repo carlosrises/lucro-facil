@@ -324,11 +324,19 @@ export function DataTable({
     // Estado local para search com debounce
     const [searchValue, setSearchValue] = React.useState(filters?.search ?? '');
 
+    // Sincronizar searchValue quando filters.search mudar externamente
+    React.useEffect(() => {
+        setSearchValue(filters?.search ?? '');
+    }, [filters?.search]);
+
     // Debounce para search (500ms)
     React.useEffect(() => {
         const timer = setTimeout(() => {
-            if (searchValue !== (filters?.search ?? '')) {
-                updateFilters({ search: searchValue || undefined });
+            const normalizedSearch = searchValue || undefined;
+            const currentSearch = filters?.search || undefined;
+            
+            if (normalizedSearch !== currentSearch) {
+                updateFilters({ search: normalizedSearch });
             }
         }, 500);
 
@@ -377,6 +385,13 @@ export function DataTable({
             ...newFilters,
             ...(resetPage ? { page: 1 } : {}),
         };
+
+        // Remover chaves com valores undefined
+        Object.keys(merged).forEach((key) => {
+            if (merged[key as keyof Filters] === undefined) {
+                delete merged[key as keyof Filters];
+            }
+        });
 
         router.get('/orders', merged, {
             preserveState: true,
@@ -429,102 +444,82 @@ export function DataTable({
     return (
         <div className="flex w-full flex-col gap-4 px-4 lg:px-6">
             {/* Avisos minimalistas no topo */}
-            <div className="flex flex-wrap gap-2">
-                {/* Aviso: Produtos não associados */}
-                {(unmappedProductsCount ?? 0) > 0 && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-9 gap-2 border border-red-200 bg-red-50 text-red-900 hover:bg-red-100 hover:text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100 dark:hover:bg-red-900"
-                        onClick={() => updateFilters({ unmapped_only: '1' })}
-                    >
-                        <AlertCircle className="h-4 w-4" />
-                        <span className="font-medium">
-                            {unmappedProductsCount} não associados
-                        </span>
-                    </Button>
-                )}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-2">
+                    {/* Aviso: Produtos não associados */}
+                    {(unmappedProductsCount ?? 0) > 0 && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 gap-2 border border-red-200 bg-red-50 text-red-900 hover:bg-red-100 hover:text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100 dark:hover:bg-red-900"
+                            onClick={() =>
+                                updateFilters({ unmapped_only: '1' })
+                            }
+                        >
+                            <AlertCircle className="h-4 w-4" />
+                            <span className="font-medium">
+                                {unmappedProductsCount} não associados
+                            </span>
+                        </Button>
+                    )}
 
-                {/* Aviso: Pedidos sem método de pagamento */}
-                {(noPaymentMethodCount ?? 0) > 0 && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-9 gap-2 border border-orange-200 bg-orange-50 text-orange-900 hover:bg-orange-100 hover:text-orange-900 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-100 dark:hover:bg-orange-900"
-                        onClick={() =>
-                            updateFilters({ no_payment_method: '1' })
-                        }
-                    >
-                        <CreditCard className="h-4 w-4" />
-                        <span className="font-medium">
-                            {noPaymentMethodCount} sem taxa vinculada
-                        </span>
-                    </Button>
-                )}
+                    {/* Aviso: Pedidos sem método de pagamento */}
+                    {(noPaymentMethodCount ?? 0) > 0 && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 gap-2 border border-orange-200 bg-orange-50 text-orange-900 hover:bg-orange-100 hover:text-orange-900 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-100 dark:hover:bg-orange-900"
+                            onClick={() =>
+                                updateFilters({ no_payment_method: '1' })
+                            }
+                        >
+                            <CreditCard className="h-4 w-4" />
+                            <span className="font-medium">
+                                {noPaymentMethodCount} sem taxa vinculada
+                            </span>
+                        </Button>
+                    )}
 
-                {/* Aviso: Pedidos sem pagamento */}
-                {(noPaymentInfoCount ?? 0) > 0 && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-9 gap-2 border border-gray-200 bg-gray-50 text-gray-900 hover:bg-gray-100 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
-                        onClick={() => updateFilters({ no_payment_info: '1' })}
-                    >
-                        <Ban className="h-4 w-4" />
-                        <span className="font-medium">
-                            {noPaymentInfoCount} sem pagamento
-                        </span>
-                    </Button>
-                )}
+                    {/* Aviso: Pedidos sem pagamento */}
+                    {(noPaymentInfoCount ?? 0) > 0 && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 gap-2 border border-gray-200 bg-gray-50 text-gray-900 hover:bg-gray-100 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+                            onClick={() =>
+                                updateFilters({ no_payment_info: '1' })
+                            }
+                        >
+                            <Ban className="h-4 w-4" />
+                            <span className="font-medium">
+                                {noPaymentInfoCount} sem pagamento
+                            </span>
+                        </Button>
+                    )}
+                </div>
 
-                {/* Botões de Sincronização Takeat */}
-                <div className="ml-auto flex gap-2">
-                    {/* Sincronizar Hoje */}
+                {/* Botões de sincronização Takeat */}
+                <div className="flex items-center gap-2">
                     <Button
                         variant="outline"
                         size="sm"
-                        className="h-9"
-                        onClick={() => {
-                            toast.promise(
-                                fetch('/takeat/sync/today', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-CSRF-TOKEN':
-                                            document
-                                                .querySelector(
-                                                    'meta[name="csrf-token"]',
-                                                )
-                                                ?.getAttribute('content') || '',
-                                    },
-                                }).then((res) => {
-                                    if (!res.ok)
-                                        throw new Error(
-                                            'Erro na sincronização',
-                                        );
-                                    router.reload({ only: ['orders'] });
-                                }),
-                                {
-                                    loading: 'Sincronizando pedidos de hoje...',
-                                    success: 'Pedidos sincronizados!',
-                                    error: 'Erro ao sincronizar',
-                                },
-                            );
-                        }}
+                        onClick={handleSyncToday}
+                        disabled={isSyncingToday}
+                        title="Sincronizar pedidos de hoje"
                     >
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Sincronizar Hoje
+                        <RefreshCw
+                            className={`h-4 w-4 ${isSyncingToday ? 'animate-spin' : ''}`}
+                        />
+                        <span className="ml-2">Sincronizar Hoje</span>
                     </Button>
-
-                    {/* Sincronizar Data Específica */}
                     <Button
                         variant="outline"
                         size="sm"
-                        className="h-9"
                         onClick={() => setSyncDialogOpen(true)}
+                        title="Sincronizar período específico"
                     >
-                        <Calendar className="mr-2 h-4 w-4" />
-                        Sincronizar Data
+                        <Calendar className="h-4 w-4" />
+                        <span className="ml-2">Sincronizar Data</span>
                     </Button>
                 </div>
             </div>
@@ -786,31 +781,6 @@ export function DataTable({
                             });
                         }}
                     />
-                </div>
-
-                {/* Botões de sincronização Takeat */}
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleSyncToday}
-                        disabled={isSyncingToday}
-                        title="Sincronizar pedidos de hoje"
-                    >
-                        <RefreshCw
-                            className={`h-4 w-4 ${isSyncingToday ? 'animate-spin' : ''}`}
-                        />
-                        <span className="ml-2">Sincronizar Hoje</span>
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSyncDialogOpen(true)}
-                        title="Sincronizar período específico"
-                    >
-                        <Calendar className="h-4 w-4" />
-                        <span className="ml-2">Sincronizar Data</span>
-                    </Button>
                 </div>
 
                 {/* 👁️ Colunas visíveis */}
