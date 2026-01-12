@@ -149,7 +149,7 @@ class OrdersController extends Controller
                             ->where('external_reference', (string) $index)
                             ->first();
 
-                        \Log::info('🔍 OrdersController - Buscando OrderItemMapping', [
+                        \Log::debug('🔍 OrdersController - Buscando OrderItemMapping', [
                             'order_item_id' => $item->id,
                             'addon_name' => $addOnName,
                             'index' => $index,
@@ -165,7 +165,7 @@ class OrdersController extends Controller
                             $unitCost = (float) $orderItemMapping->unit_cost_override;
                             $mappingQuantity = (float) $orderItemMapping->quantity; // Fração do sabor (ex: 0.25 para 1/4)
 
-                            \Log::info('✅ Usando OrderItemMapping', [
+                            \Log::debug('✅ Usando OrderItemMapping', [
                                 'unit_cost' => $unitCost,
                                 'quantity' => $mappingQuantity,
                             ]);
@@ -173,7 +173,7 @@ class OrdersController extends Controller
                             $unitCost = (float) $mapping->internalProduct->unit_cost;
                             $mappingQuantity = 1.0; // Sem fração
 
-                            \Log::info('⚠️ Fallback para ProductMapping', [
+                            \Log::debug('⚠️ Fallback para ProductMapping', [
                                 'unit_cost' => $unitCost,
                                 'quantity' => $mappingQuantity,
                             ]);
