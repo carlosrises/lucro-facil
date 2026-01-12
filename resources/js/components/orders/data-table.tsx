@@ -82,6 +82,7 @@ import { ItemMappingsDialog } from '@/components/orders/item-mappings-dialog';
 import { OrderExpandedDetails } from '@/components/orders/order-expanded-details';
 import { OrderFinancialCard } from '@/components/orders/order-financial-card';
 import { QuickAssociateDialog } from '@/components/orders/quick-associate-dialog';
+import { SyncTakeatDialog } from '@/components/orders/sync-takeat-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MultiSelect } from '@/components/ui/multi-select';
@@ -93,7 +94,15 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Link, router } from '@inertiajs/react';
+import {
+    AlertCircle,
+    Ban,
+    Calendar,
+    CreditCard,
+    RefreshCw,
+} from 'lucide-react';
 import { DateRange } from 'react-day-picker';
+import { toast } from 'sonner';
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
@@ -133,6 +142,7 @@ export function DataTable({
     providerOptions = [],
     unmappedProductsCount = 0,
     noPaymentMethodCount = 0,
+    noPaymentInfoCount = 0,
     internalProducts = [],
     marginSettings,
 }: {
@@ -143,6 +153,7 @@ export function DataTable({
     providerOptions?: Array<{ value: string; label: string }>;
     unmappedProductsCount?: number;
     noPaymentMethodCount?: number;
+    noPaymentInfoCount?: number;
     internalProducts?: Array<{
         id: number;
         name: string;
@@ -168,6 +179,10 @@ export function DataTable({
         null,
     );
     const selectedOrderIdRef = React.useRef<number | null>(null);
+
+    // Estados para sincronização Takeat
+    const [syncDialogOpen, setSyncDialogOpen] = React.useState(false);
+    const [isSyncingToday, setIsSyncingToday] = React.useState(false);
 
     // Atualizar selectedOrder quando os dados mudarem
     React.useEffect(() => {
@@ -306,6 +321,54 @@ export function DataTable({
         setLocalPaymentMethods(serverMethods);
     }, [filters?.payment_method]);
 
+    // Estado local para search com debounce
+    const [searchValue, setSearchValue] = React.useState(filters?.search ?? '');
+
+    // Debounce para search (500ms)
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            if (searchValue !== (filters?.search ?? '')) {
+                updateFilters({ search: searchValue || undefined });
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [searchValue]);
+
+    // Função para sincronizar pedidos de hoje
+    const handleSyncToday = async () => {
+        setIsSyncingToday(true);
+
+        try {
+            const response = await fetch('/takeat/sync/today', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN':
+                        document
+                            .querySelector('meta[name="csrf-token"]')
+                            ?.getAttribute('content') || '',
+                },
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Erro ao sincronizar');
+            }
+
+            toast.success('Pedidos de hoje sincronizados com sucesso!');
+            router.reload({ only: ['orders'] });
+        } catch (error: any) {
+            toast.error(
+                error.message ||
+                    'Erro ao sincronizar pedidos. Tente novamente.',
+            );
+        } finally {
+            setIsSyncingToday(false);
+        }
+    };
+
     // Atualiza filtros mantendo per_page
     const updateFilters = (newFilters: Partial<Filters>, resetPage = true) => {
         const merged = {
@@ -365,104 +428,106 @@ export function DataTable({
 
     return (
         <div className="flex w-full flex-col gap-4 px-4 lg:px-6">
-            {/* Banner de produtos não mapeados */}
-            {unmappedProductsCount > 0 && (
-                <Button
-                    variant="outline"
-                    className="h-auto w-full justify-start gap-3 rounded-lg border-2 border-red-500 bg-red-50 p-4 text-left hover:bg-red-100 dark:border-red-900 dark:bg-red-950 dark:hover:bg-red-900"
-                    onClick={() => updateFilters({ unmapped_only: '1' })}
-                >
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-red-500 text-white">
-                        <svg
-                            className="h-5 w-5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                            />
-                        </svg>
-                    </div>
-                    <div className="flex-1">
-                        <div className="text-base font-bold text-red-900 dark:text-red-100">
-                            {unmappedProductsCount} vendas sem produto vinculado
-                        </div>
-                        <div className="mt-1 text-sm text-red-700 dark:text-red-300">
-                            Clique para filtrar apenas pedidos com produtos não
-                            associados
-                        </div>
-                    </div>
-                    <div className="flex-shrink-0">
-                        <svg
-                            className="h-5 w-5 text-red-700 dark:text-red-300"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5l7 7-7 7"
-                            />
-                        </svg>
-                    </div>
-                </Button>
-            )}
+            {/* Avisos minimalistas no topo */}
+            <div className="flex flex-wrap gap-2">
+                {/* Aviso: Produtos não associados */}
+                {(unmappedProductsCount ?? 0) > 0 && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 gap-2 border border-red-200 bg-red-50 text-red-900 hover:bg-red-100 hover:text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100 dark:hover:bg-red-900"
+                        onClick={() => updateFilters({ unmapped_only: '1' })}
+                    >
+                        <AlertCircle className="h-4 w-4" />
+                        <span className="font-medium">
+                            {unmappedProductsCount} não associados
+                        </span>
+                    </Button>
+                )}
 
-            {/* Banner de pedidos sem método de pagamento */}
-            {noPaymentMethodCount > 0 && (
-                <Button
-                    variant="outline"
-                    className="h-auto w-full justify-start gap-3 rounded-lg border-2 border-orange-500 bg-orange-50 p-4 text-left hover:bg-orange-100 dark:border-orange-900 dark:bg-orange-950 dark:hover:bg-orange-900"
-                    onClick={() => updateFilters({ no_payment_method: '1' })}
-                >
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-orange-500 text-white">
-                        <svg
-                            className="h-5 w-5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                        </svg>
-                    </div>
-                    <div className="flex-1">
-                        <div className="text-base font-bold text-orange-900 dark:text-orange-100">
-                            {noPaymentMethodCount} pedidos sem método de
-                            pagamento
-                        </div>
-                        <div className="mt-1 text-sm text-orange-700 dark:text-orange-300">
-                            Clique para filtrar pedidos sem informação de
-                            pagamento
-                        </div>
-                    </div>
-                    <div className="flex-shrink-0">
-                        <svg
-                            className="h-5 w-5 text-orange-700 dark:text-orange-300"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5l7 7-7 7"
-                            />
-                        </svg>
-                    </div>
-                </Button>
-            )}
+                {/* Aviso: Pedidos sem método de pagamento */}
+                {(noPaymentMethodCount ?? 0) > 0 && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 gap-2 border border-orange-200 bg-orange-50 text-orange-900 hover:bg-orange-100 hover:text-orange-900 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-100 dark:hover:bg-orange-900"
+                        onClick={() =>
+                            updateFilters({ no_payment_method: '1' })
+                        }
+                    >
+                        <CreditCard className="h-4 w-4" />
+                        <span className="font-medium">
+                            {noPaymentMethodCount} sem taxa vinculada
+                        </span>
+                    </Button>
+                )}
+
+                {/* Aviso: Pedidos sem pagamento */}
+                {(noPaymentInfoCount ?? 0) > 0 && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 gap-2 border border-gray-200 bg-gray-50 text-gray-900 hover:bg-gray-100 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+                        onClick={() => updateFilters({ no_payment_info: '1' })}
+                    >
+                        <Ban className="h-4 w-4" />
+                        <span className="font-medium">
+                            {noPaymentInfoCount} sem pagamento
+                        </span>
+                    </Button>
+                )}
+
+                {/* Botões de Sincronização Takeat */}
+                <div className="ml-auto flex gap-2">
+                    {/* Sincronizar Hoje */}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9"
+                        onClick={() => {
+                            toast.promise(
+                                fetch('/takeat/sync/today', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRF-TOKEN':
+                                            document
+                                                .querySelector(
+                                                    'meta[name="csrf-token"]',
+                                                )
+                                                ?.getAttribute('content') || '',
+                                    },
+                                }).then((res) => {
+                                    if (!res.ok)
+                                        throw new Error(
+                                            'Erro na sincronização',
+                                        );
+                                    router.reload({ only: ['orders'] });
+                                }),
+                                {
+                                    loading: 'Sincronizando pedidos de hoje...',
+                                    success: 'Pedidos sincronizados!',
+                                    error: 'Erro ao sincronizar',
+                                },
+                            );
+                        }}
+                    >
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Sincronizar Hoje
+                    </Button>
+
+                    {/* Sincronizar Data Específica */}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9"
+                        onClick={() => setSyncDialogOpen(true)}
+                    >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        Sincronizar Data
+                    </Button>
+                </div>
+            </div>
 
             {/* 🔎 Filtros */}
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -497,7 +562,7 @@ export function DataTable({
                     {/* Badge de filtro ativo - sem método de pagamento */}
                     {filters?.no_payment_method && (
                         <Badge variant="destructive" className="h-9 gap-2 px-3">
-                            Sem método de pagamento
+                            Sem taxa vinculada
                             <button
                                 onClick={() =>
                                     updateFilters({
@@ -505,6 +570,35 @@ export function DataTable({
                                     })
                                 }
                                 className="ml-1 rounded-full hover:bg-red-700"
+                            >
+                                <svg
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
+                                </svg>
+                            </button>
+                        </Badge>
+                    )}
+
+                    {/* Badge de filtro ativo - sem pagamento */}
+                    {filters?.no_payment_info && (
+                        <Badge variant="secondary" className="h-9 gap-2 px-3">
+                            Sem pagamento
+                            <button
+                                onClick={() =>
+                                    updateFilters({
+                                        no_payment_info: undefined,
+                                    })
+                                }
+                                className="ml-1 rounded-full hover:bg-gray-700"
                             >
                                 <svg
                                     className="h-4 w-4"
@@ -559,10 +653,8 @@ export function DataTable({
                     {/* Buscar por código */}
                     <Input
                         placeholder="Buscar pedido..."
-                        defaultValue={filters?.search ?? ''}
-                        onBlur={(e) =>
-                            updateFilters({ search: e.target.value })
-                        }
+                        value={searchValue}
+                        onChange={(e) => setSearchValue(e.target.value)}
                         className="h-9 w-[200px]"
                     />
 
@@ -694,6 +786,31 @@ export function DataTable({
                             });
                         }}
                     />
+                </div>
+
+                {/* Botões de sincronização Takeat */}
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSyncToday}
+                        disabled={isSyncingToday}
+                        title="Sincronizar pedidos de hoje"
+                    >
+                        <RefreshCw
+                            className={`h-4 w-4 ${isSyncingToday ? 'animate-spin' : ''}`}
+                        />
+                        <span className="ml-2">Sincronizar Hoje</span>
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSyncDialogOpen(true)}
+                        title="Sincronizar período específico"
+                    >
+                        <Calendar className="h-4 w-4" />
+                        <span className="ml-2">Sincronizar Data</span>
+                    </Button>
                 </div>
 
                 {/* 👁️ Colunas visíveis */}
@@ -2535,14 +2652,16 @@ export function DataTable({
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent side="top">
-                                {[10, 20, 30, 40, 50].map((pageSize) => (
-                                    <SelectItem
-                                        key={pageSize}
-                                        value={`${pageSize}`}
-                                    >
-                                        {pageSize}
-                                    </SelectItem>
-                                ))}
+                                {[10, 20, 30, 40, 50, 100, 200, 500, 1000].map(
+                                    (pageSize) => (
+                                        <SelectItem
+                                            key={pageSize}
+                                            value={`${pageSize}`}
+                                        >
+                                            {pageSize}
+                                        </SelectItem>
+                                    ),
+                                )}
                             </SelectContent>
                         </Select>
                     </div>
@@ -2673,6 +2792,12 @@ export function DataTable({
                 item={selectedItem}
                 internalProducts={internalProducts}
                 provider={selectedOrder?.provider || 'ifood'}
+            />
+
+            {/* Dialog de Sincronização Takeat */}
+            <SyncTakeatDialog
+                open={syncDialogOpen}
+                onOpenChange={setSyncDialogOpen}
             />
         </div>
     );

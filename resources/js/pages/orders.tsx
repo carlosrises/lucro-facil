@@ -44,6 +44,7 @@ type OrdersPageProps = {
     providerOptions: Array<{ value: string; label: string }>;
     unmappedProductsCount: number;
     noPaymentMethodCount: number;
+    noPaymentInfoCount: number;
     internalProducts: InternalProduct[];
     marginSettings: {
         margin_excellent: number;
@@ -61,6 +62,7 @@ export default function Orders() {
         providerOptions,
         unmappedProductsCount,
         noPaymentMethodCount,
+        noPaymentInfoCount,
         internalProducts,
         marginSettings,
         auth,
@@ -94,6 +96,7 @@ export default function Orders() {
                             providerOptions={providerOptions}
                             unmappedProductsCount={unmappedProductsCount}
                             noPaymentMethodCount={noPaymentMethodCount}
+                            noPaymentInfoCount={noPaymentInfoCount}
                             internalProducts={internalProducts}
                             marginSettings={marginSettings}
                         />
