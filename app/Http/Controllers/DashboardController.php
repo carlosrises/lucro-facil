@@ -174,6 +174,7 @@ class DashboardController extends Controller
 
         // Receitas extras (movimentações financeiras)
         $extraIncome = (float) FinanceEntry::where('tenant_id', $tenantId)
+            ->withoutTemplates()
             ->whereBetween('occurred_on', [$startDateParsed, $endDateParsed])
             ->whereHas('category', function ($q) {
                 $q->where('type', 'income');
@@ -182,6 +183,7 @@ class DashboardController extends Controller
 
         // Despesas extras (movimentações financeiras) - ESTAS SÃO OS CUSTOS FIXOS
         $extraExpenses = (float) FinanceEntry::where('tenant_id', $tenantId)
+            ->withoutTemplates()
             ->whereBetween('occurred_on', [$startDateParsed, $endDateParsed])
             ->whereHas('category', function ($q) {
                 $q->where('type', 'expense');
@@ -189,8 +191,9 @@ class DashboardController extends Controller
             ->sum('amount');
 
         // Cálculos principais (mesma lógica do DRE)
-        // 1. Receita pós Dedução = Faturamento - (Taxa Pagamento + Comissão + Descontos) + Subsídios
-        $revenueAfterDeductions = $totalRevenue - $totalPaymentMethodFees - $totalCommissions - $totalDiscounts + $totalSubsidies;
+        // 1. Receita pós Dedução = Faturamento - (Taxa Pagamento + Comissão + Descontos)
+        // Subsídio já está incluso no Faturamento, não soma novamente
+        $revenueAfterDeductions = $totalRevenue - $totalPaymentMethodFees - $totalCommissions - $totalDiscounts;
 
         // 2. Margem de Contribuição (Lucro Bruto) = Receita pós Dedução - CMV - Despesas Operacionais - Impostos
         $contributionMargin = $revenueAfterDeductions - $totalCmv - $totalCosts - $totalTaxes;
@@ -343,6 +346,7 @@ class DashboardController extends Controller
         $previousEndDateParsed = Carbon::parse($previousEndDate);
 
         $previousExtraIncome = (float) FinanceEntry::where('tenant_id', $tenantId)
+            ->withoutTemplates()
             ->whereBetween('occurred_on', [$previousStartDateParsed, $previousEndDateParsed])
             ->whereHas('category', function ($q) {
                 $q->where('type', 'income');
@@ -350,6 +354,7 @@ class DashboardController extends Controller
             ->sum('amount');
 
         $previousExtraExpenses = (float) FinanceEntry::where('tenant_id', $tenantId)
+            ->withoutTemplates()
             ->whereBetween('occurred_on', [$previousStartDateParsed, $previousEndDateParsed])
             ->whereHas('category', function ($q) {
                 $q->where('type', 'expense');
@@ -357,7 +362,7 @@ class DashboardController extends Controller
             ->sum('amount');
 
         // Cálculos do período anterior (mesma lógica do DRE)
-        $previousRevenueAfterDeductions = $previousRevenue - $previousPaymentFees - $previousCommissions - $previousDiscounts + $previousSubsidies;
+        $previousRevenueAfterDeductions = $previousRevenue - $previousPaymentFees - $previousCommissions - $previousDiscounts;
         $previousContributionMargin = $previousRevenueAfterDeductions - $previousCmv - $previousCosts - $previousTaxes;
         $previousFixedCosts = $previousExtraExpenses;
         $previousNetProfit = $previousContributionMargin - $previousExtraExpenses + $previousExtraIncome;

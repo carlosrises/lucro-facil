@@ -167,6 +167,7 @@ class FinancialSummaryController extends Controller
 
         // 6. Receitas extras (movimentações operacionais)
         $extraRevenue = (float) FinanceEntry::where('tenant_id', $tenantId)
+            ->withoutTemplates()
             ->whereYear('occurred_on', $year)
             ->whereMonth('occurred_on', $monthNum)
             ->whereHas('category', function ($q) {
@@ -176,6 +177,7 @@ class FinancialSummaryController extends Controller
 
         // 7. Despesas operacionais extras (movimentações)
         $operationalExpenses = (float) FinanceEntry::where('tenant_id', $tenantId)
+            ->withoutTemplates()
             ->whereYear('occurred_on', $year)
             ->whereMonth('occurred_on', $monthNum)
             ->whereHas('category', function ($q) {
@@ -193,8 +195,9 @@ class FinancialSummaryController extends Controller
         $discounts = $totalDiscounts;
         $subsidies = $totalSubsidies;
 
-        // Receita pós Dedução = Faturamento - (Taxa de pagamento + Comissão Marketplace + Descontos) + Subsídios
-        $revenueAfterDeductions = $grossRevenue - $paymentFees - $commissions - $discounts + $subsidies;
+        // Receita pós Dedução = Faturamento - (Taxa de pagamento + Comissão Marketplace + Descontos)
+        // Subsídio já está incluso no Faturamento, não soma novamente
+        $revenueAfterDeductions = $grossRevenue - $paymentFees - $commissions - $discounts;
         $revenueAfterDeductionsPercent = $grossRevenue > 0 ? ($revenueAfterDeductions / $grossRevenue) * 100 : 0;
 
         // Custos
