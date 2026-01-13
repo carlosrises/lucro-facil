@@ -40,6 +40,13 @@ class ProductsController extends Controller
             ->appends($request->except('page'))
             ->withQueryString();
 
+        // DEBUG TEMPORÁRIO: Log dos primeiros 3 produtos para verificar unit_cost
+        foreach ($products->items() as $index => $product) {
+            if ($index < 3) {
+                \Log::info("[PRODUCTS INDEX] ID: {$product->id} | Nome: {$product->name} | unit_cost: {$product->unit_cost}");
+            }
+        }
+
         // Buscar ingredients ativos para o formulário
         $rawIngredients = Ingredient::where('tenant_id', tenant_id())
             ->where('active', true)
@@ -377,6 +384,9 @@ class ProductsController extends Controller
                 // Recalcular CMV e sobrescrever unit_cost
                 $cmv = $product->calculateCMV();
                 $product->update(['unit_cost' => $cmv]);
+
+                // Atualizar $product com os novos valores do banco
+                $product->refresh();
             } else {
                 // Se não há receita ou receita vazia, remove todos os custos
                 // e mantém o unit_cost cadastrado manualmente
@@ -390,18 +400,33 @@ class ProductsController extends Controller
 
             // Se o unit_cost mudou, verificar se este produto é usado como insumo em outros produtos
             if ($oldUnitCost != $product->unit_cost) {
+                \Log::info('Produto atualizado - verificando dependentes', [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'old_cost' => $oldUnitCost,
+                    'new_cost' => $product->unit_cost,
+                ]);
+
                 // Verificar se existe algum produto que usa este como ingrediente
                 $isUsedAsIngredient = ProductCost::where('tenant_id', tenant_id())
                     ->where('ingredient_id', $product->id)
                     ->exists();
 
                 if ($isUsedAsIngredient) {
+                    \Log::info('Produto é usado como insumo - disparando evento', [
+                        'product_id' => $product->id,
+                    ]);
+
                     event(new \App\Events\ProductCostChanged(
                         $product->id,
                         $product->tenant_id,
                         $oldUnitCost,
                         $product->unit_cost
                     ));
+                } else {
+                    \Log::info('Produto não é usado como insumo - evento não disparado', [
+                        'product_id' => $product->id,
+                    ]);
                 }
             }
 
