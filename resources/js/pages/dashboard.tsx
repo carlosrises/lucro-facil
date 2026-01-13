@@ -1,13 +1,20 @@
 import { DashboardSectionCards } from '@/components/dashboard/section-cards';
 import { DashboardSectionChart } from '@/components/dashboard/section-chart';
 import { DateRangePicker } from '@/components/date-range-picker';
+import { Button } from '@/components/ui/button';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from '@/components/ui/command';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 
 import AppLayout from '@/layouts/app-layout';
 
@@ -15,7 +22,9 @@ import { dashboard } from '@/routes';
 
 import { type BreadcrumbItem } from '@/types';
 
+import { cn } from '@/lib/utils';
 import { Head, router } from '@inertiajs/react';
+import { Check, ChevronsUpDown, Store as StoreIcon } from 'lucide-react';
 import { useState } from 'react';
 import { DateRange } from 'react-day-picker';
 
@@ -72,7 +81,7 @@ interface DashboardProps {
     dashboardData: DashboardData;
     chartData: ChartDataPoint[];
     stores: Store[];
-    providers: Provider[];
+    providerOptions: Provider[];
     filters: {
         start_date: string;
         end_date: string;
@@ -85,7 +94,7 @@ export default function Dashboard({
     dashboardData,
     chartData,
     stores,
-    providers,
+    providerOptions,
     filters,
 }: DashboardProps) {
     const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
@@ -105,6 +114,36 @@ export default function Dashboard({
     const [selectedProvider, setSelectedProvider] = useState<string>(
         filters.provider || 'all',
     );
+
+    const [openStoreCombo, setOpenStoreCombo] = useState(false);
+    const [openProviderCombo, setOpenProviderCombo] = useState(false);
+
+    // Mapear logos dos marketplaces
+    const getMarketplaceLogo = (provider: string) => {
+        const logoMap: Record<string, { src: string; alt: string }> = {
+            ifood: {
+                src: '/images/ifood.svg',
+                alt: 'iFood',
+            },
+            takeat: {
+                src: '/images/takeat.svg',
+                alt: 'Takeat',
+            },
+            '99food': {
+                src: '/images/99food.png',
+                alt: '99Food',
+            },
+            rappi: {
+                src: '/images/rappi.svg',
+                alt: 'Rappi',
+            },
+            neemo: {
+                src: '/images/neemo.png',
+                alt: 'Neemo',
+            },
+        };
+        return logoMap[provider] || null;
+    };
 
     const handleDateRangeChange = (range: DateRange | undefined) => {
         setDateRange(range);
@@ -185,49 +224,275 @@ export default function Dashboard({
                                 onChange={handleDateRangeChange}
                             />
 
-                            <Select
-                                value={selectedStore}
-                                onValueChange={handleStoreChange}
+                            {/* Filtro de Lojas com Combobox */}
+                            <Popover
+                                open={openStoreCombo}
+                                onOpenChange={setOpenStoreCombo}
                             >
-                                <SelectTrigger className="w-full sm:w-[240px]">
-                                    <SelectValue placeholder="Todas as lojas" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">
-                                        Todas as lojas
-                                    </SelectItem>
-                                    {stores.map((store) => (
-                                        <SelectItem
-                                            key={store.id}
-                                            value={String(store.id)}
-                                        >
-                                            {store.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={openStoreCombo}
+                                        className="h-9 w-full justify-between sm:w-[280px]"
+                                    >
+                                        <div className="flex items-center gap-2 overflow-hidden">
+                                            {selectedStore === 'all' ? (
+                                                <>
+                                                    <StoreIcon className="h-4 w-4 shrink-0" />
+                                                    <span className="truncate">
+                                                        Todas as lojas
+                                                    </span>
+                                                </>
+                                            ) : (
+                                                (() => {
+                                                    const store = stores.find(
+                                                        (s) =>
+                                                            String(s.id) ===
+                                                            selectedStore,
+                                                    );
+                                                    const logo =
+                                                        store &&
+                                                        getMarketplaceLogo(
+                                                            store.provider,
+                                                        );
+                                                    return (
+                                                        <>
+                                                            {logo ? (
+                                                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded border bg-background">
+                                                                    <img
+                                                                        src={
+                                                                            logo.src
+                                                                        }
+                                                                        alt={
+                                                                            logo.alt
+                                                                        }
+                                                                        className="h-4 w-4 object-contain"
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <StoreIcon className="h-4 w-4 shrink-0" />
+                                                            )}
+                                                            <span className="truncate">
+                                                                {store?.name ||
+                                                                    'Selecionar...'}
+                                                            </span>
+                                                        </>
+                                                    );
+                                                })()
+                                            )}
+                                        </div>
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                    className="w-[280px] p-0"
+                                    align="start"
+                                >
+                                    <Command>
+                                        <CommandInput
+                                            placeholder="Buscar loja..."
+                                            className="h-9"
+                                        />
+                                        <CommandList>
+                                            <CommandEmpty>
+                                                Nenhuma loja encontrada.
+                                            </CommandEmpty>
+                                            <CommandGroup>
+                                                <CommandItem
+                                                    value="all"
+                                                    keywords={[
+                                                        'todas',
+                                                        'all',
+                                                        'lojas',
+                                                    ]}
+                                                    onSelect={() => {
+                                                        handleStoreChange(
+                                                            'all',
+                                                        );
+                                                        setOpenStoreCombo(
+                                                            false,
+                                                        );
+                                                    }}
+                                                >
+                                                    <StoreIcon className="mr-2 h-4 w-4" />
+                                                    Todas as lojas
+                                                    <Check
+                                                        className={cn(
+                                                            'ml-auto h-4 w-4',
+                                                            selectedStore ===
+                                                                'all'
+                                                                ? 'opacity-100'
+                                                                : 'opacity-0',
+                                                        )}
+                                                    />
+                                                </CommandItem>
+                                                {stores.map((store) => {
+                                                    const logo =
+                                                        getMarketplaceLogo(
+                                                            store.provider,
+                                                        );
+                                                    return (
+                                                        <CommandItem
+                                                            key={store.id}
+                                                            value={store.name}
+                                                            keywords={[
+                                                                store.name,
+                                                                store.provider,
+                                                                String(
+                                                                    store.id,
+                                                                ),
+                                                            ]}
+                                                            onSelect={() => {
+                                                                handleStoreChange(
+                                                                    String(
+                                                                        store.id,
+                                                                    ),
+                                                                );
+                                                                setOpenStoreCombo(
+                                                                    false,
+                                                                );
+                                                            }}
+                                                        >
+                                                            {logo ? (
+                                                                <div className="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded border bg-background">
+                                                                    <img
+                                                                        src={
+                                                                            logo.src
+                                                                        }
+                                                                        alt={
+                                                                            logo.alt
+                                                                        }
+                                                                        className="h-4 w-4 object-contain"
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <StoreIcon className="mr-2 h-4 w-4" />
+                                                            )}
+                                                            {store.name}
+                                                            <Check
+                                                                className={cn(
+                                                                    'ml-auto h-4 w-4',
+                                                                    selectedStore ===
+                                                                        String(
+                                                                            store.id,
+                                                                        )
+                                                                        ? 'opacity-100'
+                                                                        : 'opacity-0',
+                                                                )}
+                                                            />
+                                                        </CommandItem>
+                                                    );
+                                                })}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
 
-                            <Select
-                                value={selectedProvider}
-                                onValueChange={handleProviderChange}
+                            {/* Filtro de Marketplaces com Combobox */}
+                            <Popover
+                                open={openProviderCombo}
+                                onOpenChange={setOpenProviderCombo}
                             >
-                                <SelectTrigger className="w-full sm:w-[200px]">
-                                    <SelectValue placeholder="Todos os marketplaces" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">
-                                        Todos os marketplaces
-                                    </SelectItem>
-                                    {providers.map((provider) => (
-                                        <SelectItem
-                                            key={provider.value}
-                                            value={provider.value}
-                                        >
-                                            {provider.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={openProviderCombo}
+                                        className="h-9 w-full justify-between sm:w-[280px]"
+                                    >
+                                        <span className="truncate">
+                                            {selectedProvider === 'all'
+                                                ? 'Todos os marketplaces'
+                                                : providerOptions.find(
+                                                      (p) =>
+                                                          p.value ===
+                                                          selectedProvider,
+                                                  )?.label || 'Selecionar...'}
+                                        </span>
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                    className="w-[280px] p-0"
+                                    align="start"
+                                >
+                                    <Command>
+                                        <CommandInput
+                                            placeholder="Buscar marketplace..."
+                                            className="h-9"
+                                        />
+                                        <CommandList>
+                                            <CommandEmpty>
+                                                Nenhum marketplace encontrado.
+                                            </CommandEmpty>
+                                            <CommandGroup>
+                                                <CommandItem
+                                                    value="all"
+                                                    keywords={[
+                                                        'todos',
+                                                        'all',
+                                                        'marketplaces',
+                                                    ]}
+                                                    onSelect={() => {
+                                                        handleProviderChange(
+                                                            'all',
+                                                        );
+                                                        setOpenProviderCombo(
+                                                            false,
+                                                        );
+                                                    }}
+                                                >
+                                                    Todos os marketplaces
+                                                    <Check
+                                                        className={cn(
+                                                            'ml-auto h-4 w-4',
+                                                            selectedProvider ===
+                                                                'all'
+                                                                ? 'opacity-100'
+                                                                : 'opacity-0',
+                                                        )}
+                                                    />
+                                                </CommandItem>
+                                                {providerOptions.map(
+                                                    (provider) => (
+                                                        <CommandItem
+                                                            key={provider.value}
+                                                            value={
+                                                                provider.label
+                                                            }
+                                                            keywords={[
+                                                                provider.label,
+                                                                provider.value,
+                                                            ]}
+                                                            onSelect={() => {
+                                                                handleProviderChange(
+                                                                    provider.value,
+                                                                );
+                                                                setOpenProviderCombo(
+                                                                    false,
+                                                                );
+                                                            }}
+                                                        >
+                                                            {provider.label}
+                                                            <Check
+                                                                className={cn(
+                                                                    'ml-auto h-4 w-4',
+                                                                    selectedProvider ===
+                                                                        provider.value
+                                                                        ? 'opacity-100'
+                                                                        : 'opacity-0',
+                                                                )}
+                                                            />
+                                                        </CommandItem>
+                                                    ),
+                                                )}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
 
                         <DashboardSectionCards data={dashboardData} />
