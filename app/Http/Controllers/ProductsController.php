@@ -40,13 +40,6 @@ class ProductsController extends Controller
             ->appends($request->except('page'))
             ->withQueryString();
 
-        // DEBUG TEMPORÁRIO: Log dos primeiros 3 produtos para verificar unit_cost
-        foreach ($products->items() as $index => $product) {
-            if ($index < 3) {
-                \Log::info("[PRODUCTS INDEX] ID: {$product->id} | Nome: {$product->name} | unit_cost: {$product->unit_cost}");
-            }
-        }
-
         // Buscar ingredients ativos para o formulário
         $rawIngredients = Ingredient::where('tenant_id', tenant_id())
             ->where('active', true)

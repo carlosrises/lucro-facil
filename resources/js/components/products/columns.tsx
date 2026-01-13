@@ -130,17 +130,6 @@ export const createColumns = ({
             // Se parseFloat retornar NaN, usar 0
             const finalCost = isNaN(cost) ? 0 : cost;
 
-            // DEBUG TEMPORÁRIO: Log para verificar valores em produção
-            if (row.original.id === 159) {
-                console.log('[PRODUCTS TABLE DEBUG] Pizza 4 Queijos:', {
-                    costValue,
-                    type: typeof costValue,
-                    cost,
-                    finalCost,
-                    fullProduct: row.original,
-                });
-            }
-
             return (
                 <div className="font-medium text-orange-600">
                     {new Intl.NumberFormat('pt-BR', {
