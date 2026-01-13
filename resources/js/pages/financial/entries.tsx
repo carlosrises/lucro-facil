@@ -31,6 +31,7 @@ interface FinanceEntry {
     amount: string;
     reference: string | null;
     supplier: string | null;
+    description: string | null;
     notes: string | null;
     due_date: string | null;
     recurrence_type:
@@ -43,11 +44,14 @@ interface FinanceEntry {
         | 'semiannual'
         | 'annual';
     recurrence_end_date: string | null;
+    consider_business_days: boolean;
     payment_method: string | null;
     financial_account: string | null;
     competence_date: string | null;
     status: 'pending' | 'paid';
     paid_at: string | null;
+    is_recurring: boolean;
+    parent_entry_id: number | null;
     category: FinanceCategory;
 }
 

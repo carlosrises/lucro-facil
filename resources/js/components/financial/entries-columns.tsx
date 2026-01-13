@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ColumnDef } from '@tanstack/react-table';
 import {
+    AlertTriangle,
     ArrowUpDown,
     MoreHorizontal,
     Pencil,
@@ -23,6 +24,7 @@ export type FinanceEntry = {
     amount: string;
     reference: string | null;
     supplier: string | null;
+    description: string | null;
     notes: string | null;
     due_date: string | null;
     recurrence_type:
@@ -35,6 +37,7 @@ export type FinanceEntry = {
         | 'semiannual'
         | 'annual';
     recurrence_end_date: string | null;
+    consider_business_days: boolean;
     payment_method: string | null;
     financial_account: string | null;
     competence_date: string | null;
@@ -96,12 +99,25 @@ export const createColumns = ({
         },
     },
     {
+        accessorKey: 'description',
+        header: 'Descrição',
+        cell: ({ row }) => {
+            const description = row.getValue('description') as string | null;
+            return (
+                description || <span className="text-muted-foreground">—</span>
+            );
+        },
+    },
+    {
         accessorKey: 'category',
         header: 'Categoria',
         cell: ({ row }) => {
             const category = row.original.category;
             const isRecurring = row.original.parent_entry_id !== null;
             const installmentNumber = row.original.installment_number;
+            const isTemplateWithError =
+                row.original.is_recurring &&
+                row.original.parent_entry_id === null;
 
             return (
                 <div className="flex items-center gap-2">
@@ -119,6 +135,16 @@ export const createColumns = ({
                         <Badge variant="outline" className="gap-1 text-xs">
                             <Repeat className="h-3 w-3" />
                             {installmentNumber}
+                        </Badge>
+                    )}
+                    {isTemplateWithError && (
+                        <Badge
+                            variant="destructive"
+                            className="gap-1 text-xs"
+                            title="Template com erro - Edite para corrigir a data limite"
+                        >
+                            <AlertTriangle className="h-3 w-3" />
+                            Erro
                         </Badge>
                     )}
                 </div>

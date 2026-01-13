@@ -19,7 +19,14 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { router } from '@inertiajs/react';
+import { Info } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -36,6 +43,7 @@ interface FinanceEntry {
     amount: string;
     reference: string | null;
     supplier: string | null;
+    description: string | null;
     notes: string | null;
     due_date: string | null;
     recurrence_type:
@@ -48,6 +56,7 @@ interface FinanceEntry {
         | 'semiannual'
         | 'annual';
     recurrence_end_date: string | null;
+    consider_business_days: boolean;
     payment_method: string | null;
     financial_account: string | null;
     competence_date: string | null;
@@ -77,10 +86,12 @@ export function EntryFormDialog({
         amount: '',
         reference: '',
         supplier: '',
+        description: '',
         notes: '',
         due_date: '',
         recurrence_type: 'single',
         recurrence_end_date: '',
+        consider_business_days: false,
         payment_method: '',
         financial_account: '',
         competence_date: '',
@@ -103,10 +114,12 @@ export function EntryFormDialog({
                 amount: entry.amount,
                 reference: entry.reference || '',
                 supplier: entry.supplier || '',
+                description: entry.description || '',
                 notes: entry.notes || '',
                 due_date: formatDate(entry.due_date),
                 recurrence_type: entry.recurrence_type,
                 recurrence_end_date: formatDate(entry.recurrence_end_date),
+                consider_business_days: entry.consider_business_days || false,
                 payment_method: entry.payment_method || '',
                 financial_account: entry.financial_account || '',
                 competence_date:
@@ -123,10 +136,12 @@ export function EntryFormDialog({
                 amount: '',
                 reference: '',
                 supplier: '',
+                description: '',
                 notes: '',
                 due_date: '',
                 recurrence_type: 'single',
                 recurrence_end_date: '',
+                consider_business_days: false,
                 payment_method: '',
                 financial_account: '',
                 competence_date: today,
@@ -138,6 +153,22 @@ export function EntryFormDialog({
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Validação básica do frontend
+        if (!formData.description || formData.description.trim() === '') {
+            toast.error('Por favor, informe uma descrição');
+            return;
+        }
+
+        if (!formData.finance_category_id) {
+            toast.error('Por favor, selecione uma categoria');
+            return;
+        }
+
+        if (!formData.amount || parseFloat(formData.amount) <= 0) {
+            toast.error('Por favor, informe um valor válido');
+            return;
+        }
 
         const url = entry
             ? `/financial/entries/${entry.id}`
@@ -160,8 +191,16 @@ export function EntryFormDialog({
                 );
                 onOpenChange(false);
             },
-            onError: () => {
-                toast.error('Erro ao salvar movimentação');
+            onError: (errors) => {
+                console.error('Erro ao salvar movimentação:', errors);
+
+                // Se houver erros de validação específicos, mostrar o primeiro
+                const firstError = Object.values(errors)[0];
+                const errorMessage = Array.isArray(firstError)
+                    ? firstError[0]
+                    : firstError || 'Erro ao salvar movimentação';
+
+                toast.error(errorMessage);
             },
         });
     };
@@ -184,10 +223,34 @@ export function EntryFormDialog({
                                   : 'Conta a receber'}
                         </DialogTitle>
                         <DialogDescription>
-                            Preencha os dados da movimentação financeira
+                            Preencha os dados da movimentação financeira.
+                            <br />
+                            <span className="text-xs text-muted-foreground">
+                                Campos marcados com{' '}
+                                <span className="text-destructive">*</span> são
+                                obrigatórios
+                            </span>
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="description">
+                                Descrição{' '}
+                                <span className="text-destructive">*</span>
+                            </Label>
+                            <Input
+                                id="description"
+                                placeholder="Ex: Conta de Luz, Salários, Aluguel..."
+                                value={formData.description}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        description: e.target.value,
+                                    })
+                                }
+                                required
+                            />
+                        </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="supplier">Fornecedor</Label>
@@ -204,7 +267,10 @@ export function EntryFormDialog({
                                 />
                             </div>
                             <div className="grid gap-2">
-                                <Label htmlFor="amount">Valor (R$) *</Label>
+                                <Label htmlFor="amount">
+                                    Valor (R$){' '}
+                                    <span className="text-destructive">*</span>
+                                </Label>
                                 <Input
                                     id="amount"
                                     type="number"
@@ -225,7 +291,10 @@ export function EntryFormDialog({
 
                         <div className="grid grid-cols-3 gap-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="occurred_on">Emissão *</Label>
+                                <Label htmlFor="occurred_on">
+                                    Emissão{' '}
+                                    <span className="text-destructive">*</span>
+                                </Label>
                                 <Input
                                     id="occurred_on"
                                     type="date"
@@ -241,7 +310,8 @@ export function EntryFormDialog({
                             </div>
                             <div className="grid gap-2">
                                 <Label htmlFor="competence_date">
-                                    Competência *
+                                    Competência{' '}
+                                    <span className="text-destructive">*</span>
                                 </Label>
                                 <Input
                                     id="competence_date"
@@ -257,7 +327,10 @@ export function EntryFormDialog({
                                 />
                             </div>
                             <div className="grid gap-2">
-                                <Label htmlFor="due_date">Vencimento *</Label>
+                                <Label htmlFor="due_date">
+                                    Vencimento{' '}
+                                    <span className="text-destructive">*</span>
+                                </Label>
                                 <Input
                                     id="due_date"
                                     type="date"
@@ -303,6 +376,61 @@ export function EntryFormDialog({
                                 value="pagamento"
                                 className="space-y-4"
                             >
+                                <div className="grid gap-2">
+                                    <Label htmlFor="finance_category_id">
+                                        Categoria{' '}
+                                        <span className="text-destructive">
+                                            *
+                                        </span>
+                                    </Label>
+                                    <Select
+                                        value={formData.finance_category_id}
+                                        onValueChange={(value) =>
+                                            setFormData({
+                                                ...formData,
+                                                finance_category_id: value,
+                                            })
+                                        }
+                                        required
+                                    >
+                                        <SelectTrigger
+                                            id="finance_category_id"
+                                            className="w-full"
+                                        >
+                                            <SelectValue placeholder="Selecione uma categoria" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {filteredCategories.map(
+                                                (category) => (
+                                                    <SelectItem
+                                                        key={category.id}
+                                                        value={category.id.toString()}
+                                                    >
+                                                        {category.name}
+                                                    </SelectItem>
+                                                ),
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="reference">
+                                        N° documento
+                                    </Label>
+                                    <Input
+                                        id="reference"
+                                        placeholder="Número do documento"
+                                        value={formData.reference}
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                reference: e.target.value,
+                                            })
+                                        }
+                                    />
+                                </div>
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="grid gap-2">
                                         <Label htmlFor="payment_method">
@@ -317,7 +445,10 @@ export function EntryFormDialog({
                                                 })
                                             }
                                         >
-                                            <SelectTrigger id="payment_method">
+                                            <SelectTrigger
+                                                id="payment_method"
+                                                className="w-full"
+                                            >
                                                 <SelectValue placeholder="Selecione" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -355,7 +486,10 @@ export function EntryFormDialog({
                                                 })
                                             }
                                         >
-                                            <SelectTrigger id="financial_account">
+                                            <SelectTrigger
+                                                id="financial_account"
+                                                className="w-full"
+                                            >
                                                 <SelectValue placeholder="Selecione" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -369,61 +503,12 @@ export function EntryFormDialog({
                                         </Select>
                                     </div>
                                 </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="finance_category_id">
-                                            Categoria
-                                        </Label>
-                                        <Select
-                                            value={formData.finance_category_id}
-                                            onValueChange={(value) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    finance_category_id: value,
-                                                })
-                                            }
-                                        >
-                                            <SelectTrigger id="finance_category_id">
-                                                <SelectValue placeholder="Sem categoria" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {filteredCategories.map(
-                                                    (category) => (
-                                                        <SelectItem
-                                                            key={category.id}
-                                                            value={category.id.toString()}
-                                                        >
-                                                            {category.name}
-                                                        </SelectItem>
-                                                    ),
-                                                )}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="reference">
-                                            N° documento
-                                        </Label>
-                                        <Input
-                                            id="reference"
-                                            placeholder="Número do documento"
-                                            value={formData.reference}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    reference: e.target.value,
-                                                })
-                                            }
-                                        />
-                                    </div>
-                                </div>
                             </TabsContent>
                             <TabsContent
                                 value="ocorrencia"
                                 className="space-y-4"
                             >
-                                <div className="grid grid-cols-3 gap-4">
+                                <div className="grid grid-cols-2 gap-4">
                                     <div className="grid gap-2">
                                         <Label htmlFor="recurrence_type">
                                             Recorrência
@@ -437,7 +522,10 @@ export function EntryFormDialog({
                                                 })
                                             }
                                         >
-                                            <SelectTrigger id="recurrence_type">
+                                            <SelectTrigger
+                                                id="recurrence_type"
+                                                className="w-full"
+                                            >
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -469,46 +557,33 @@ export function EntryFormDialog({
                                         </Select>
                                     </div>
 
-                                    {formData.recurrence_type === 'weekly' && (
-                                        <div className="grid gap-2">
-                                            <Label htmlFor="day_of_week">
-                                                Dia da semana *
-                                            </Label>
-                                            <Select>
-                                                <SelectTrigger id="day_of_week">
-                                                    <SelectValue placeholder="Domingo" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="0">
-                                                        Domingo
-                                                    </SelectItem>
-                                                    <SelectItem value="1">
-                                                        Segunda-feira
-                                                    </SelectItem>
-                                                    <SelectItem value="2">
-                                                        Terça-feira
-                                                    </SelectItem>
-                                                    <SelectItem value="3">
-                                                        Quarta-feira
-                                                    </SelectItem>
-                                                    <SelectItem value="4">
-                                                        Quinta-feira
-                                                    </SelectItem>
-                                                    <SelectItem value="5">
-                                                        Sexta-feira
-                                                    </SelectItem>
-                                                    <SelectItem value="6">
-                                                        Sábado
-                                                    </SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    )}
-
                                     {formData.recurrence_type !== 'single' && (
                                         <div className="grid gap-2">
-                                            <Label htmlFor="recurrence_end_date">
+                                            <Label
+                                                htmlFor="recurrence_end_date"
+                                                className="flex items-center gap-2"
+                                            >
                                                 Data Limite
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Info className="h-4 w-4 cursor-help text-muted-foreground" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p className="max-w-xs">
+                                                                A data limite
+                                                                deve ser igual
+                                                                ou posterior à
+                                                                data de emissão.
+                                                                As parcelas
+                                                                serão geradas a
+                                                                partir da data
+                                                                de emissão até a
+                                                                data limite.
+                                                            </p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
                                             </Label>
                                             <Input
                                                 id="recurrence_end_date"
@@ -529,59 +604,94 @@ export function EntryFormDialog({
                                     )}
                                 </div>
 
-                                {formData.recurrence_type !== 'single' && (
-                                    <>
-                                        <div className="grid gap-2">
-                                            <Label htmlFor="recurrence_category">
-                                                Categoria
-                                            </Label>
-                                            <Select
-                                                value={
-                                                    formData.finance_category_id
-                                                }
-                                                onValueChange={(value) =>
-                                                    setFormData({
-                                                        ...formData,
-                                                        finance_category_id:
-                                                            value,
-                                                    })
-                                                }
+                                {formData.recurrence_type === 'weekly' && (
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="day_of_week">
+                                            Dia da semana *
+                                        </Label>
+                                        <Select>
+                                            <SelectTrigger
+                                                id="day_of_week"
+                                                className="w-full"
                                             >
-                                                <SelectTrigger id="recurrence_category">
-                                                    <SelectValue placeholder="Sem categoria" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {filteredCategories.map(
-                                                        (category) => (
-                                                            <SelectItem
-                                                                key={
-                                                                    category.id
-                                                                }
-                                                                value={category.id.toString()}
-                                                            >
-                                                                {category.name}
-                                                            </SelectItem>
-                                                        ),
-                                                    )}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
+                                                <SelectValue placeholder="Domingo" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="0">
+                                                    Domingo
+                                                </SelectItem>
+                                                <SelectItem value="1">
+                                                    Segunda-feira
+                                                </SelectItem>
+                                                <SelectItem value="2">
+                                                    Terça-feira
+                                                </SelectItem>
+                                                <SelectItem value="3">
+                                                    Quarta-feira
+                                                </SelectItem>
+                                                <SelectItem value="4">
+                                                    Quinta-feira
+                                                </SelectItem>
+                                                <SelectItem value="5">
+                                                    Sexta-feira
+                                                </SelectItem>
+                                                <SelectItem value="6">
+                                                    Sábado
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
 
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="checkbox"
-                                                id="consider_business_days"
-                                                className="h-4 w-4 rounded border-gray-300"
-                                            />
-                                            <Label
-                                                htmlFor="consider_business_days"
-                                                className="cursor-pointer font-normal"
-                                            >
-                                                Considerar dias úteis -
-                                                Desativado
-                                            </Label>
-                                        </div>
-                                    </>
+                                {formData.recurrence_type !== 'single' && (
+                                    <div className="flex items-center justify-between space-x-2">
+                                        <Label
+                                            htmlFor="consider_business_days"
+                                            className="flex cursor-pointer items-center gap-2 font-normal"
+                                        >
+                                            Considerar dias úteis
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Info className="h-4 w-4 cursor-help text-muted-foreground" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p className="max-w-xs">
+                                                            Quando ativada, esta
+                                                            opção ajustará
+                                                            automaticamente as
+                                                            datas de vencimento
+                                                            para o próximo dia
+                                                            útil caso caiam em
+                                                            finais de semana.
+                                                            <br />
+                                                            <br />
+                                                            <strong>
+                                                                Exemplo:
+                                                            </strong>{' '}
+                                                            Se uma parcela cair
+                                                            em sábado ou
+                                                            domingo, será movida
+                                                            para segunda-feira.
+                                                        </p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        </Label>
+                                        <Switch
+                                            id="consider_business_days"
+                                            checked={
+                                                formData.consider_business_days
+                                            }
+                                            onCheckedChange={(checked) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    consider_business_days:
+                                                        checked,
+                                                })
+                                            }
+                                        />
+                                    </div>
                                 )}
                             </TabsContent>
                             <TabsContent value="anexos" className="space-y-4">
