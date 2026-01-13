@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\InternalProduct;
 use App\Models\OrderItem;
 use App\Models\OrderItemMapping;
 
@@ -12,7 +13,8 @@ use App\Models\OrderItemMapping;
  * 1. Conta quantos mappings são do tipo 'pizza_flavor'
  * 2. Divide 1 pelo número de sabores (ex: 2 sabores = 0.5 cada)
  * 3. Atualiza automaticamente a quantidade de cada sabor
- * 4. Mantém outros tipos (addon, drink, etc) com quantidade original
+ * 4. Recalcula o CMV baseado no tamanho da pizza pai
+ * 5. Mantém outros tipos (addon, drink, etc) com quantidade original
  */
 class PizzaFractionService
 {
@@ -31,7 +33,7 @@ class PizzaFractionService
 
         $flavorCount = $pizzaFlavors->count();
 
-        // Se não houver sabores ou só 1, não faz nada
+        // Se não houver sabores ou só 0, não faz nada
         if ($flavorCount <= 0) {
             return [
                 'updated' => 0,
@@ -47,11 +49,46 @@ class PizzaFractionService
         // Atualizar cada sabor com a fração calculada
         $updated = 0;
         foreach ($pizzaFlavors as $mapping) {
-            // Só atualiza se a quantidade estiver diferente
-            if ((float) $mapping->quantity !== $fraction) {
-                $mapping->quantity = $fraction;
+            // Buscar a quantidade original do add-on no OrderItem
+            $addOns = $orderItem->add_ons;
+            $addOnQuantity = 1;
+
+            if (is_array($addOns) && $mapping->external_reference !== null) {
+                $index = (int) $mapping->external_reference;
+                if (isset($addOns[$index])) {
+                    $addOn = $addOns[$index];
+                    $addOnQuantity = $addOn['quantity'] ?? $addOn['qty'] ?? 1;
+                }
+            }
+
+            // Quantidade final = fração × quantidade do add-on
+            $newQuantity = $fraction * $addOnQuantity;
+
+            // Recalcular CMV baseado no tamanho da pizza pai
+            $product = $mapping->internalProduct;
+            $newCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : $mapping->unit_cost_override;
+
+            // Atualizar se houver mudança
+            $quantityChanged = abs((float) $mapping->quantity - $newQuantity) > 0.0001;
+            $cmvChanged = $newCMV !== null && abs((float) $mapping->unit_cost_override - $newCMV) > 0.01;
+
+            if ($quantityChanged || $cmvChanged) {
+                $mapping->quantity = $newQuantity;
+                if ($newCMV !== null) {
+                    $mapping->unit_cost_override = $newCMV;
+                }
                 $mapping->save();
                 $updated++;
+
+                \Log::info('🔄 Fração e CMV atualizados', [
+                    'mapping_id' => $mapping->id,
+                    'product_name' => $product?->name,
+                    'fraction' => $fraction,
+                    'addon_quantity' => $addOnQuantity,
+                    'new_quantity' => $newQuantity,
+                    'old_cmv' => $mapping->getOriginal('unit_cost_override'),
+                    'new_cmv' => $newCMV,
+                ]);
             }
         }
 
@@ -60,6 +97,81 @@ class PizzaFractionService
             'pizza_flavors' => $flavorCount,
             'fraction' => $fraction,
         ];
+    }
+
+    /**
+     * Calcular o CMV correto do produto baseado no tamanho da pizza pai
+     */
+    protected function calculateCorrectCMV(InternalProduct $product, OrderItem $orderItem): ?float
+    {
+        // Se não for sabor de pizza, usar unit_cost normal
+        if ($product->product_category !== 'sabor_pizza') {
+            return (float) $product->unit_cost;
+        }
+
+        // Buscar o produto pai através do mapping principal
+        $pizzaSize = null;
+        $mainMapping = $orderItem->mappings()->where('mapping_type', 'main')->first();
+
+        if ($mainMapping && $mainMapping->internalProduct) {
+            $pizzaSize = $mainMapping->internalProduct->size;
+
+            \Log::info('🍕 PizzaFractionService - Tamanho do produto pai', [
+                'main_product_id' => $mainMapping->internalProduct->id,
+                'main_product_name' => $mainMapping->internalProduct->name,
+                'main_product_size' => $pizzaSize,
+            ]);
+        }
+
+        // FALLBACK: Detectar o tamanho do nome do item pai
+        if (!$pizzaSize) {
+            $pizzaSize = $this->detectPizzaSize($orderItem->name);
+
+            \Log::info('🍕 PizzaFractionService - Tamanho detectado do nome (fallback)', [
+                'order_item_name' => $orderItem->name,
+                'detected_size' => $pizzaSize,
+            ]);
+        }
+
+        // Se não detectou tamanho, usar unit_cost genérico
+        if (!$pizzaSize) {
+            return (float) $product->unit_cost;
+        }
+
+        // Calcular CMV dinamicamente pela ficha técnica
+        $cmv = $product->calculateCMV($pizzaSize);
+
+        \Log::info('💰 PizzaFractionService - CMV calculado', [
+            'product_name' => $product->name,
+            'size' => $pizzaSize,
+            'cmv_calculated' => $cmv,
+            'unit_cost' => $product->unit_cost,
+        ]);
+
+        return $cmv > 0 ? $cmv : (float) $product->unit_cost;
+    }
+
+    /**
+     * Detectar tamanho da pizza a partir do nome do item
+     */
+    protected function detectPizzaSize(string $itemName): ?string
+    {
+        $itemNameLower = mb_strtolower($itemName);
+
+        if (preg_match('/\bbroto\b/', $itemNameLower)) {
+            return 'broto';
+        }
+        if (preg_match('/\bgrande\b/', $itemNameLower)) {
+            return 'grande';
+        }
+        if (preg_match('/\b(familia|big|don|70x35)\b/', $itemNameLower)) {
+            return 'familia';
+        }
+        if (preg_match('/\b(media|média|m\b)/', $itemNameLower)) {
+            return 'media';
+        }
+
+        return null;
     }
 
     /**
