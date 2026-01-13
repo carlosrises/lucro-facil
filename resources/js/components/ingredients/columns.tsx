@@ -53,20 +53,6 @@ export const createColumns = ({
     onDelete,
 }: ColumnsProps): ColumnDef<Ingredient>[] => [
     {
-        id: 'status_indicator',
-        header: '',
-        enableSorting: false,
-        enableHiding: false,
-        cell: ({ row }) => {
-            const { active } = row.original;
-            return (
-                <div
-                    className={`h-2 w-2 rounded-full ${active ? 'bg-green-500' : 'bg-gray-400'}`}
-                />
-            );
-        },
-    },
-    {
         accessorKey: 'name',
         header: 'Nome',
         cell: ({ row }) => {
@@ -151,6 +137,18 @@ export const createColumns = ({
                 <div className="text-sm text-muted-foreground">
                     {stock.toFixed(2)} {row.original.unit}
                 </div>
+            );
+        },
+    },
+    {
+        accessorKey: 'active',
+        header: 'Status',
+        cell: ({ row }) => {
+            const active = row.getValue('active') as boolean;
+            return (
+                <Badge variant={active ? 'default' : 'secondary'}>
+                    {active ? 'Ativo' : 'Inativo'}
+                </Badge>
             );
         },
     },

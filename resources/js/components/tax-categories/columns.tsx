@@ -154,25 +154,7 @@ export const columns: ColumnDef<TaxCategory>[] = [
         header: 'Nome',
         enableHiding: false,
         cell: ({ row }) => {
-            const isActive = row.original.active;
-            return (
-                <div className="flex items-center gap-2">
-                    <span
-                        className={
-                            !isActive
-                                ? 'text-muted-foreground line-through'
-                                : ''
-                        }
-                    >
-                        {row.getValue('name')}
-                    </span>
-                    {!isActive && (
-                        <Badge variant="secondary" className="text-xs">
-                            Inativo
-                        </Badge>
-                    )}
-                </div>
-            );
+            return <span>{row.getValue('name')}</span>;
         },
     },
     {
@@ -243,6 +225,18 @@ export const columns: ColumnDef<TaxCategory>[] = [
             }
 
             return <span className="font-semibold">{total.toFixed(2)}%</span>;
+        },
+    },
+    {
+        accessorKey: 'active',
+        header: 'Status',
+        cell: ({ row }) => {
+            const active = row.getValue('active') as boolean;
+            return (
+                <Badge variant={active ? 'default' : 'secondary'}>
+                    {active ? 'Ativo' : 'Inativo'}
+                </Badge>
+            );
         },
     },
     {

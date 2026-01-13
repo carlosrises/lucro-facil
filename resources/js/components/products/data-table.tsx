@@ -304,7 +304,9 @@ export function DataTable({
                                 <SelectValue placeholder="Tipo" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all">Todos</SelectItem>
+                                <SelectItem value="all">
+                                    Todos os tipos
+                                </SelectItem>
                                 <SelectItem value="product">Produto</SelectItem>
                             </SelectContent>
                         </Select>
@@ -326,7 +328,9 @@ export function DataTable({
                                 <SelectValue placeholder="Status" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all">Todos</SelectItem>
+                                <SelectItem value="all">
+                                    Todos os status
+                                </SelectItem>
                                 <SelectItem value="1">Ativos</SelectItem>
                                 <SelectItem value="0">Inativos</SelectItem>
                             </SelectContent>

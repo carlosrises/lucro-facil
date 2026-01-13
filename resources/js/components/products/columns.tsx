@@ -85,20 +85,6 @@ export const createColumns = ({
     marginSettings,
 }: ColumnsProps): ColumnDef<Product>[] => [
     {
-        id: 'status_indicator',
-        header: '',
-        enableSorting: false,
-        enableHiding: false,
-        cell: ({ row }) => {
-            const { active } = row.original;
-            return (
-                <div
-                    className={`h-2 w-2 rounded-full ${active ? 'bg-green-500' : 'bg-gray-400'}`}
-                />
-            );
-        },
-    },
-    {
         accessorKey: 'name',
         header: 'Nome',
         cell: ({ row }) => {
@@ -320,6 +306,18 @@ export const createColumns = ({
                         ))}
                     </div>
                 </TooltipProvider>
+            );
+        },
+    },
+    {
+        accessorKey: 'active',
+        header: 'Status',
+        cell: ({ row }) => {
+            const active = row.getValue('active') as boolean;
+            return (
+                <Badge variant={active ? 'default' : 'secondary'}>
+                    {active ? 'Ativo' : 'Inativo'}
+                </Badge>
             );
         },
     },
