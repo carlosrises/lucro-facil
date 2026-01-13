@@ -26,6 +26,7 @@ import {
     Package,
     Pizza,
     Plus,
+    RefreshCw,
     Search,
     UtensilsCrossed,
 } from 'lucide-react';
@@ -119,6 +120,8 @@ export function QuickLinkDialog({
     const [selectedProduct, setSelectedProduct] = React.useState<string>('');
     const [searchTerm, setSearchTerm] = React.useState('');
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [isRefreshingProducts, setIsRefreshingProducts] =
+        React.useState(false);
     const [actualOccurrences, setActualOccurrences] = React.useState<
         number | null
     >(null);
@@ -187,6 +190,21 @@ export function QuickLinkDialog({
             product.name.toLowerCase().includes(search),
         );
     }, [internalProducts, searchTerm]);
+
+    const handleRefreshProducts = () => {
+        setIsRefreshingProducts(true);
+        router.reload({
+            only: ['internalProducts'],
+            onSuccess: () => {
+                toast.success('Lista de produtos atualizada!');
+                setIsRefreshingProducts(false);
+            },
+            onError: () => {
+                toast.error('Erro ao atualizar lista de produtos');
+                setIsRefreshingProducts(false);
+            },
+        });
+    };
 
     const handleConfirm = () => {
         if (!item?.sku || !selectedProduct) return;
@@ -556,7 +574,24 @@ export function QuickLinkDialog({
 
                         {/* Busca de Produto */}
                         <div className="space-y-2">
-                            <Label htmlFor="product-search">Produto CMV</Label>
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="product-search">
+                                    Produto CMV
+                                </Label>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleRefreshProducts}
+                                    disabled={isRefreshingProducts}
+                                    className="h-7 px-2 text-xs"
+                                >
+                                    <RefreshCw
+                                        className={`mr-1 h-3 w-3 ${isRefreshingProducts ? 'animate-spin' : ''}`}
+                                    />
+                                    Atualizar
+                                </Button>
+                            </div>
                             <div className="relative">
                                 <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                 <Input
