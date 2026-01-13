@@ -2150,16 +2150,34 @@ export function DataTable({
                                                                             </ul>
                                                                         </div>
                                                                     )}
-                                                                
+
                                                                 {/* Mensagem quando não há pagamentos */}
-                                                                {!row.original.raw?.payments?.methods?.length &&
-                                                                    !row.original.raw?.session?.payments?.length && (
+                                                                {!row.original
+                                                                    .raw
+                                                                    ?.payments
+                                                                    ?.methods
+                                                                    ?.length &&
+                                                                    !row
+                                                                        .original
+                                                                        .raw
+                                                                        ?.session
+                                                                        ?.payments
+                                                                        ?.length && (
                                                                         <div className="flex flex-col items-center justify-center px-3 py-6 text-center">
                                                                             <p className="text-sm text-muted-foreground">
-                                                                                Nenhum pagamento registrado
+                                                                                Nenhum
+                                                                                pagamento
+                                                                                registrado
                                                                             </p>
                                                                             <p className="mt-1 text-xs text-muted-foreground">
-                                                                                Informações de pagamento não disponíveis para este pedido
+                                                                                Informações
+                                                                                de
+                                                                                pagamento
+                                                                                não
+                                                                                disponíveis
+                                                                                para
+                                                                                este
+                                                                                pedido
                                                                             </p>
                                                                         </div>
                                                                     )}
