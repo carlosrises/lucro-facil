@@ -9,6 +9,7 @@ use App\Models\ProductMapping;
 use App\Models\Store;
 use App\Models\SyncCursor;
 use App\Services\IfoodClient;
+use App\Services\PizzaFractionService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -301,6 +302,8 @@ class SyncOrdersJob implements ShouldQueue
 
         // Auto-mapear complementos (add_ons) se houverem
         $addOns = $orderItem->add_ons ?? [];
+        $hasPizzaFlavors = false;
+
         foreach ($addOns as $index => $addOn) {
             $addonName = $addOn['name'] ?? '';
             $addonQty = $addOn['quantity'] ?? 1;
@@ -318,11 +321,15 @@ class SyncOrdersJob implements ShouldQueue
                 $isPizzaFlavor = stripos($addOn['name'] ?? '', 'pizza') !== false
                     || stripos($productMapping->external_item_name ?? '', 'pizza') !== false;
 
+                if ($isPizzaFlavor) {
+                    $hasPizzaFlavors = true;
+                }
+
                 OrderItemMapping::create([
                     'tenant_id' => $this->tenantId,
                     'order_item_id' => $orderItem->id,
                     'internal_product_id' => $addonMapping->internal_product_id,
-                    'quantity' => $addonQty,
+                    'quantity' => $addonQty, // Será recalculado pelo PizzaFractionService
                     'mapping_type' => 'addon',
                     'option_type' => $isPizzaFlavor ? 'pizza_flavor' : 'addon',
                     'auto_fraction' => $isPizzaFlavor,
@@ -339,11 +346,25 @@ class SyncOrdersJob implements ShouldQueue
             }
         }
 
+        // Se houver sabores de pizza, recalcular frações automaticamente
+        if ($hasPizzaFlavors) {
+            $pizzaFractionService = app(PizzaFractionService::class);
+            $result = $pizzaFractionService->recalculateFractions($orderItem);
+
+            logger()->info('🍕 Frações de pizza recalculadas automaticamente', [
+                'order_item' => $orderItem->id,
+                'pizza_flavors' => $result['pizza_flavors'],
+                'fraction' => $result['fraction'],
+                'updated' => $result['updated'],
+            ]);
+        }
+
         logger()->info('✅ Auto-mapeamento aplicado', [
             'order_item' => $orderItem->id,
             'sku' => $orderItem->sku,
             'product_id' => $productMapping->internal_product_id,
             'addons_mapped' => count($addOns),
+            'has_pizza_flavors' => $hasPizzaFlavors,
         ]);
     }
 }
