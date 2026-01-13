@@ -464,15 +464,14 @@ export default function FinancialSummary() {
                                         </CardHeader>
                                     </Card>
 
-                                    {/* 8. (-) DESPESAS OPERACIONAIS */}
+                                    {/* 8. (-) CUSTOS VARIÁVEIS */}
                                     <Card className="border-l-4 border-l-rose-500">
                                         <CardHeader className="px-6">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
                                                     <MinusCircle className="h-5 w-5 text-rose-600" />
                                                     <CardTitle>
-                                                        (-) Despesas
-                                                        Operacionais
+                                                        (-) Custos Variáveis
                                                     </CardTitle>
                                                 </div>
                                                 <div className="flex items-center gap-2">
@@ -502,8 +501,8 @@ export default function FinancialSummary() {
                                                 </div>
                                             </div>
                                             <CardDescription>
-                                                Custos fixos atribuídos aos
-                                                pedidos
+                                                Custos variáveis dos pedidos
+                                                (entrega, embalagens, etc)
                                             </CardDescription>
                                         </CardHeader>
                                     </Card>
@@ -590,14 +589,14 @@ export default function FinancialSummary() {
                                         </CardHeader>
                                     </Card>
 
-                                    {/* 11. (-) DESPESAS FINANCEIRAS */}
+                                    {/* 11. (-) DESPESAS OPERACIONAIS */}
                                     <Card className="border-l-4 border-l-red-600">
                                         <CardHeader className="px-6">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
                                                     <MinusCircle className="h-5 w-5 text-red-600" />
                                                     <CardTitle>
-                                                        (-) Despesas Financeiras
+                                                        (-) Despesas Operacionais
                                                     </CardTitle>
                                                 </div>
                                                 <div className="flex items-center gap-2">
@@ -627,20 +626,20 @@ export default function FinancialSummary() {
                                                 </div>
                                             </div>
                                             <CardDescription>
-                                                Despesas de movimentações
-                                                financeiras
+                                                Despesas das movimentações
+                                                operacionais
                                             </CardDescription>
                                         </CardHeader>
                                     </Card>
 
-                                    {/* 12. (+) RECEITAS FINANCEIRAS */}
+                                    {/* 12. (+) RECEITAS OPERACIONAIS */}
                                     <Card className="border-l-4 border-l-green-600">
                                         <CardHeader className="px-6">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
                                                     <PlusCircle className="h-5 w-5 text-green-600" />
                                                     <CardTitle>
-                                                        (+) Receitas Financeiras
+                                                        (+) Receitas Operacionais
                                                     </CardTitle>
                                                 </div>
                                                 <div className="flex items-center gap-2">
@@ -670,8 +669,8 @@ export default function FinancialSummary() {
                                                 </div>
                                             </div>
                                             <CardDescription>
-                                                Receitas de movimentações
-                                                financeiras
+                                                Receitas das movimentações
+                                                operacionais
                                             </CardDescription>
                                         </CardHeader>
                                     </Card>
