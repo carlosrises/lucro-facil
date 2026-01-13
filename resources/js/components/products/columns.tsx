@@ -131,7 +131,7 @@ export const createColumns = ({
             const finalCost = isNaN(cost) ? 0 : cost;
 
             // DEBUG TEMPORÁRIO: Log para verificar valores em produção
-            if (row.original.id === 13) {
+            if (row.original.id === 159) {
                 console.log('[PRODUCTS TABLE DEBUG] Pizza 4 Queijos:', {
                     costValue,
                     type: typeof costValue,
