@@ -99,11 +99,28 @@ class FinanceEntriesController extends Controller
 
             // Verificar se é recorrente
             if ($validated['recurrence_type'] !== 'single') {
-                $this->recurringService->createRecurringEntry($validated);
+                logger()->info('Criando movimentação recorrente', [
+                    'tenant_id' => $validated['tenant_id'],
+                    'recurrence_type' => $validated['recurrence_type'],
+                    'occurred_on' => $validated['occurred_on'],
+                    'recurrence_end_date' => $validated['recurrence_end_date'] ?? null,
+                ]);
+                
+                $template = $this->recurringService->createRecurringEntry($validated);
+                
+                logger()->info('Template criado com sucesso', [
+                    'template_id' => $template->id,
+                    'children_count' => $template->children()->count(),
+                ]);
             } else {
                 // Garantir que is_recurring seja false para entradas únicas
                 $validated['is_recurring'] = false;
-                FinanceEntry::create($validated);
+                $entry = FinanceEntry::create($validated);
+                
+                logger()->info('Movimentação única criada', [
+                    'entry_id' => $entry->id,
+                    'tenant_id' => $validated['tenant_id'],
+                ]);
             }
 
             return redirect()->back()->with('success', 'Movimentação criada com sucesso!');
