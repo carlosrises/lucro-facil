@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import {
     Dialog,
     DialogContent,
@@ -8,8 +9,16 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 import { router } from '@inertiajs/react';
-import { Calendar } from 'lucide-react';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Calendar, CalendarIcon } from 'lucide-react';
 import React from 'react';
 import { toast } from 'sonner';
 
@@ -22,8 +31,8 @@ export function SyncTakeatDialog({
     open,
     onOpenChange,
 }: SyncTakeatDialogProps) {
-    const [selectedDate, setSelectedDate] = React.useState<string>(
-        new Date().toISOString().split('T')[0],
+    const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(
+        new Date(),
     );
     const [isSyncing, setIsSyncing] = React.useState(false);
 
@@ -36,6 +45,7 @@ export function SyncTakeatDialog({
         setIsSyncing(true);
 
         try {
+            const dateString = format(selectedDate, 'yyyy-MM-dd');
             const response = await fetch('/takeat/sync/date', {
                 method: 'POST',
                 headers: {
@@ -45,7 +55,7 @@ export function SyncTakeatDialog({
                             .querySelector('meta[name="csrf-token"]')
                             ?.getAttribute('content') || '',
                 },
-                body: JSON.stringify({ date: selectedDate }),
+                body: JSON.stringify({ date: dateString }),
             });
 
             const data = await response.json();
@@ -82,19 +92,48 @@ export function SyncTakeatDialog({
 
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="sync-date">Data</Label>
-                        <div className="relative">
-                            <input
-                                id="sync-date"
-                                type="date"
-                                value={selectedDate}
-                                onChange={(e) =>
-                                    setSelectedDate(e.target.value)
-                                }
-                                max={new Date().toISOString().split('T')[0]}
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                            />
-                        </div>
+                        <Label>Data</Label>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    className={cn(
+                                        'w-full justify-start text-left font-normal',
+                                        !selectedDate &&
+                                            'text-muted-foreground',
+                                    )}
+                                >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {selectedDate ? (
+                                        format(
+                                            selectedDate,
+                                            "dd 'de' MMMM 'de' yyyy",
+                                            {
+                                                locale: ptBR,
+                                            },
+                                        )
+                                    ) : (
+                                        <span>Selecione uma data</span>
+                                    )}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                                className="w-auto p-0"
+                                align="start"
+                            >
+                                <CalendarComponent
+                                    mode="single"
+                                    selected={selectedDate}
+                                    onSelect={setSelectedDate}
+                                    disabled={(date) =>
+                                        date > new Date() ||
+                                        date < new Date('1900-01-01')
+                                    }
+                                    locale={ptBR}
+                                    initialFocus
+                                />
+                            </PopoverContent>
+                        </Popover>
                         <p className="text-xs text-muted-foreground">
                             Sincroniza todos os pedidos do dia selecionado
                         </p>
