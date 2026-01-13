@@ -504,6 +504,49 @@ class ItemTriageController extends Controller
         if ($mapping) {
             // Atualizar mapping existente
             $isUpdate = true;
+
+            // Se internal_product_id for null, desassociar (deletar OrderItemMappings)
+            if ($validated['internal_product_id'] === null) {
+                \Log::info('🗑️ Desassociando produto - removendo OrderItemMappings', [
+                    'mapping_id' => $mapping->id,
+                    'sku' => $validated['sku'],
+                ]);
+
+                // Deletar OrderItemMappings associados
+                if (str_starts_with($validated['sku'], 'addon_')) {
+                    // Para add-ons, deletar mappings do tipo 'addon'
+                    $deletedCount = \App\Models\OrderItemMapping::whereHas('orderItem', function ($q) use ($tenantId, $validated) {
+                        $q->where('tenant_id', $tenantId);
+                    })
+                        ->where('mapping_type', 'addon')
+                        ->whereHas('orderItem', function ($q) use ($validated) {
+                            $q->whereRaw("JSON_CONTAINS(add_ons, JSON_OBJECT('name', ?)) = 1", [$validated['name']]);
+                        })
+                        ->delete();
+                } else {
+                    // Para itens principais, deletar mappings do tipo 'main'
+                    $deletedCount = \App\Models\OrderItemMapping::whereHas('orderItem', function ($q) use ($tenantId, $validated) {
+                        $q->where('tenant_id', $tenantId)
+                            ->where('sku', $validated['sku']);
+                    })
+                        ->where('mapping_type', 'main')
+                        ->delete();
+                }
+
+                // Atualizar o ProductMapping para remover o produto
+                $mapping->update([
+                    'item_type' => $validated['item_type'],
+                    'internal_product_id' => null,
+                ]);
+
+                \Log::info('✅ Produto desassociado', [
+                    'deleted_mappings' => $deletedCount,
+                ]);
+
+                return back()->with('success', 'Produto desassociado com sucesso!');
+            }
+
+            // Atualizar normalmente
             $mapping->update([
                 'item_type' => $validated['item_type'],
                 'internal_product_id' => $validated['internal_product_id'],
@@ -595,7 +638,14 @@ class ItemTriageController extends Controller
             'mapping_id' => $mapping->id,
             'external_item_id' => $mapping->external_item_id,
             'internal_product_id' => $mapping->internal_product_id,
+            'item_type' => $mapping->item_type,
         ]);
+
+        // Se não há produto vinculado, não há o que recalcular
+        if (!$mapping->internal_product_id) {
+            \Log::info('⚠️ Sem produto vinculado, pulando recálculo');
+            return;
+        }
 
         // Buscar todos os order_items que têm este SKU
         $orderItems = OrderItem::where('tenant_id', $tenantId)
@@ -665,6 +715,21 @@ class ItemTriageController extends Controller
                     'option_type' => 'regular',
                     'auto_fraction' => false,
                     'unit_cost_override' => $correctCMV, // CMV calculado por tamanho
+                ]);
+            }
+
+            // NOVO: Se vinculou um produto pai (parent_product), recalcular frações dos sabores
+            if ($mapping->item_type === 'parent_product' && $mapping->internal_product_id) {
+                \Log::info('🍕 Produto pai vinculado - recalculando frações dos sabores', [
+                    'order_item_id' => $orderItem->id,
+                ]);
+
+                $pizzaFractionService = new \App\Services\PizzaFractionService();
+                $result = $pizzaFractionService->recalculateFractions($orderItem);
+
+                \Log::info('✅ Frações recalculadas', [
+                    'order_item_id' => $orderItem->id,
+                    'result' => $result,
                 ]);
             }
         }
