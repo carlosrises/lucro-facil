@@ -34,3 +34,9 @@ yarn-error.log
 *.pkg
 *.deb
 *.rpm
+
+# Test files
+test_*.bat
+test_*.sh
+app/Console/Commands/Test*.php
+app/Console/Commands/Inspect*.php
