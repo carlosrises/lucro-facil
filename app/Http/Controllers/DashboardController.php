@@ -68,8 +68,9 @@ class DashboardController extends Controller
 
             $totalRevenue += $orderRevenue;
 
-            // Taxa de entrega
-            // Priorizar custos calculados (calculated_costs.costs) quando existir uma taxa de entrega
+            // Taxa de entrega (CUSTOS de entrega, não receita)
+            // Buscar apenas em calculated_costs.costs (custos operacionais de entrega)
+            // NÃO usar order->delivery_fee (é receita cobrada do cliente, não custo)
             $deliveryFromCosts = 0;
             $costs = $order->calculated_costs ?? null;
             if ($costs && isset($costs['costs']) && is_array($costs['costs'])) {
@@ -81,12 +82,7 @@ class DashboardController extends Controller
                 }
             }
 
-            if ($deliveryFromCosts > 0) {
-                $totalDeliveryFee += $deliveryFromCosts;
-            } else {
-                // Fallback para campo legacy delivery_fee
-                $totalDeliveryFee += (float) ($order->delivery_fee ?? 0);
-            }
+            $totalDeliveryFee += $deliveryFromCosts;
 
             // Calcular CMV e Impostos dos produtos a partir dos itens
             foreach ($order->items as $item) {
@@ -253,7 +249,7 @@ class DashboardController extends Controller
             }
 
             $previousRevenue += $orderRevenue;
-            // Priorizar custos calculados para o período anterior também
+            // Taxa de entrega do período anterior (CUSTOS apenas)
             $prevDeliveryFromCosts = 0;
             $prevCosts = $order->calculated_costs ?? null;
             if ($prevCosts && isset($prevCosts['costs']) && is_array($prevCosts['costs'])) {
@@ -265,11 +261,7 @@ class DashboardController extends Controller
                 }
             }
 
-            if ($prevDeliveryFromCosts > 0) {
-                $previousDeliveryFee += $prevDeliveryFromCosts;
-            } else {
-                $previousDeliveryFee += (float) ($order->delivery_fee ?? 0);
-            }
+            $previousDeliveryFee += $prevDeliveryFromCosts;
 
             // Calcular CMV e impostos dos produtos do período anterior
             foreach ($order->items as $item) {
