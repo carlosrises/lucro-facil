@@ -1,11 +1,14 @@
 import { DataTable } from '@/components/categories/data-table';
+import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
+import { ArrowLeft } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { label: 'Cadastros IPC', href: '/categories' },
-    { label: 'Categorias', href: '/categories' },
+    { title: 'Cadastros', href: '#' },
+    { title: 'Insumos', href: '/ingredients' },
+    { title: 'Categorias', href: '/categories' },
 ];
 
 interface Category {
@@ -46,13 +49,26 @@ export default function CategoriesManage({
             <div className="flex flex-1 flex-col">
                 <div className="@container/main flex flex-1 flex-col gap-2">
                     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-                        <div className="flex flex-col gap-2 px-4 lg:px-6">
-                            <h1 className="text-3xl font-bold tracking-tight">
-                                Categorias de Insumos
-                            </h1>
-                            <p className="text-muted-foreground">
-                                Gerencie as categorias dos seus insumos
-                            </p>
+                        <div className="flex flex-col gap-4 px-4 lg:px-6">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => router.get('/ingredients')}
+                                className="w-fit"
+                            >
+                                <ArrowLeft className="h-4 w-4" />
+                                <span className="ml-2">
+                                    Voltar para Insumos
+                                </span>
+                            </Button>
+                            <div>
+                                <h1 className="text-2xl font-bold tracking-tight">
+                                    Categorias de Insumos
+                                </h1>
+                                <p className="text-muted-foreground">
+                                    Gerencie as categorias dos seus insumos
+                                </p>
+                            </div>
                         </div>
 
                         <DataTable
