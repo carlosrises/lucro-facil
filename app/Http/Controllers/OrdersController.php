@@ -133,6 +133,7 @@ class OrdersController extends Controller
                     $addOnsWithMappings = [];
                     foreach ($item->add_ons as $index => $addOn) {
                         $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
+                        $addOnQuantity = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
                         $addOnSku = 'addon_'.md5($addOnName);
 
                         // Buscar ProductMapping do add-on
@@ -162,6 +163,7 @@ class OrdersController extends Controller
                             'name' => $addOnName,
                             'sku' => $addOnSku,
                             'external_code' => $addOnSku,
+                            'quantity' => $addOnQuantity, // Quantidade do add-on (ex: 2 para "2x Don Rafaello")
                             'unit_cost_override' => $unitCost, // CMV unitário do OrderItemMapping
                             'mapping_quantity' => $mappingQuantity, // Fração do sabor (0.25 = 1/4)
                             'product_mapping' => $mapping ? [
