@@ -21,7 +21,9 @@ class FinanceEntry extends Model
         'notes',
         'recurrence_type',
         'recurrence_end_date',
+        'consider_business_days',
         'supplier',
+        'description',
         'due_date',
         'payment_method',
         'financial_account',
@@ -40,6 +42,7 @@ class FinanceEntry extends Model
         'competence_date' => 'date',
         'paid_at' => 'datetime',
         'is_recurring' => 'boolean',
+        'consider_business_days' => 'boolean',
     ];
 
     public function category(): BelongsTo
@@ -76,12 +79,20 @@ class FinanceEntry extends Model
 
     /**
      * Scope para excluir templates da listagem
+     * Mostra templates sem filhas (erro de geração) para permitir edição/exclusão
      */
     public function scopeWithoutTemplates(Builder $query): Builder
     {
         return $query->where(function ($q) {
+            // Mostrar entradas não-recorrentes
             $q->where('is_recurring', false)
-                ->orWhereNotNull('parent_entry_id');
+                // Ou entradas que são filhas de recorrentes
+                ->orWhereNotNull('parent_entry_id')
+                // Ou templates que não geraram filhas (erro)
+                ->orWhere(function ($subQ) {
+                    $subQ->where('is_recurring', true)
+                        ->whereDoesntHave('children');
+                });
         });
     }
 }
