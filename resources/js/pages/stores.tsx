@@ -33,6 +33,12 @@ export default function Stores() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Lojas" />
             <div className="flex flex-col gap-6 py-6">
+                <div className="px-4 lg:px-6">
+                    <h1 className="text-2xl font-bold tracking-tight">Lojas</h1>
+                    <p className="text-muted-foreground">
+                        Gerencie suas lojas integradas e suas configurações
+                    </p>
+                </div>
                 <div className="flex w-full flex-col gap-4 px-4 lg:px-6">
                     <IntegrationWarning storesWithError={storesWithError} />
                     <DataTable

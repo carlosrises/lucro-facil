@@ -15,8 +15,13 @@ class StoresController extends Controller
             ->where('tenant_id', $request->user()->tenant_id)
             ->when($request->input('search'), fn ($q, $search) => $q->where('display_name', 'like', "%{$search}%")
             )
-            ->when($request->input('status'), fn ($q, $status) => $q->where('status', $status)
-            )
+            ->when($request->input('status'), function ($q, $status) {
+                if ($status === 'active') {
+                    $q->where('active', true);
+                } elseif ($status === 'inactive') {
+                    $q->where('active', false);
+                }
+            })
             ->orderBy('display_name');
 
         $perPage = (int) $request->input('per_page', 10);

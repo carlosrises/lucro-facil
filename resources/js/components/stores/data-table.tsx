@@ -63,6 +63,28 @@ export function DataTable({
         { id: 'name', desc: false },
     ]);
 
+    // Estado local para search com debounce
+    const [searchValue, setSearchValue] = React.useState(filters?.search ?? '');
+
+    // Sincronizar searchValue quando filters.search mudar externamente
+    React.useEffect(() => {
+        setSearchValue(filters?.search ?? '');
+    }, [filters?.search]);
+
+    // Debounce para search (500ms)
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            const normalizedSearch = searchValue || undefined;
+            const currentSearch = filters?.search || undefined;
+
+            if (normalizedSearch !== currentSearch) {
+                updateFilters({ search: normalizedSearch });
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [searchValue]);
+
     const table = useReactTable({
         data,
         columns,
@@ -84,11 +106,11 @@ export function DataTable({
     return (
         <>
             {/* 🔍 Filtros */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                 <Input
                     placeholder="Buscar loja..."
-                    defaultValue={filters?.search ?? ''}
-                    onBlur={(e) => updateFilters({ search: e.target.value })}
+                    value={searchValue}
+                    onChange={(e) => setSearchValue(e.target.value)}
                     className="h-9 w-[200px]"
                 />
 
@@ -100,11 +122,11 @@ export function DataTable({
                         })
                     }
                 >
-                    <SelectTrigger className="w-[160px]">
+                    <SelectTrigger className="h-9 w-[160px]">
                         <SelectValue placeholder="Filtrar status" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="all">Todas</SelectItem>
+                        <SelectItem value="all">Todos os status</SelectItem>
                         <SelectItem value="active">Ativas</SelectItem>
                         <SelectItem value="inactive">Inativas</SelectItem>
                     </SelectContent>
