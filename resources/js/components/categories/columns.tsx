@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -28,20 +29,6 @@ export const createColumns = ({
     onEdit,
     onDelete,
 }: ColumnsProps): ColumnDef<Category>[] => [
-    {
-        id: 'status_indicator',
-        header: '',
-        enableSorting: false,
-        enableHiding: false,
-        cell: ({ row }) => {
-            const { active } = row.original;
-            return (
-                <div
-                    className={`h-2 w-2 rounded-full ${active ? 'bg-green-500' : 'bg-gray-400'}`}
-                />
-            );
-        },
-    },
     {
         accessorKey: 'name',
         header: 'Nome',
@@ -84,6 +71,18 @@ export const createColumns = ({
                         {color}
                     </span>
                 </div>
+            );
+        },
+    },
+    {
+        accessorKey: 'active',
+        header: 'Status',
+        cell: ({ row }) => {
+            const active = row.getValue('active') as boolean;
+            return (
+                <Badge variant={active ? 'default' : 'secondary'}>
+                    {active ? 'Ativo' : 'Inativo'}
+                </Badge>
             );
         },
     },

@@ -189,7 +189,9 @@ export function DataTable({ data, pagination, filters }: DataTableProps) {
                                 <SelectValue placeholder="Status" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all">Todos</SelectItem>
+                                <SelectItem value="all">
+                                    Todos os status
+                                </SelectItem>
                                 <SelectItem value="1">Ativos</SelectItem>
                                 <SelectItem value="0">Inativos</SelectItem>
                             </SelectContent>
