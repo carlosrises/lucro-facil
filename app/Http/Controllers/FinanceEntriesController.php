@@ -105,9 +105,9 @@ class FinanceEntriesController extends Controller
                     'occurred_on' => $validated['occurred_on'],
                     'recurrence_end_date' => $validated['recurrence_end_date'] ?? null,
                 ]);
-                
+
                 $template = $this->recurringService->createRecurringEntry($validated);
-                
+
                 logger()->info('Template criado com sucesso', [
                     'template_id' => $template->id,
                     'children_count' => $template->children()->count(),
@@ -116,7 +116,7 @@ class FinanceEntriesController extends Controller
                 // Garantir que is_recurring seja false para entradas únicas
                 $validated['is_recurring'] = false;
                 $entry = FinanceEntry::create($validated);
-                
+
                 logger()->info('Movimentação única criada', [
                     'entry_id' => $entry->id,
                     'tenant_id' => $validated['tenant_id'],
