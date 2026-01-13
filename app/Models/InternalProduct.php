@@ -69,16 +69,33 @@ class InternalProduct extends Model
      */
     public function calculateCMV(?string $size = null): float
     {
-        $query = $this->costs()
-            ->join('ingredients', 'ingredients.id', '=', 'product_costs.ingredient_id');
+        $costs = $this->costs();
 
         // Se for sabor de pizza e tiver tamanho, filtrar por tamanho
         if ($this->product_category === 'sabor_pizza' && $size) {
-            $query->where('product_costs.size', $size);
+            $costs = $costs->where('size', $size);
         }
 
-        return $query->selectRaw('SUM(product_costs.qty * ingredients.unit_price) as total')
-            ->value('total') ?? 0;
+        $costs = $costs->get();
+
+        $total = 0;
+
+        foreach ($costs as $cost) {
+            // Tentar buscar como ingrediente primeiro
+            $ingredient = \App\Models\Ingredient::find($cost->ingredient_id);
+
+            if ($ingredient) {
+                $total += $cost->qty * $ingredient->unit_price;
+            } else {
+                // Se não for ingrediente, buscar como produto interno
+                $product = InternalProduct::find($cost->ingredient_id);
+                if ($product) {
+                    $total += $cost->qty * $product->unit_cost;
+                }
+            }
+        }
+
+        return $total;
     }
 
     /**
