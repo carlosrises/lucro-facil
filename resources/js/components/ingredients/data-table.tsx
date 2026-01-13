@@ -299,6 +299,16 @@ export function DataTable({
 
                     {/* Ações à direita */}
                     <div className="flex items-center gap-2">
+                        {/* Botão Categorias */}
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => router.get('/categories')}
+                        >
+                            <LayoutGrid className="h-4 w-4" />
+                            <span className="ml-2">Categorias</span>
+                        </Button>
+
                         {/* Adicionar Insumo */}
                         <Button
                             size="sm"

@@ -90,10 +90,6 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
             //     locked: true,
             // },
             {
-                title: 'Categorias',
-                href: '/categories',
-            },
-            {
                 title: 'Categorias Fiscais',
                 href: '/tax-categories',
             },
