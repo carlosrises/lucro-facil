@@ -150,8 +150,8 @@ export function IngredientFormDialog({
                             )}
                         </div>
 
-                        {/* Categoria */}
-                        <div className="grid gap-2">
+                        {/* Categoria - 50% da linha */}
+                        <div className="grid w-1/2 gap-2">
                             <Label htmlFor="category_id">Categoria</Label>
                             <CategoryCombobox
                                 categories={categories}
@@ -170,7 +170,7 @@ export function IngredientFormDialog({
                             )}
                         </div>
 
-                        {/* Unidade e Preço */}
+                        {/* Unidade e Preço Unitário */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="unit">
@@ -183,7 +183,7 @@ export function IngredientFormDialog({
                                         setData('unit', value)
                                     }
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger className="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
