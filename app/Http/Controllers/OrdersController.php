@@ -59,11 +59,9 @@ class OrdersController extends Controller
                 $startDate = $request->input('start_date', now()->startOfMonth()->format('Y-m-d'));
                 $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
 
-                // Converter datas do horário de Brasília para UTC
-                $startDateUtc = \Carbon\Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
-                $endDateUtc = \Carbon\Carbon::parse($endDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
-
-                return $q->whereBetween('placed_at', [$startDateUtc, $endDateUtc]);
+                // Usar whereDate para comparar apenas a data, considerando o timezone da aplicação
+                return $q->whereDate('placed_at', '>=', $startDate)
+                    ->whereDate('placed_at', '<=', $endDate);
             })
             ->when($request->input('unmapped_only'), function ($q) {
                 // Filtrar apenas pedidos com itens não mapeados
