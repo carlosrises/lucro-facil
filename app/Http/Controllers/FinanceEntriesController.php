@@ -23,6 +23,7 @@ class FinanceEntriesController extends Controller
             ->when($request->input('search'), fn ($q, $search) => $q->where(function ($query) use ($search) {
                 $query->where('reference', 'like', "%{$search}%")
                     ->orWhere('supplier', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%")
                     ->orWhere('notes', 'like', "%{$search}%");
             })
             )
@@ -57,38 +58,60 @@ class FinanceEntriesController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'finance_category_id' => 'required|exists:finance_categories,id',
-            'occurred_on' => 'required|date',
-            'amount' => 'required|numeric|min:0.01',
-            'reference' => 'nullable|string|max:255',
-            'notes' => 'nullable|string',
-            'supplier' => 'nullable|string|max:255',
-            'due_date' => 'nullable|date',
-            'recurrence_type' => 'required|in:single,weekly,biweekly,monthly,bimonthly,quarterly,semiannual,annual',
-            'recurrence_end_date' => 'nullable|required_unless:recurrence_type,single|date|after:occurred_on',
-            'payment_method' => 'nullable|string|max:255',
-            'financial_account' => 'nullable|string|max:255',
-            'competence_date' => 'nullable|date',
-            'status' => 'nullable|in:pending,paid',
-            'paid_at' => 'nullable|date',
-        ]);
+        try {
+            $validated = $request->validate([
+                'finance_category_id' => 'required|exists:finance_categories,id',
+                'occurred_on' => 'required|date',
+                'amount' => 'required|numeric|min:0.01',
+                'reference' => 'nullable|string|max:255',
+                'notes' => 'nullable|string',
+                'supplier' => 'nullable|string|max:255',
+                'description' => 'required|string|max:255',
+                'due_date' => 'nullable|date',
+                'recurrence_type' => 'required|in:single,weekly,biweekly,monthly,bimonthly,quarterly,semiannual,annual',
+                'recurrence_end_date' => 'nullable|required_unless:recurrence_type,single|date|after_or_equal:occurred_on',
+                'consider_business_days' => 'nullable|boolean',
+                'payment_method' => 'nullable|string|max:255',
+                'financial_account' => 'nullable|string|max:255',
+                'competence_date' => 'nullable|date',
+                'status' => 'nullable|in:pending,paid',
+                'paid_at' => 'nullable|date',
+            ], [
+                'recurrence_end_date.after_or_equal' => 'A data limite deve ser igual ou posterior à data de emissão.',
+                'recurrence_end_date.required_unless' => 'A data limite é obrigatória para movimentações recorrentes.',
+            ]);
 
-        $validated['tenant_id'] = tenant_id();
+            $validated['tenant_id'] = tenant_id();
 
-        // Se status for 'paid' e paid_at não for informado, usar a data/hora atual
-        if (isset($validated['status']) && $validated['status'] === 'paid' && empty($validated['paid_at'])) {
-            $validated['paid_at'] = now();
+            // Se status for 'paid' e paid_at não for informado, usar a data/hora atual
+            if (isset($validated['status']) && $validated['status'] === 'paid' && empty($validated['paid_at'])) {
+                $validated['paid_at'] = now();
+            }
+
+            // Verificar se é recorrente
+            if ($validated['recurrence_type'] !== 'single') {
+                $this->recurringService->createRecurringEntry($validated);
+            } else {
+                // Garantir que is_recurring seja false para entradas únicas
+                $validated['is_recurring'] = false;
+                FinanceEntry::create($validated);
+            }
+
+            return redirect()->back()->with('success', 'Movimentação criada com sucesso!');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            logger()->error('Erro de validação ao criar movimentação financeira', [
+                'errors' => $e->errors(),
+                'data' => $request->all(),
+            ]);
+            throw $e;
+        } catch (\Exception $e) {
+            logger()->error('Erro ao criar movimentação financeira', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'data' => $request->all(),
+            ]);
+            return redirect()->back()->withErrors(['error' => 'Erro ao salvar movimentação: ' . $e->getMessage()]);
         }
-
-        // Verificar se é recorrente
-        if ($validated['recurrence_type'] !== 'single') {
-            $this->recurringService->createRecurringEntry($validated);
-        } else {
-            FinanceEntry::create($validated);
-        }
-
-        return redirect()->back();
     }
 
     public function update(Request $request, FinanceEntry $entry)
@@ -98,36 +121,65 @@ class FinanceEntriesController extends Controller
             abort(403, 'Unauthorized');
         }
 
-        $validated = $request->validate([
-            'finance_category_id' => 'required|exists:finance_categories,id',
-            'occurred_on' => 'required|date',
-            'amount' => 'required|numeric|min:0.01',
-            'reference' => 'nullable|string|max:255',
-            'notes' => 'nullable|string',
-            'supplier' => 'nullable|string|max:255',
-            'due_date' => 'nullable|date',
-            'recurrence_type' => 'required|in:single,weekly,biweekly,monthly,bimonthly,quarterly,semiannual,annual',
-            'recurrence_end_date' => 'nullable|required_unless:recurrence_type,single|date|after:occurred_on',
-            'payment_method' => 'nullable|string|max:255',
-            'financial_account' => 'nullable|string|max:255',
-            'competence_date' => 'nullable|date',
-            'status' => 'nullable|in:pending,paid',
-            'paid_at' => 'nullable|date',
-        ]);
+        try {
+            $validated = $request->validate([
+                'finance_category_id' => 'required|exists:finance_categories,id',
+                'occurred_on' => 'required|date',
+                'amount' => 'required|numeric|min:0.01',
+                'reference' => 'nullable|string|max:255',
+                'notes' => 'nullable|string',
+                'supplier' => 'nullable|string|max:255',
+                'description' => 'required|string|max:255',
+                'due_date' => 'nullable|date',
+                'recurrence_type' => 'required|in:single,weekly,biweekly,monthly,bimonthly,quarterly,semiannual,annual',
+                'recurrence_end_date' => 'nullable|required_unless:recurrence_type,single|date|after_or_equal:occurred_on',
+                'consider_business_days' => 'nullable|boolean',
+                'payment_method' => 'nullable|string|max:255',
+                'financial_account' => 'nullable|string|max:255',
+                'competence_date' => 'nullable|date',
+                'status' => 'nullable|in:pending,paid',
+                'paid_at' => 'nullable|date',
+            ]);
 
-        // Se status mudou para 'paid' e paid_at não foi informado, usar a data/hora atual
-        if (isset($validated['status']) && $validated['status'] === 'paid' && empty($validated['paid_at'])) {
-            $validated['paid_at'] = now();
+            // Se status mudou para 'paid' e paid_at não foi informado, usar a data/hora atual
+            if (isset($validated['status']) && $validated['status'] === 'paid' && empty($validated['paid_at'])) {
+                $validated['paid_at'] = now();
+            }
+
+            // Se é uma parcela filha de recorrência, atualizar o template pai
+            if ($entry->parent_entry_id !== null) {
+                $template = FinanceEntry::find($entry->parent_entry_id);
+                if ($template && $template->is_recurring && $validated['recurrence_type'] !== 'single') {
+                    // Atualizar o template com os novos dados
+                    $this->recurringService->updateRecurringEntry($template, $validated);
+                    return redirect()->back()->with('success', 'Recorrência atualizada! Todas as parcelas futuras foram regeneradas.');
+                }
+            }
+
+            // Se é um template recorrente, atualizar e regenerar parcelas
+            if ($entry->is_recurring && $entry->parent_entry_id === null && $validated['recurrence_type'] !== 'single') {
+                $this->recurringService->updateRecurringEntry($entry, $validated);
+            } else {
+                $entry->update($validated);
+            }
+
+            return redirect()->back()->with('success', 'Movimentação atualizada com sucesso!');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            logger()->error('Erro de validação ao atualizar movimentação financeira', [
+                'entry_id' => $entry->id,
+                'errors' => $e->errors(),
+                'data' => $request->all(),
+            ]);
+            throw $e;
+        } catch (\Exception $e) {
+            logger()->error('Erro ao atualizar movimentação financeira', [
+                'entry_id' => $entry->id,
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'data' => $request->all(),
+            ]);
+            return redirect()->back()->withErrors(['error' => 'Erro ao atualizar movimentação: ' . $e->getMessage()]);
         }
-
-        // Se é um template recorrente, atualizar e regenerar parcelas
-        if ($entry->is_recurring && $entry->parent_entry_id === null && $validated['recurrence_type'] !== 'single') {
-            $this->recurringService->updateRecurringEntry($entry, $validated);
-        } else {
-            $entry->update($validated);
-        }
-
-        return redirect()->back();
     }
 
     public function destroy(FinanceEntry $entry)
