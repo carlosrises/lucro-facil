@@ -124,13 +124,29 @@ export const createColumns = ({
         accessorKey: 'unit_cost',
         header: 'Custo (CMV)',
         cell: ({ row }) => {
-            const cost = parseFloat(row.getValue('unit_cost'));
+            const costValue = row.getValue('unit_cost');
+            const cost = costValue ? parseFloat(costValue as string) : 0;
+
+            // Se parseFloat retornar NaN, usar 0
+            const finalCost = isNaN(cost) ? 0 : cost;
+
+            // DEBUG TEMPORÁRIO: Log para verificar valores em produção
+            if (row.original.id === 13) {
+                console.log('[PRODUCTS TABLE DEBUG] Pizza 4 Queijos:', {
+                    costValue,
+                    type: typeof costValue,
+                    cost,
+                    finalCost,
+                    fullProduct: row.original,
+                });
+            }
+
             return (
                 <div className="font-medium text-orange-600">
                     {new Intl.NumberFormat('pt-BR', {
                         style: 'currency',
                         currency: 'BRL',
-                    }).format(cost)}
+                    }).format(finalCost)}
                 </div>
             );
         },
