@@ -19,7 +19,7 @@ class DashboardController extends Controller
         $startDate = $request->input('start_date', now()->startOfMonth()->format('Y-m-d'));
         $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
         $storeId = $request->input('store_id');
-        $provider = $request->input('provider');
+        $providerFilter = $request->input('provider');
 
         // Converter datas do horário de Brasília para UTC para filtrar corretamente
         $startDateUtc = Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
@@ -30,7 +30,15 @@ class DashboardController extends Controller
             ->with(['items.internalProduct', 'items.mappings.internalProduct'])
             ->whereBetween('placed_at', [$startDateUtc, $endDateUtc])
             ->when($storeId, fn($q) => $q->where('store_id', $storeId))
-            ->when($provider, fn($q) => $q->where('provider', $provider))
+            ->when($providerFilter, function ($q, $providerFilter) {
+                // Formato: "provider" ou "provider:origin"
+                if (str_contains($providerFilter, ':')) {
+                    [$provider, $origin] = explode(':', $providerFilter, 2);
+                    $q->where('provider', $provider)->where('origin', $origin);
+                } else {
+                    $q->where('provider', $providerFilter);
+                }
+            })
             ->get();
 
         // Inicializar acumuladores
@@ -220,6 +228,15 @@ class DashboardController extends Controller
             ->with(['items.internalProduct', 'items.mappings.internalProduct'])
             ->whereBetween('placed_at', [$previousStartDateUtc, $previousEndDateUtc])
             ->when($storeId, fn($q) => $q->where('store_id', $storeId))
+            ->when($providerFilter, function ($q, $providerFilter) {
+                // Formato: "provider" ou "provider:origin"
+                if (str_contains($providerFilter, ':')) {
+                    [$provider, $origin] = explode(':', $providerFilter, 2);
+                    $q->where('provider', $provider)->where('origin', $origin);
+                } else {
+                    $q->where('provider', $providerFilter);
+                }
+            })
             ->get();
 
         $previousRevenue = 0;
@@ -507,25 +524,52 @@ class DashboardController extends Controller
                 ];
             });
 
-        // Buscar providers únicos do tenant
-        $providers = Order::where('tenant_id', $tenantId)
-            ->select('provider')
+        // Buscar combinações de provider+origin disponíveis nos pedidos
+        $providerOptions = Order::where('tenant_id', $tenantId)
+            ->select('provider', 'origin')
             ->distinct()
             ->orderBy('provider')
-            ->pluck('provider')
-            ->filter()
-            ->map(function ($provider) {
+            ->orderBy('origin')
+            ->get()
+            ->map(function ($order) {
+                // Mapear labels amigáveis
+                $providerLabels = [
+                    'ifood' => 'iFood',
+                    'takeat' => 'Takeat',
+                    '99food' => '99Food',
+                    'rappi' => 'Rappi',
+                    'uber_eats' => 'Uber Eats',
+                ];
+
+                $originLabels = [
+                    'ifood' => 'iFood',
+                    '99food' => '99Food',
+                    'neemo' => 'Neemo',
+                    'keeta' => 'Keeta',
+                    'totem' => 'Totem',
+                    'pdv' => 'PDV',
+                    'takeat' => 'Próprio',
+                ];
+
+                $providerLabel = $providerLabels[$order->provider] ?? ucfirst($order->provider);
+
+                // Se for Takeat com origin diferente de 'takeat', criar combinação
+                if ($order->provider === 'takeat' && $order->origin && $order->origin !== 'takeat') {
+                    $originLabel = $originLabels[$order->origin] ?? ucfirst($order->origin);
+
+                    return [
+                        'value' => "takeat:{$order->origin}",
+                        'label' => "{$originLabel} (Takeat)",
+                    ];
+                }
+
+                // Para outros providers ou Takeat próprio
                 return [
-                    'value' => $provider,
-                    'label' => match($provider) {
-                        'ifood' => 'iFood',
-                        'rappi' => 'Rappi',
-                        'takeat' => 'Takeat',
-                        '99food' => '99Food',
-                        default => ucfirst($provider),
-                    },
+                    'value' => $order->provider,
+                    'label' => $providerLabel,
                 ];
             })
+            ->unique('value')
             ->values();
 
         return Inertia::render('dashboard', [
@@ -550,12 +594,12 @@ class DashboardController extends Controller
             ],
             'chartData' => $chartData,
             'stores' => $stores,
-            'providers' => $providers,
+            'providerOptions' => $providerOptions,
             'filters' => [
                 'start_date' => $startDate,
                 'end_date' => $endDate,
                 'store_id' => $storeId,
-                'provider' => $provider,
+                'provider' => $providerFilter,
             ],
         ]);
     }
