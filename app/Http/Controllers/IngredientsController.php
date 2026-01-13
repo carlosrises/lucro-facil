@@ -96,7 +96,18 @@ class IngredientsController extends Controller
             'active' => ['boolean'],
         ]);
 
+        $oldUnitPrice = $ingredient->unit_price;
         $ingredient->update($validated);
+
+        // Se o preço unitário mudou, disparar evento para recalcular produtos dependentes
+        if ($oldUnitPrice != $validated['unit_price']) {
+            event(new \App\Events\IngredientCostChanged(
+                $ingredient->id,
+                $ingredient->tenant_id,
+                $oldUnitPrice,
+                $validated['unit_price']
+            ));
+        }
 
         return redirect()->back()->with('success', 'Insumo atualizado com sucesso!');
     }

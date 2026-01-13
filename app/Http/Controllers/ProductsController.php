@@ -388,6 +388,23 @@ class ProductsController extends Controller
                 \App\Jobs\RecalculateOrderCostsJob::dispatch($product->id, true, 'product');
             }
 
+            // Se o unit_cost mudou, verificar se este produto é usado como insumo em outros produtos
+            if ($oldUnitCost != $product->unit_cost) {
+                // Verificar se existe algum produto que usa este como ingrediente
+                $isUsedAsIngredient = ProductCost::where('tenant_id', tenant_id())
+                    ->where('ingredient_id', $product->id)
+                    ->exists();
+
+                if ($isUsedAsIngredient) {
+                    event(new \App\Events\ProductCostChanged(
+                        $product->id,
+                        $product->tenant_id,
+                        $oldUnitCost,
+                        $product->unit_cost
+                    ));
+                }
+            }
+
             DB::commit();
 
             $message = 'Produto atualizado com sucesso!';
