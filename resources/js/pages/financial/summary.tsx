@@ -596,7 +596,8 @@ export default function FinancialSummary() {
                                                 <div className="flex items-center gap-2">
                                                     <MinusCircle className="h-5 w-5 text-red-600" />
                                                     <CardTitle>
-                                                        (-) Despesas Operacionais
+                                                        (-) Despesas
+                                                        Operacionais
                                                     </CardTitle>
                                                 </div>
                                                 <div className="flex items-center gap-2">
@@ -639,7 +640,8 @@ export default function FinancialSummary() {
                                                 <div className="flex items-center gap-2">
                                                     <PlusCircle className="h-5 w-5 text-green-600" />
                                                     <CardTitle>
-                                                        (+) Receitas Operacionais
+                                                        (+) Receitas
+                                                        Operacionais
                                                     </CardTitle>
                                                 </div>
                                                 <div className="flex items-center gap-2">
