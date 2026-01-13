@@ -806,6 +806,15 @@ export function OrderFinancialCard({
                                                                 <Icon
                                                                     className={`h-3.5 w-3.5 shrink-0 ${className}`}
                                                                 />
+                                                                {quantity >
+                                                                    1 && (
+                                                                    <span className="rounded bg-blue-50 px-1 py-0.5 text-[10px] leading-3 font-medium text-blue-600">
+                                                                        {
+                                                                            quantity
+                                                                        }
+                                                                        x
+                                                                    </span>
+                                                                )}
                                                                 <TooltipProvider
                                                                     delayDuration={
                                                                         300
@@ -816,11 +825,6 @@ export function OrderFinancialCard({
                                                                             asChild
                                                                         >
                                                                             <span className="cursor-help truncate text-xs leading-4 font-medium text-muted-foreground">
-                                                                                {
-                                                                                    quantity
-                                                                                }
-
-                                                                                x{' '}
                                                                                 {
                                                                                     item.name
                                                                                 }
@@ -1041,6 +1045,9 @@ export function OrderFinancialCard({
 
                                                                         // Calcular custo do add-on
                                                                         let addonCost = 0;
+                                                                        const addonQuantity =
+                                                                            addOn.quantity ||
+                                                                            1;
 
                                                                         // PRIORIDADE 1: Usar unit_cost_override se existir (valor do OrderItemMapping)
                                                                         if (
@@ -1050,7 +1057,7 @@ export function OrderFinancialCard({
                                                                                 null
                                                                         ) {
                                                                             // Aplicar a fração (mapping_quantity) se existir
-                                                                            const quantity =
+                                                                            const mappingQuantity =
                                                                                 addOn.mapping_quantity ||
                                                                                 1.0;
                                                                             addonCost =
@@ -1059,7 +1066,8 @@ export function OrderFinancialCard({
                                                                                         addOn.unit_cost_override,
                                                                                     ),
                                                                                 ) *
-                                                                                quantity;
+                                                                                mappingQuantity *
+                                                                                addonQuantity;
                                                                         } else {
                                                                             // FALLBACK: Sistema legado
                                                                             const internalProduct =
@@ -1097,9 +1105,11 @@ export function OrderFinancialCard({
                                                                                 isFlavor &&
                                                                                 totalFlavors >
                                                                                     1
-                                                                                    ? baseAddonCost /
-                                                                                      totalFlavors
-                                                                                    : baseAddonCost;
+                                                                                    ? (baseAddonCost /
+                                                                                          totalFlavors) *
+                                                                                      addonQuantity
+                                                                                    : baseAddonCost *
+                                                                                      addonQuantity;
                                                                         }
 
                                                                         // Calcular fração para exibição
@@ -1155,6 +1165,15 @@ export function OrderFinancialCard({
                                                                                             {
                                                                                                 fractionText
                                                                                             }
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {addonQuantity >
+                                                                                        1 && (
+                                                                                        <span className="rounded bg-blue-50 px-1 py-0.5 text-[10px] leading-3 font-medium text-blue-600">
+                                                                                            {
+                                                                                                addonQuantity
+                                                                                            }
+                                                                                            x
                                                                                         </span>
                                                                                     )}
                                                                                     {addonTooltipText ? (
