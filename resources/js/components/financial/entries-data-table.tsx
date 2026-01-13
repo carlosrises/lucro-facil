@@ -242,7 +242,7 @@ export function DataTable({
                             <SelectValue placeholder="Status" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">Todos</SelectItem>
+                            <SelectItem value="all">Todos os status</SelectItem>
                             <SelectItem value="pending">Pendente</SelectItem>
                             <SelectItem value="paid">Pago</SelectItem>
                         </SelectContent>

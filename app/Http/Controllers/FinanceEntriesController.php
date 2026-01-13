@@ -16,6 +16,9 @@ class FinanceEntriesController extends Controller
 
     public function index(Request $request)
     {
+        // Definir mês padrão como mês atual se não informado
+        $month = $request->input('month', now()->format('Y-m'));
+
         $query = FinanceEntry::query()
             ->where('tenant_id', tenant_id())
             ->withoutTemplates() // Excluir templates da listagem
@@ -35,9 +38,9 @@ class FinanceEntriesController extends Controller
             )
             ->when($request->input('status'), fn ($q, $status) => $q->where('status', $status)
             )
-            ->when($request->input('month'), fn ($q, $month) => $q->whereYear('occurred_on', substr($month, 0, 4))
-                ->whereMonth('occurred_on', substr($month, 5, 2))
-            )
+            // Sempre aplicar filtro de mês (padrão: mês atual)
+            ->whereYear('occurred_on', substr($month, 0, 4))
+            ->whereMonth('occurred_on', substr($month, 5, 2))
             ->orderBy('occurred_on', 'desc');
 
         $perPage = (int) $request->input('per_page', 10);
@@ -52,7 +55,13 @@ class FinanceEntriesController extends Controller
         return Inertia::render('financial/entries', [
             'entries' => $entries,
             'categories' => $categories,
-            'filters' => $request->only(['search', 'category_id', 'type', 'status', 'month']),
+            'filters' => [
+                'search' => $request->input('search'),
+                'category_id' => $request->input('category_id'),
+                'type' => $request->input('type'),
+                'status' => $request->input('status'),
+                'month' => $request->input('month', now()->format('Y-m')), // Pré-setar com mês atual
+            ],
         ]);
     }
 
