@@ -73,61 +73,6 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
         icon: Wallet,
     },
     {
-        title: 'Financeiro',
-        icon: LineChart,
-        items: [
-            {
-                title: 'Resumo (DRE)',
-                href: '/financial/summary',
-            },
-            {
-                title: 'Categorias Operacionais',
-                href: '/financial/categories',
-            },
-            {
-                title: 'Movimentações Operacionais',
-                href: '/financial/entries',
-            },
-        ],
-    },
-    // {
-    //     title: 'Fluxo de Caixa',
-    //     href: '#',
-    //     icon: Wallet,
-    //     locked: true,
-    // },
-    // {
-    //     title: 'Estoque',
-    //     icon: Boxes,
-    //     items: [
-    //         {
-    //             title: 'Inventário',
-    //             href: '#',
-    //             locked: true,
-    //         },
-    //         {
-    //             title: 'Compras',
-    //             href: '#',
-    //             locked: true,
-    //         },
-    //         {
-    //             title: 'Análise',
-    //             href: '#',
-    //             locked: true,
-    //         },
-    //         {
-    //             title: 'Lista de Produção',
-    //             href: '#',
-    //             locked: true,
-    //         },
-    //         {
-    //             title: 'Movimentação',
-    //             href: '#',
-    //             locked: true,
-    //         },
-    //     ],
-    // },
-    {
         title: 'Cadastros IPC',
         icon: ClipboardList,
         items: [
@@ -160,9 +105,27 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
         ],
     },
     {
+        title: 'Financeiro',
+        icon: LineChart,
+        items: [
+            {
+                title: 'Categorias Operacionais',
+                href: '/financial/categories',
+            },
+            {
+                title: 'Movimentações Operacionais',
+                href: '/financial/entries',
+            },
+        ],
+    },
+    {
         title: 'Análises',
         icon: PieChart,
         items: [
+            {
+                title: 'Resumo (DRE)',
+                href: '/financial/summary',
+            },
             {
                 title: 'Curva ABC',
                 href: '/abc-curve',
