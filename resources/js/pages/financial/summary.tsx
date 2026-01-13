@@ -215,6 +215,44 @@ export default function FinancialSummary() {
                                                         </div>
                                                     ),
                                                 )}
+
+                                                {/* Informação de Subsídio */}
+                                                {data.subsidies > 0 && (
+                                                    <div className="mt-4 border-t pt-4">
+                                                        <div className="flex items-center justify-between text-sm">
+                                                            <div className="flex items-center gap-2 text-muted-foreground">
+                                                                <PlusCircle className="h-4 w-4" />
+                                                                <span>
+                                                                    Subsídio
+                                                                    incluso
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="text-green-700"
+                                                                >
+                                                                    {data.subsidiesPercent.toFixed(
+                                                                        1,
+                                                                    )}
+                                                                    %
+                                                                </Badge>
+                                                                <span className="font-semibold text-green-700">
+                                                                    {new Intl.NumberFormat(
+                                                                        'pt-BR',
+                                                                        {
+                                                                            style: 'currency',
+                                                                            currency:
+                                                                                'BRL',
+                                                                        },
+                                                                    ).format(
+                                                                        data.subsidies,
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </CardContent>
                                     </Card>
@@ -345,49 +383,7 @@ export default function FinancialSummary() {
                                         </CardHeader>
                                     </Card>
 
-                                    {/* 5. (+) SUBSÍDIO */}
-                                    <Card className="border-l-4 border-l-green-500">
-                                        <CardHeader className="px-6">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <PlusCircle className="h-5 w-5 text-green-600" />
-                                                    <CardTitle>
-                                                        (+) Subsídio
-                                                    </CardTitle>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="text-green-700"
-                                                    >
-                                                        {data.subsidiesPercent.toFixed(
-                                                            1,
-                                                        )}
-                                                        %
-                                                    </Badge>
-                                                    <Badge
-                                                        variant="secondary"
-                                                        className="text-lg font-semibold text-green-700"
-                                                    >
-                                                        {new Intl.NumberFormat(
-                                                            'pt-BR',
-                                                            {
-                                                                style: 'currency',
-                                                                currency: 'BRL',
-                                                            },
-                                                        ).format(
-                                                            data.subsidies,
-                                                        )}
-                                                    </Badge>
-                                                </div>
-                                            </div>
-                                            <CardDescription>
-                                                Subsídios recebidos
-                                            </CardDescription>
-                                        </CardHeader>
-                                    </Card>
-
-                                    {/* 6. (=) RECEITA PÓS DEDUÇÃO */}
+                                    {/* 5. (=) RECEITA PÓS DEDUÇÃO */}
                                     <Card className="border-2 border-emerald-500 bg-emerald-50/50">
                                         <CardHeader className="px-6">
                                             <div className="flex items-center justify-between">
@@ -421,8 +417,8 @@ export default function FinancialSummary() {
                                                 </div>
                                             </div>
                                             <CardDescription>
-                                                Receita após dedução de taxas,
-                                                comissões e ajustes
+                                                Faturamento após dedução de
+                                                taxas, comissões e descontos
                                             </CardDescription>
                                         </CardHeader>
                                     </Card>
