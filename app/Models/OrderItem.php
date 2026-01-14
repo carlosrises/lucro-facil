@@ -73,8 +73,14 @@ class OrderItem extends Model
             $totalCost += $mapping->calculateCost();
         }
 
-        // 2. Custo dos add-ons (sabores de pizza)
-        if ($this->add_ons && is_array($this->add_ons)) {
+        // 2. Custo dos add-ons via OrderItemMapping (todos os tipos: flavors, beverages, complements, etc)
+        $addonMappings = $this->mappings()->where('mapping_type', 'addon')->get();
+        foreach ($addonMappings as $mapping) {
+            $totalCost += $mapping->calculateCost();
+        }
+
+        // FALLBACK LEGADO: Se não tem mappings, usar cálculo antigo por ProductMapping
+        if ($totalCost == 0 && $this->add_ons && is_array($this->add_ons)) {
             // Detectar tamanho da pizza
             $pizzaSize = $this->detectPizzaSize($this->name);
 
@@ -117,7 +123,7 @@ class OrderItem extends Model
             }
         }
 
-        // Fallback: sistema legado (ProductMapping direto)
+        // FALLBACK FINAL: sistema legado (ProductMapping direto no item principal)
         if ($totalCost == 0 && $this->internalProduct && $this->internalProduct->unit_cost) {
             $unitCost = (float) $this->internalProduct->unit_cost;
             $totalCost = $unitCost;
