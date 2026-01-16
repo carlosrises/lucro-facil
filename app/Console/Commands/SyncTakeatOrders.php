@@ -2,8 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Models\InternalProduct;
+use App\Models\OrderItemMapping;
+use App\Models\ProductMapping;
 use App\Models\Store;
 use App\Services\OrderCostService;
+use App\Services\PizzaFractionService;
 use App\Services\TakeatClient;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -335,7 +339,7 @@ class SyncTakeatOrders extends Command
                 }
             }
 
-            \App\Models\OrderItem::create([
+            $orderItem = \App\Models\OrderItem::create([
                 'tenant_id' => $order->tenant_id,
                 'order_id' => $order->id,
                 'sku' => (string) $productId,
@@ -345,7 +349,182 @@ class SyncTakeatOrders extends Command
                 'total' => $totalPrice,
                 'add_ons' => $addOns,
             ]);
+
+            // Auto-aplicar mapeamento se existir ProductMapping para este SKU
+            $this->autoApplyMappings($orderItem);
         }
+    }
+
+    /**
+     * Auto-aplicar mapeamentos ao OrderItem baseado em ProductMapping
+     */
+    protected function autoApplyMappings(\App\Models\OrderItem $orderItem): void
+    {
+        // Buscar ProductMapping pelo SKU
+        $productMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
+            ->where('external_item_id', $orderItem->sku)
+            ->first();
+
+        if (! $productMapping || ! $productMapping->internal_product_id) {
+            return; // Sem mapeamento configurado
+        }
+
+        // Buscar o produto interno para calcular CMV correto
+        $product = InternalProduct::find($productMapping->internal_product_id);
+        $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
+
+        // Criar OrderItemMapping principal
+        OrderItemMapping::create([
+            'tenant_id' => $orderItem->tenant_id,
+            'order_item_id' => $orderItem->id,
+            'internal_product_id' => $productMapping->internal_product_id,
+            'quantity' => 1.0,
+            'mapping_type' => 'main',
+            'option_type' => 'regular',
+            'auto_fraction' => false,
+            'unit_cost_override' => $correctCMV,
+        ]);
+
+        // Auto-mapear complementos (add_ons) se houverem
+        $addOns = $orderItem->add_ons ?? [];
+        $hasPizzaFlavors = false;
+
+        foreach ($addOns as $index => $addOn) {
+            $addonName = $addOn['name'] ?? '';
+            $addonQty = $addOn['quantity'] ?? 1;
+
+            // Tentar encontrar mapeamento para o complemento
+            $addonMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
+                ->where(function ($q) use ($addonName) {
+                    $q->where('external_item_name', 'LIKE', "%{$addonName}%");
+                })
+                ->first();
+
+            if ($addonMapping && $addonMapping->internal_product_id) {
+                // Detectar se é sabor de pizza
+                $isPizzaFlavor = stripos($addOn['name'] ?? '', 'pizza') !== false
+                    || stripos($productMapping->external_item_name ?? '', 'pizza') !== false
+                    || $addonMapping->item_type === 'flavor';
+
+                if ($isPizzaFlavor) {
+                    $hasPizzaFlavors = true;
+                }
+
+                // Buscar produto do addon para calcular CMV
+                $addonProduct = InternalProduct::find($addonMapping->internal_product_id);
+                $addonCMV = $addonProduct ? $this->calculateCorrectCMV($addonProduct, $orderItem) : null;
+
+                OrderItemMapping::create([
+                    'tenant_id' => $orderItem->tenant_id,
+                    'order_item_id' => $orderItem->id,
+                    'internal_product_id' => $addonMapping->internal_product_id,
+                    'quantity' => $addonQty,
+                    'mapping_type' => 'addon',
+                    'option_type' => $isPizzaFlavor ? 'pizza_flavor' : 'addon',
+                    'auto_fraction' => $isPizzaFlavor,
+                    'external_reference' => (string) $index,
+                    'external_name' => $addonName,
+                    'unit_cost_override' => $addonCMV,
+                ]);
+
+                logger()->info('🍕 Auto-mapeamento Takeat: complemento aplicado', [
+                    'order_item' => $orderItem->id,
+                    'addon_name' => $addonName,
+                    'product_id' => $addonMapping->internal_product_id,
+                    'is_pizza_flavor' => $isPizzaFlavor,
+                    'cmv' => $addonCMV,
+                ]);
+            }
+        }
+
+        // Se houver sabores de pizza, recalcular frações automaticamente
+        if ($hasPizzaFlavors) {
+            $pizzaFractionService = app(PizzaFractionService::class);
+            $result = $pizzaFractionService->recalculateFractions($orderItem);
+
+            logger()->info('🍕 Auto-mapeamento Takeat: frações recalculadas', [
+                'order_item' => $orderItem->id,
+                'pizza_flavors' => $result['pizza_flavors'],
+                'fraction' => $result['fraction'],
+                'updated' => $result['updated'],
+            ]);
+        }
+
+        logger()->info('✅ Auto-mapeamento Takeat aplicado', [
+            'order_item' => $orderItem->id,
+            'sku' => $orderItem->sku,
+            'product_id' => $productMapping->internal_product_id,
+            'cmv' => $correctCMV,
+            'addons_mapped' => count($addOns),
+            'has_pizza_flavors' => $hasPizzaFlavors,
+        ]);
+    }
+
+    /**
+     * Calcular CMV correto baseado no tamanho do produto
+     * (Mesmo método usado no ItemTriageController)
+     */
+    protected function calculateCorrectCMV(InternalProduct $product, \App\Models\OrderItem $orderItem): ?float
+    {
+        // Se o produto não for sabor de pizza, usar unit_cost padrão
+        if ($product->product_category !== 'sabor_pizza') {
+            return $product->unit_cost;
+        }
+
+        // Detectar tamanho da pizza
+        $pizzaSize = $this->detectPizzaSize($product, $orderItem);
+
+        if (! $pizzaSize) {
+            logger()->warning('⚠️ Takeat: Não foi possível detectar tamanho da pizza', [
+                'product_id' => $product->id,
+                'product_name' => $product->name,
+                'order_item_name' => $orderItem->name,
+            ]);
+
+            return $product->unit_cost; // Fallback para unit_cost genérico
+        }
+
+        // Calcular CMV pelo tamanho
+        $correctCMV = $product->calculateCMV($pizzaSize);
+
+        logger()->info('🍕 Takeat: CMV calculado por tamanho', [
+            'product_id' => $product->id,
+            'product_name' => $product->name,
+            'size' => $pizzaSize,
+            'cmv' => $correctCMV,
+            'generic_unit_cost' => $product->unit_cost,
+        ]);
+
+        return $correctCMV;
+    }
+
+    /**
+     * Detectar tamanho da pizza a partir do nome do item
+     */
+    protected function detectPizzaSize(InternalProduct $product, \App\Models\OrderItem $orderItem): ?string
+    {
+        // Tentar detectar do nome do OrderItem
+        $itemName = strtolower($orderItem->name);
+
+        $sizePatterns = [
+            'broto' => '/\b(broto|brotinho|pequena|p)\b/i',
+            'media' => '/\b(media|média|m)\b/i',
+            'grande' => '/\b(grande|g)\b/i',
+            'familia' => '/\b(familia|família|gigante|gg)\b/i',
+        ];
+
+        foreach ($sizePatterns as $size => $pattern) {
+            if (preg_match($pattern, $itemName)) {
+                return $size;
+            }
+        }
+
+        // Se o produto interno tem size definido, usar ele
+        if ($product->size) {
+            return $product->size;
+        }
+
+        return null;
     }
 
     /**
