@@ -46,7 +46,28 @@ class PizzaFractionService
         // NÃO usar max_flavors, pois uma pizza de 4 sabores pode ter apenas 2 escolhidos
         $fraction = $this->calculateFraction($flavorCount);
 
-        // Atualizar cada sabor com a fração calculada
+        // Primeiro, corrigir não-sabores para quantity = 1.0
+        $nonFlavors = $mappings->whereNotIn('option_type', [
+            OrderItemMapping::OPTION_TYPE_PIZZA_FLAVOR,
+            null
+        ]);
+
+        foreach ($nonFlavors as $mapping) {
+            if (abs((float) $mapping->quantity - 1.0) > 0.0001) {
+                $mapping->quantity = 1.0;
+                $mapping->save();
+                $updated++;
+
+                \Log::info('🔄 Não-sabor corrigido para 100%', [
+                    'mapping_id' => $mapping->id,
+                    'option_type' => $mapping->option_type,
+                    'external_name' => $mapping->external_name,
+                    'old_quantity' => $mapping->getOriginal('quantity'),
+                ]);
+            }
+        }
+
+        // Depois, atualizar cada sabor com a fração calculada
         $updated = 0;
         foreach ($pizzaFlavors as $mapping) {
             // Buscar a quantidade original do add-on no OrderItem
