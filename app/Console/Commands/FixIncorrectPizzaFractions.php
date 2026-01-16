@@ -37,7 +37,7 @@ class FixIncorrectPizzaFractions extends Command
                 'mappings' => function ($q) {
                     $q->orderBy('mapping_type')->orderBy('id');
                 },
-                'mappings.internalProduct.product_category',
+                'mappings.internalProduct',
                 'order',
             ]);
 
