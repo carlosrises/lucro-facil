@@ -29,6 +29,14 @@ class Order extends Model
         'costs_calculated_at' => 'datetime',
     ];
 
+    /**
+     * Preparar datas para serialização (converter para timezone da aplicação)
+     */
+    protected function serializeDate(\DateTimeInterface $date): string
+    {
+        return $date->setTimezone(config('app.timezone'))->format('Y-m-d\TH:i:s.u\Z');
+    }
+
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);
