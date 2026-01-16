@@ -144,7 +144,7 @@ class FixIncorrectPizzaFractions extends Command
 
                     // Verificar se é sabor de pizza
                     $isFlavor = $productMapping && $productMapping->item_type === 'flavor';
-                    
+
                     // Se não tem ProductMapping mas tem OrderItemMapping, pode ser sabor não classificado
                     if (!$isFlavor && $orderItemMapping && (stripos($addon['name'], 'pizza') !== false || stripos($addon['name'], 'sabor') !== false)) {
                         $this->line("   └ {$addon['name']} - ⚠️  Sabor não classificado (tem OrderItemMapping)");
@@ -169,14 +169,22 @@ class FixIncorrectPizzaFractions extends Command
                     $currentSubtotal = $currentCMV * $mappingQuantity * $addonQuantity;
 
                     // Calcular CMV e subtotal CORRETO
-                    // Se o ProductMapping não tem internal_product_id (desassociado), CMV correto = 0
                     if (!$productMapping || !$productMapping->internal_product_id || !$product) {
-                        $correctCMV = 0;
+                        // Se não tem produto associado:
+                        // - Para SABORES: CMV = 0 (precisa associar)
+                        // - Para OUTROS (bebidas, etc): manter CMV atual (só corrigir fração)
+                        $correctCMV = $isFlavor ? 0 : $currentCMV;
                     } else {
-                        // Calcular CMV por tamanho se tem produto associado
-                        $correctCMV = $pizzaSize ? $product->calculateCMV($pizzaSize) : $product->unit_cost;
+                        // Calcular CMV:
+                        // - SABORES: usar calculateCMV por tamanho (broto, média, grande, família)
+                        // - OUTROS: usar unit_cost direto (bebidas não têm tamanho)
+                        if ($isFlavor && $pizzaSize) {
+                            $correctCMV = $product->calculateCMV($pizzaSize);
+                        } else {
+                            $correctCMV = $product->unit_cost;
+                        }
                     }
-                    
+
                     // Aplicar fração APENAS para sabores de pizza
                     // Outros add-ons (bebidas, complementos) são 100% completos
                     $correctQuantity = $isFlavor ? $correctFraction : 1.0;
@@ -189,8 +197,10 @@ class FixIncorrectPizzaFractions extends Command
                     $currentFractionText = $mappingQuantity == 0.5 ? '1/2' : ($mappingQuantity == 0.33 || abs($mappingQuantity - 0.33) < 0.01 ? '1/3' : ($mappingQuantity == 0.25 ? '1/4' : number_format($mappingQuantity, 2)));
                     $correctFractionText = $correctQuantity == 0.5 ? '1/2' : ($correctQuantity == 0.33 || abs($correctQuantity - 0.33) < 0.01 ? '1/3' : ($correctQuantity == 0.25 ? '1/4' : number_format($correctQuantity, 2)));
 
-                    // Verificar se está incorreto (CMV errado OU fração errada para sabores)
-                    $isIncorrect = abs($currentCMV - $correctCMV) > 0.01 || ($isFlavor && abs($mappingQuantity - $correctQuantity) > 0.01);
+                    // Verificar se está incorreto:
+                    // - CMV errado
+                    // - Fração errada (para qualquer tipo de add-on)
+                    $isIncorrect = abs($currentCMV - $correctCMV) > 0.01 || abs($mappingQuantity - $correctQuantity) > 0.01;
 
                     $productName = $product ? $product->name : $addon['name'];
 
