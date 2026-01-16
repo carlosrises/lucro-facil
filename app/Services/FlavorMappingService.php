@@ -359,11 +359,11 @@ class FlavorMappingService
         // Verificar se este add-on específico é um sabor
         $addOnName = $addOn['name'] ?? '';
         $addOnSku = 'addon_'.md5($addOnName);
-        
+
         $mapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
             ->where('external_item_id', $addOnSku)
             ->first();
-        
+
         // Se não é sabor de pizza (item_type='flavor'), retorna 100%
         if (!$mapping || $mapping->item_type !== 'flavor') {
             return 1.0;
