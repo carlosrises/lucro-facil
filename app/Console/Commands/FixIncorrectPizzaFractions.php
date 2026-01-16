@@ -123,7 +123,9 @@ class FixIncorrectPizzaFractions extends Command
                         'unit_cost_override' => $unitCost, // CMV unitário
                         'mapping_quantity' => $correctFraction, // USAR FRAÇÃO CALCULADA, NÃO A DO MAPPING
                         'product' => $mapping?->internalProduct,
+                        'product_mapping' => $mapping, // Adicionar ProductMapping completo
                         'order_item_mapping_id' => $orderItemMapping?->id,
+                        'order_item_mapping' => $orderItemMapping, // Adicionar OrderItemMapping completo
                     ];
                 }
 
@@ -136,21 +138,23 @@ class FixIncorrectPizzaFractions extends Command
                 $correctTotal = 0;
 
                 foreach ($addOnsWithMappings as $addon) {
+                    $productMapping = $addon['product_mapping'] ?? null;
+                    $orderItemMapping = $addon['order_item_mapping'] ?? null;
                     $product = $addon['product'] ?? null;
 
-                    if (! $product) {
-                        $this->line("   └ {$addon['name']} - ⚠️  Sem ProductMapping");
-
-                        continue;
-                    }
-
-                    $prodCategory = $product->product_category ?? 'N/A';
-
-                    // Pular se não for sabor de pizza
-                    if ($prodCategory !== 'Sabor' && $prodCategory !== 'sabor_pizza') {
-                        $this->line("   └ {$addon['name']} ({$prodCategory}) - pulado");
-
-                        continue;
+                    // Pular se NÃO é sabor de pizza (verificar pelo item_type do ProductMapping)
+                    $isFlavor = $productMapping && $productMapping->item_type === 'flavor';
+                    
+                    if (!$isFlavor) {
+                        // Se não tem ProductMapping mas tem OrderItemMapping, pode ser sabor não classificado
+                        if ($orderItemMapping && (stripos($addon['name'], 'pizza') !== false || stripos($addon['name'], 'sabor') !== false)) {
+                            $this->line("   └ {$addon['name']} - ⚠️  Sabor não classificado (tem OrderItemMapping)");
+                            $isFlavor = true; // Processar como sabor mesmo sem classificação
+                        } else {
+                            $category = $productMapping ? ($productMapping->item_type ?? 'N/A') : 'N/A';
+                            $this->line("   └ {$addon['name']} ({$category}) - pulado");
+                            continue;
+                        }
                     }
 
                     $hasPizzaFlavor = true;
@@ -336,7 +340,7 @@ class FixIncorrectPizzaFractions extends Command
             return (int) $matches[1];
         }
 
-        // Contar quantos sabores estão no add_ons
+        // Contar quantos sabores estão no add_ons (mesma lógica do frontend)
         $flavorCount = 0;
         foreach ($orderItem->add_ons as $addOn) {
             $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
@@ -349,10 +353,13 @@ class FixIncorrectPizzaFractions extends Command
                 ->where('external_item_id', $addonSku)
                 ->first();
 
-            $product = $mapping?->internalProduct;
-            $category = $product?->product_category ?? '';
-
-            if ($category === 'Sabor' || $category === 'sabor_pizza') {
+            // Contar como sabor se:
+            // 1. Tem ProductMapping com item_type='flavor' (mesma lógica do frontend linha 1118-1125)
+            // 2. OU se o nome contém "pizza" (fallback para itens não classificados)
+            if ($mapping && $mapping->item_type === 'flavor') {
+                $flavorCount++;
+            } elseif (stripos($addOnName, 'pizza') !== false || stripos($addOnName, 'sabor') !== false) {
+                // Adicionar sabores não classificados mas que claramente são sabores
                 $flavorCount++;
             }
         }
