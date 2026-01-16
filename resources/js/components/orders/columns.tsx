@@ -674,7 +674,30 @@ export const columns: ColumnDef<Order>[] = [
         cell: ({ row }) => {
             const items = row.original.items || [];
             const raw = row.original.raw;
+            const calculatedCosts = row.original.calculated_costs || null;
 
+            // Se já temos o net_revenue calculado no backend, usar esse valor
+            if (calculatedCosts?.net_revenue !== undefined && calculatedCosts?.net_revenue !== null) {
+                const netRevenue = calculatedCosts.net_revenue;
+                const isCancelled = row.original.status === 'CANCELLED';
+                
+                return (
+                    <span
+                        className={`${
+                            isCancelled
+                                ? 'font-semibold text-muted-foreground line-through'
+                                : 'font-semibold'
+                        } text-end`}
+                    >
+                        {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                        }).format(netRevenue)}
+                    </span>
+                );
+            }
+
+            // Fallback: calcular manualmente (para pedidos antigos sem calculated_costs)
             // Para Takeat, calcular net_total considerando custos, impostos e taxas
             if (row.original.provider === 'takeat') {
                 // Usar a mesma lógica do "Total do Pedido" para a base de cálculo
