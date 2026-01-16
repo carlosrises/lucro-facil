@@ -74,14 +74,17 @@ class FixIncorrectPizzaFractions extends Command
             ) {
                 foreach ($orderItems as $orderItem) {
             try {
-                // Detectar tamanho da pizza
+                // Detectar tamanho e quantidade de sabores da pizza
                 $pizzaSize = $this->detectPizzaSize($orderItem);
+                $numFlavors = $this->detectNumFlavors($orderItem);
+                $correctFraction = $numFlavors > 0 ? (1.0 / $numFlavors) : 1.0;
 
                 // SEMPRE mostrar detalhes para debug
                 $this->line('');
                 $this->info("📦 Pedido #{$orderItem->order_id} - Item #{$orderItem->id}");
                 $this->line("   🍕 {$orderItem->name}");
                 $this->line('   📏 Tamanho detectado: '.($pizzaSize ?: 'não detectado'));
+                $this->line("   🍕 Sabores detectados: {$numFlavors} (fração: {$correctFraction})");
                 $this->line('');
 
                 // COPIAR EXATAMENTE A LÓGICA DO OrdersController (linhas 133-180)
@@ -118,7 +121,7 @@ class FixIncorrectPizzaFractions extends Command
                         'name' => $addOnName,
                         'quantity' => $addOnQuantity, // Quantidade do add-on (ex: 2 para "2x Don Rafaello")
                         'unit_cost_override' => $unitCost, // CMV unitário
-                        'mapping_quantity' => $mappingQuantity, // Fração do sabor (0.25 = 1/4)
+                        'mapping_quantity' => $correctFraction, // USAR FRAÇÃO CALCULADA, NÃO A DO MAPPING
                         'product' => $mapping?->internalProduct,
                         'order_item_mapping_id' => $orderItemMapping?->id,
                     ];
@@ -206,10 +209,20 @@ class FixIncorrectPizzaFractions extends Command
                 $this->warn('   ⚠️  NECESSITA CORREÇÃO');
 
                 if (! $dryRun) {
-                    // Recalcular frações (reassocia como se fosse na Triagem)
-                    $result = $pizzaService->recalculateFractions($orderItem);
+                    // Deletar mappings antigos de addons para forçar reassociação
+                    $deletedCount = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
+                        ->where('mapping_type', 'addon')
+                        ->delete();
 
-                    $this->info('   ✅ Recalculado!');
+                    if ($deletedCount > 0) {
+                        $this->line("   🗑️  Deletados {$deletedCount} mappings antigos");
+                    }
+
+                    // Reprocessar pela Triagem (cria novos mappings corretos)
+                    $triageService = app(\App\Services\TriageService::class);
+                    $triageService->processOrderItem($orderItem);
+
+                    $this->info('   ✅ Reprocessado pela Triagem!');
 
                     // Verificar resultado
                     $orderItem->refresh();
@@ -259,6 +272,37 @@ class FixIncorrectPizzaFractions extends Command
     /**
      * Detectar tamanho da pizza do OrderItem
      */
+    protected function detectNumFlavors(OrderItem $orderItem): int
+    {
+        $itemName = strtolower($orderItem->name);
+
+        // Detectar pelo nome: "Pizza Grande 2 sabores", "Pizza 3 sabores", etc
+        if (preg_match('/(\d+)\s*sabor/i', $itemName, $matches)) {
+            return (int) $matches[1];
+        }
+
+        // Contar quantos sabores estão no add_ons
+        $flavorCount = 0;
+        foreach ($orderItem->add_ons as $addOn) {
+            $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
+
+            // Procurar ProductMapping para ver se é sabor
+            $mapping = \App\Models\ProductMapping::where('tenant_id', $orderItem->tenant_id)
+                ->where('store_id', $orderItem->order->store_id)
+                ->where('external_name', $addOnName)
+                ->first();
+
+            $product = $mapping?->internalProduct;
+            $category = $product?->product_category ?? '';
+
+            if ($category === 'Sabor' || $category === 'sabor_pizza') {
+                $flavorCount++;
+            }
+        }
+
+        return $flavorCount > 0 ? $flavorCount : 1;
+    }
+
     protected function detectPizzaSize(OrderItem $orderItem): ?string
     {
         // 1. Tentar pelo produto pai (mapping principal)
