@@ -208,13 +208,18 @@ class PizzaFractionService
         // NÃO usar max_flavors, pois uma pizza de 4 sabores pode ter apenas 2 escolhidos
         $fraction = $this->calculateFraction($pizzaFlavorCount);
 
-        // Atualizar quantidade de cada pizza_flavor com auto_fraction
+        // Atualizar quantidade de cada item baseado no tipo
         return collect($newMappings)->map(function ($mapping) use ($fraction) {
-            if (
-                ($mapping['option_type'] ?? null) === OrderItemMapping::OPTION_TYPE_PIZZA_FLAVOR &&
-                ($mapping['auto_fraction'] ?? false) === true
-            ) {
+            $optionType = $mapping['option_type'] ?? null;
+
+            // Sabores de pizza com auto_fraction = fração calculada
+            if ($optionType === OrderItemMapping::OPTION_TYPE_PIZZA_FLAVOR &&
+                ($mapping['auto_fraction'] ?? false) === true) {
                 $mapping['quantity'] = $fraction;
+            }
+            // Todos os outros tipos (drink, addon, regular, observation) = 100%
+            elseif ($optionType !== null && $optionType !== OrderItemMapping::OPTION_TYPE_PIZZA_FLAVOR) {
+                $mapping['quantity'] = 1.0;
             }
 
             return $mapping;
