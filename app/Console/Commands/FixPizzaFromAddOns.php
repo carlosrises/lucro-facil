@@ -46,7 +46,7 @@ class FixPizzaFromAddOns extends Command
         }
 
         $orderItems = $query->get();
-        
+
         // Filtrar apenas items que parecem ser pizzas
         $pizzaItems = $orderItems->filter(function($item) {
             return $this->isPizzaItem($item);
@@ -66,23 +66,23 @@ class FixPizzaFromAddOns extends Command
                 $this->line('');
                 $this->info("📦 Pedido #{$orderItem->order_id} - Item #{$orderItem->id}");
                 $this->line("   🍕 {$orderItem->name}");
-                
+
                 // Detectar tamanho da pizza
                 $pizzaSize = $this->detectPizzaSize($orderItem);
                 $this->line('   📏 Tamanho detectado: '.($pizzaSize ?: 'não detectado'));
-                
+
                 if (!$pizzaSize) {
                     $this->warn('   ⚠️  Não foi possível detectar o tamanho - pulando');
                     $skipped++;
                     continue;
                 }
-                
+
                 // Mostrar add_ons
                 $this->line("   📋 Add-ons JSON ({$orderItem->add_ons} items):");
-                
+
                 $currentTotal = 0;
                 $correctTotal = 0;
-                
+
                 foreach ($orderItem->add_ons as $index => $addon) {
                     $addonName = is_array($addon) ? ($addon['name'] ?? '') : $addon;
                     $addonQuantity = is_array($addon) ? ($addon['quantity'] ?? $addon['qty'] ?? 1) : 1;
@@ -102,19 +102,19 @@ class FixPizzaFromAddOns extends Command
                     $product = $mapping->internalProduct;
                     $genericCMV = $product->unit_cost;
                     $correctCMV = $product->calculateCMV($pizzaSize);
-                    
+
                     // Calcular fração (assumir divisão igual)
                     $flavorCount = count($orderItem->add_ons);
                     $fraction = $flavorCount > 0 ? (1.0 / $flavorCount) : 1.0;
-                    
+
                     $currentSubtotal = $genericCMV * $addonQuantity;
                     $correctSubtotal = $correctCMV * $fraction * $addonQuantity;
-                    
+
                     $currentTotal += $currentSubtotal;
                     $correctTotal += $correctSubtotal;
-                    
+
                     $fractionLabel = $fraction == 0.5 ? '1/2' : ($fraction == 0.33 ? '1/3' : ($fraction == 0.25 ? '1/4' : $fraction));
-                    
+
                     if (abs($genericCMV - $correctCMV) > 0.01) {
                         $this->line("      ├ ⚠️  {$addonName} (qty: {$addonQuantity}, fração: {$fractionLabel})");
                         $this->line("         ❌ CMV ATUAL (genérico): R$ ".number_format($currentSubtotal, 2, ',', '.')." (unit: R$ ".number_format($genericCMV, 2, ',', '.').")");
@@ -123,33 +123,33 @@ class FixPizzaFromAddOns extends Command
                         $this->line("      └ ✅ {$addonName} (qty: {$addonQuantity}, fração: {$fractionLabel}) - R$ ".number_format($correctSubtotal, 2, ',', '.'));
                     }
                 }
-                
+
                 $difference = abs($currentTotal - $correctTotal);
-                
+
                 $this->line('');
                 $this->line('   💰 Total ATUAL (genérico): R$ '.number_format($currentTotal, 2, ',', '.'));
                 $this->line('   ✅ Total CORRETO (com tamanho): R$ '.number_format($correctTotal, 2, ',', '.'));
                 $this->line('   📏 Diferença: R$ '.number_format($difference, 2, ',', '.'));
-                
+
                 if ($difference < 1.0) {
                     $this->comment('   ✅ Diferença pequena - OK');
                     $skipped++;
                     continue;
                 }
-                
+
                 $this->warn('   ⚠️  NECESSITA CORREÇÃO');
-                
+
                 if (!$dryRun) {
                     // Recalcular frações (cria os mappings corretos)
                     $result = $pizzaService->recalculateFractions($orderItem);
-                    
+
                     $this->info('   ✅ Frações recalculadas e mappings criados!');
-                    
+
                     // Verificar resultado
                     $orderItem->refresh();
                     $newTotal = $orderItem->calculateTotalCost();
                     $this->line('   🆕 Novo total: R$ '.number_format($newTotal, 2, ',', '.'));
-                    
+
                     $fixed++;
                 } else {
                     $this->comment('   🔍 Seria recalculado (dry-run)');
@@ -193,7 +193,7 @@ class FixPizzaFromAddOns extends Command
         // Procurar por palavras-chave de pizza nos add_ons
         foreach ($item->add_ons as $addon) {
             $name = is_array($addon) ? ($addon['name'] ?? '') : $addon;
-            
+
             // Padrões de sabores ou tamanhos de pizza
             if (preg_match('/(grande|média|pequena|broto|familia|pizza|sabor)/i', $name)) {
                 return true;
@@ -210,7 +210,7 @@ class FixPizzaFromAddOns extends Command
     {
         // 1. Tentar detectar do nome do item ou add_ons
         $itemName = strtolower($orderItem->name);
-        
+
         // Verificar também nos add_ons
         $addOnsText = '';
         if (!empty($orderItem->add_ons)) {
@@ -219,7 +219,7 @@ class FixPizzaFromAddOns extends Command
                 $addOnsText .= ' ' . strtolower($name);
             }
         }
-        
+
         $fullText = $itemName . ' ' . $addOnsText;
 
         if (preg_match('/\bbroto\b/', $fullText)) {
