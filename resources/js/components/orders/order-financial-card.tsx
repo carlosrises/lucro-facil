@@ -1119,26 +1119,33 @@ export function OrderFinancialCard({
                                                                         }
 
                                                                         // Calcular fração para exibição
-                                                                        const totalFlavors =
-                                                                            isFlavor
-                                                                                ? addOnsEnriched.filter(
-                                                                                      (
-                                                                                          a,
-                                                                                      ) =>
-                                                                                          a
-                                                                                              .product_mapping
-                                                                                              ?.item_type ===
-                                                                                          'flavor',
-                                                                                  )
-                                                                                      .length
-                                                                                : 0;
-
-                                                                        const fractionText =
-                                                                            isFlavor &&
-                                                                            totalFlavors >
-                                                                                1
-                                                                                ? `1/${totalFlavors}`
-                                                                                : null;
+                                                                        // PRIORIDADE: usar mapping_quantity (valor real salvo no OrderItemMapping)
+                                                                        let fractionText: string | null = null;
+                                                                        if (isFlavor && addOn.mapping_quantity !== undefined && addOn.mapping_quantity !== null) {
+                                                                            const fraction = addOn.mapping_quantity;
+                                                                            // Converter decimal para fração visual
+                                                                            if (Math.abs(fraction - 0.5) < 0.01) {
+                                                                                fractionText = '1/2';
+                                                                            } else if (Math.abs(fraction - 0.333) < 0.01 || Math.abs(fraction - 1/3) < 0.01) {
+                                                                                fractionText = '1/3';
+                                                                            } else if (Math.abs(fraction - 0.25) < 0.01) {
+                                                                                fractionText = '1/4';
+                                                                            } else if (Math.abs(fraction - 0.2) < 0.01) {
+                                                                                fractionText = '1/5';
+                                                                            } else if (Math.abs(fraction - 0.166) < 0.01 || Math.abs(fraction - 1/6) < 0.01) {
+                                                                                fractionText = '1/6';
+                                                                            } else if (fraction < 1) {
+                                                                                fractionText = `${(fraction * 100).toFixed(0)}%`;
+                                                                            }
+                                                                        } else if (isFlavor) {
+                                                                            // FALLBACK: contar sabores (sistema legado)
+                                                                            const totalFlavors = addOnsEnriched.filter(
+                                                                                (a) => a.product_mapping?.item_type === 'flavor',
+                                                                            ).length;
+                                                                            if (totalFlavors > 1) {
+                                                                                fractionText = `1/${totalFlavors}`;
+                                                                            }
+                                                                        }
 
                                                                         // Tooltip para add-on
                                                                         const internalProduct =
