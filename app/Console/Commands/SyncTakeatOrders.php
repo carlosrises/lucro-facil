@@ -250,8 +250,9 @@ class SyncTakeatOrders extends Command
         // Status baseado no order_status e completed_at
         $status = $this->mapTakeatStatus($basket['order_status'] ?? null, $session['status'] ?? null);
 
-        // Data do pedido
-        $placedAt = \Carbon\Carbon::parse($basket['start_time'] ?? $session['start_time']);
+        // Data do pedido (Takeat retorna em UTC, converter para timezone da aplicação)
+        $placedAt = \Carbon\Carbon::parse($basket['start_time'] ?? $session['start_time'], 'UTC')
+            ->setTimezone(config('app.timezone'));
 
         // Criar ou atualizar Order
         $order = \App\Models\Order::updateOrCreate(
