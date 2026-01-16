@@ -222,34 +222,41 @@ class FixIncorrectPizzaFractions extends Command
                     $remappedCount = 0;
                     foreach ($orderItem->add_ons as $index => $addOn) {
                         $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
-
-                        // Buscar ProductMapping do sabor
+                        
+                        // Gerar SKU do addon como a Triagem faz
+                        $addonSku = 'addon_'.md5($addOnName);
+                        
+                        // Buscar ProductMapping do sabor pelo SKU
                         $mapping = \App\Models\ProductMapping::where('tenant_id', $orderItem->tenant_id)
-                            ->where('store_id', $orderItem->order->store_id)
-                            ->where('external_name', $addOnName)
+                            ->where('external_item_id', $addonSku)
                             ->where('item_type', 'flavor')
                             ->first();
-
+                        
                         if (!$mapping || !$mapping->internal_product_id) continue;
-
+                        
                         $product = $mapping->internalProduct;
                         if (!$product) continue;
-
-                        // Calcular CMV correto baseado no tamanho
+                        
+                        // Calcular CMV correto baseado no tamanho (mesma lógica do FlavorMappingService)
                         $correctCMV = $pizzaSize ? $product->calculateCMV($pizzaSize) : $product->unit_cost;
-
-                        // Criar novo OrderItemMapping
+                        
+                        // Obter quantidade do add-on
+                        $addOnQuantity = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
+                        
+                        // Criar novo OrderItemMapping (mesma estrutura do FlavorMappingService linha 227-239)
                         \App\Models\OrderItemMapping::create([
+                            'tenant_id' => $orderItem->tenant_id,
                             'order_item_id' => $orderItem->id,
                             'internal_product_id' => $product->id,
+                            'quantity' => $correctFraction * $addOnQuantity, // Fração x Quantidade do add-on
                             'mapping_type' => 'addon',
-                            'external_reference' => (string) $index,
-                            'quantity' => $correctFraction, // Usar fração calculada
-                            'unit_cost_override' => $correctCMV,
-                            'option_type' => \App\Models\OrderItemMapping::OPTION_TYPE_PIZZA_FLAVOR,
+                            'option_type' => 'pizza_flavor',
                             'auto_fraction' => true,
+                            'external_reference' => (string) $index,
+                            'external_name' => $addOnName,
+                            'unit_cost_override' => $correctCMV,
                         ]);
-
+                        
                         $remappedCount++;
                     }
 
