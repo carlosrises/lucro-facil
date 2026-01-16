@@ -52,7 +52,7 @@ class FixIncorrectPizzaFractions extends Command
         $orderItems = $query->get();
 
         // Filtrar apenas items que têm pizza nos add_ons (mesma lógica do controller)
-        $pizzaItems = $orderItems->filter(function($item) {
+        $pizzaItems = $orderItems->filter(function ($item) {
             if (empty($item->add_ons)) {
                 return false;
             }
@@ -75,7 +75,7 @@ class FixIncorrectPizzaFractions extends Command
         });
 
         $this->info("📦 Encontrados {$pizzaItems->count()} items com sabores de pizza");
-        $this->linpizza;
+        $this->line('');
 
         $fixed = 0;
         $alreadyCorrect = 0;
@@ -121,8 +121,9 @@ class FixIncorrectPizzaFractions extends Command
                         ->where('external_reference', (string) $index)
                         ->first();
 
-                    if (!$mapping || !$mapping->internalProduct) {
+                    if (! $mapping || ! $mapping->internalProduct) {
                         $this->line("   └ {$addOnName} - ⚠️  Sem ProductMapping");
+
                         continue;
                     }
 
@@ -132,6 +133,7 @@ class FixIncorrectPizzaFractions extends Command
                     // Pular se não for sabor de pizza
                     if ($prodCategory !== 'Sabor') {
                         $this->line("   └ {$addOnName} ({$prodCategory}) - pulado");
+
                         continue;
                     }
 
@@ -154,41 +156,27 @@ class FixIncorrectPizzaFractions extends Command
 
                     $currentTotal += $currentSubtotal;
                     $correctTotal += $correctSubtotal;
- (sabores): R$ '.number_format($currentTotal, 2, ',', '.'));
-                $this->line('   ✅ Total CORRETO (sabores): R$ '.number_format($correctTotal, 2, ',', '.'));
 
-                $difference = abs($currentTotal - $correctTotal1/3' : ($mappingQuantity == 0.25 ? '1/4' : $mappingQuantity));
+                    $fraction = $mappingQuantity == 0.5 ? '1/2' : ($mappingQuantity == 0.33 ? '1/3' : ($mappingQuantity == 0.25 ? '1/4' : $mappingQuantity));
                     $isIncorrect = abs($currentCMV - $correctCMV) > 0.01;
 
                     if ($isIncorrect) {
                         $this->line("   ├ ⚠️  {$fraction} {$product->name}");
-                        $this->line("      OrderItemMapping ID: ".($orderItemMapping->id ?? 'N/A'));
+                        $this->line('      OrderItemMapping ID: '.($orderItemMapping->id ?? 'N/A'));
                         $this->line('      ❌ ATUAL (CMV): R$ '.number_format($currentCMV, 2, ',', '.').' × '.$mappingQuantity.' × '.$addOnQuantity.' = R$ '.number_format($currentSubtotal, 2, ',', '.'));
                         $this->line("      ✅ CORRETO ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.').' × '.$mappingQuantity.' × '.$addOnQuantity.' = R$ '.number_format($correctSubtotal, 2, ',', '.'));
                         $hasIncorrectCost = true;
                     } else {
-                        $this->line("   ├ ✅ {$fraction} {$product->n
-                            $fraction = $qty == 0.5 ? '1/2' : ($qty == 0.33 ? '1/3' : ($qty == 0.25 ? '1/4' : $qty));
-
-                            if ($isIncorrect) {
-                                $this->line("   ├ ⚠️  {$fraction} {$prodName}");
-                                $this->line('      ❌ ATUAL (genérico): R$ '.number_format($currentSubtotal, 2, ',', '.').' (CMV: R$ '.number_format($currentCost, 2, ',', '.').')');
-                                $this->line("      ✅ CORRETO ({$pizzaSize}): R$ ".number_format($correctSubtotal, 2, ',', '.').' (CMV: R$ '.number_format($correctCMV, 2, ',', '.').')');
-                                $hasIncorrectCost = true;
-                            } else {
-                                $this->line("   ├ ✅ {$fraction} {$prodName}");
-                                $this->line('      💰 R$ '.number_format($currentSubtotal, 2, ',', '.'));
-                            }
-                        }
-                    } else {
-                        $this->line("   └ {$prodName}");
+                        $this->line("   ├ ✅ {$fraction} {$product->name}");
                         $this->line('      💰 R$ '.number_format($currentSubtotal, 2, ',', '.'));
                     }
                 }
 
                 $this->line('');
-                $this->line('   💰 Total ATUAL: R$ '.number_format($currentTotal, 2, ',', '.'));
-                $this->line('   ✅ Total CORRETO: R$ '.number_format($correctTotal, 2, ',', '.'));
+                $this->line('   💰 Total ATUAL (sabores): R$ '.number_format($currentTotal, 2, ',', '.'));
+                $this->line('   ✅ Total CORRETO (sabores): R$ '.number_format($correctTotal, 2, ',', '.'));
+
+                $difference = abs($currentTotal - $correctTotal);
                 $this->line('   📏 Diferença: R$ '.number_format($difference, 2, ',', '.'));
 
                 if (! $hasIncorrectCost || $difference < $threshold) {
@@ -223,9 +211,9 @@ class FixIncorrectPizzaFractions extends Command
             }
         }
 
-        $this->line('');pizza
+        $this->line('');
         $this->info('═══════════════════════════════════════');
-        $this->info("📊 Total analisado: {$orderItems->count()} items");
+        $this->info("📊 Total analisado: {$pizzaItems->count()} items");
         $this->info("✅ Já corretos: {$alreadyCorrect}");
         $this->info('🔧 '.($dryRun ? 'Seriam corrigidos' : 'Corrigidos').": {$fixed}");
         $this->info('💰 Diferença total encontrada: R$ '.number_format($totalDifference, 2, ',', '.'));
