@@ -30,16 +30,10 @@ class FixIncorrectPizzaFractions extends Command
         $this->info("🔍 Buscando pedidos com add_ons (pizzas)...");
         $this->line('');
 
-        // Buscar OrderItems que têm add_ons JSON (como o controller faz)
+        // Buscar OrderItems que têm add_ons JSON
         $query = OrderItem::whereNotNull('add_ons')
             ->where('add_ons', '!=', '[]')
-            ->with([
-                'mappings' => function ($q) {
-                    $q->orderBy('mapping_type')->orderBy('id');
-                },
-                'mappings.internalProduct',
-                'order',
-            ]);
+            ->with(['mappings', 'order']);
 
         if ($orderId) {
             $query->where('order_id', $orderId);
@@ -51,30 +45,7 @@ class FixIncorrectPizzaFractions extends Command
 
         $orderItems = $query->get();
 
-        // Filtrar apenas items que têm pizza nos add_ons (mesma lógica do controller)
-        $pizzaItems = $orderItems->filter(function ($item) {
-            if (empty($item->add_ons)) {
-                return false;
-            }
-
-            foreach ($item->add_ons as $index => $addOn) {
-                $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
-                $addOnSku = 'addon_'.md5($addOnName);
-
-                $mapping = \App\Models\ProductMapping::where('external_item_id', $addOnSku)
-                    ->where('tenant_id', $item->tenant_id)
-                    ->with('internalProduct')
-                    ->first();
-
-                if ($mapping && $mapping->internalProduct && $mapping->internalProduct->product_category === 'Sabor') {
-                    return true;
-                }
-            }
-
-            return false;
-        });
-
-        $this->info("📦 Encontrados {$pizzaItems->count()} items com sabores de pizza");
+        $this->info("📦 Encontrados {$orderItems->count()} items com add_ons");
         $this->line('');
 
         $fixed = 0;
@@ -84,7 +55,7 @@ class FixIncorrectPizzaFractions extends Command
 
         $pizzaService = app(PizzaFractionService::class);
 
-        foreach ($pizzaItems as $orderItem) {
+        foreach ($orderItems as $orderItem) {
             try {
                 // Detectar tamanho da pizza
                 $pizzaSize = $this->detectPizzaSize($orderItem);
@@ -96,63 +67,85 @@ class FixIncorrectPizzaFractions extends Command
                 $this->line('   📏 Tamanho detectado: '.($pizzaSize ?: 'não detectado'));
                 $this->line('');
 
-                // Mostrar detalhes dos add_ons (como o controller faz)
-                $hasIncorrectCost = false;
-
-                $this->line('   🔍 Add-ons no JSON: '.count($orderItem->add_ons));
-
-                $currentTotal = 0;
-                $correctTotal = 0;
-
+                // COPIAR EXATAMENTE A LÓGICA DO OrdersController (linhas 133-180)
+                $addOnsWithMappings = [];
                 foreach ($orderItem->add_ons as $index => $addOn) {
                     $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
                     $addOnQuantity = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
                     $addOnSku = 'addon_'.md5($addOnName);
 
-                    // Buscar ProductMapping (mesmo que o controller)
+                    // Buscar ProductMapping do add-on
                     $mapping = \App\Models\ProductMapping::where('external_item_id', $addOnSku)
                         ->where('tenant_id', $orderItem->tenant_id)
-                        ->with('internalProduct')
+                        ->with('internalProduct:id,name,unit_cost,product_category')
                         ->first();
 
-                    // Buscar OrderItemMapping (mesmo que o controller)
+                    // CRÍTICO: Buscar OrderItemMapping do add-on para obter unit_cost_override e quantity (fração)
                     $orderItemMapping = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
                         ->where('mapping_type', 'addon')
                         ->where('external_reference', (string) $index)
                         ->first();
 
-                    if (! $mapping || ! $mapping->internalProduct) {
-                        $this->line("   └ {$addOnName} - ⚠️  Sem ProductMapping");
+                    // Usar unit_cost_override do OrderItemMapping se existir, senão fallback para unit_cost do produto
+                    $unitCost = null;
+                    $mappingQuantity = null;
+                    if ($orderItemMapping && $orderItemMapping->unit_cost_override !== null) {
+                        $unitCost = (float) $orderItemMapping->unit_cost_override;
+                        $mappingQuantity = (float) $orderItemMapping->quantity; // Fração do sabor (ex: 0.25 para 1/4)
+                    } elseif ($mapping && $mapping->internalProduct) {
+                        $unitCost = (float) $mapping->internalProduct->unit_cost;
+                        $mappingQuantity = 1.0; // Sem fração
+                    }
+
+                    $addOnsWithMappings[] = [
+                        'name' => $addOnName,
+                        'quantity' => $addOnQuantity, // Quantidade do add-on (ex: 2 para "2x Don Rafaello")
+                        'unit_cost_override' => $unitCost, // CMV unitário
+                        'mapping_quantity' => $mappingQuantity, // Fração do sabor (0.25 = 1/4)
+                        'product' => $mapping?->internalProduct,
+                        'order_item_mapping_id' => $orderItemMapping?->id,
+                    ];
+                }
+
+                $this->line('   🔍 Add-ons processados: '.count($addOnsWithMappings));
+
+                // Processar add_ons_enriched como o frontend faz
+                $hasIncorrectCost = false;
+                $hasPizzaFlavor = false;
+                $currentTotal = 0;
+                $correctTotal = 0;
+
+                foreach ($addOnsWithMappings as $addon) {
+                    $product = $addon['product'] ?? null;
+
+                    if (! $product) {
+                        $this->line("   └ {$addon['name']} - ⚠️  Sem ProductMapping");
 
                         continue;
                     }
 
-                    $product = $mapping->internalProduct;
                     $prodCategory = $product->product_category ?? 'N/A';
 
                     // Pular se não for sabor de pizza
                     if ($prodCategory !== 'Sabor') {
-                        $this->line("   └ {$addOnName} ({$prodCategory}) - pulado");
+                        $this->line("   └ {$addon['name']} ({$prodCategory}) - pulado");
 
                         continue;
                     }
 
-                    // Calcular CMV atual (o que está salvo)
-                    $currentCMV = null;
-                    $mappingQuantity = null;
-                    if ($orderItemMapping && $orderItemMapping->unit_cost_override !== null) {
-                        $currentCMV = (float) $orderItemMapping->unit_cost_override;
-                        $mappingQuantity = (float) $orderItemMapping->quantity;
-                    } else {
-                        $currentCMV = (float) $product->unit_cost;
-                        $mappingQuantity = 1.0;
-                    }
+                    $hasPizzaFlavor = true;
+
+                    // Calcular como o frontend calcula (order-financial-card.tsx linha 1052-1070)
+                    // const addonCost = (unitCost ?? 0) * (mappingQuantity ?? 1) * addonQuantity;
+                    $currentCMV = $addon['unit_cost_override'] ?? 0;
+                    $mappingQuantity = $addon['mapping_quantity'] ?? 1.0;
+                    $addonQuantity = $addon['quantity'] ?? 1;
+
+                    $currentSubtotal = $currentCMV * $mappingQuantity * $addonQuantity;
 
                     // Calcular CMV correto por tamanho
                     $correctCMV = $pizzaSize ? $product->calculateCMV($pizzaSize) : $currentCMV;
-
-                    $currentSubtotal = $currentCMV * $mappingQuantity * $addOnQuantity;
-                    $correctSubtotal = $correctCMV * $mappingQuantity * $addOnQuantity;
+                    $correctSubtotal = $correctCMV * $mappingQuantity * $addonQuantity;
 
                     $currentTotal += $currentSubtotal;
                     $correctTotal += $correctSubtotal;
@@ -162,14 +155,21 @@ class FixIncorrectPizzaFractions extends Command
 
                     if ($isIncorrect) {
                         $this->line("   ├ ⚠️  {$fraction} {$product->name}");
-                        $this->line('      OrderItemMapping ID: '.($orderItemMapping->id ?? 'N/A'));
-                        $this->line('      ❌ ATUAL (CMV): R$ '.number_format($currentCMV, 2, ',', '.').' × '.$mappingQuantity.' × '.$addOnQuantity.' = R$ '.number_format($currentSubtotal, 2, ',', '.'));
-                        $this->line("      ✅ CORRETO ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.').' × '.$mappingQuantity.' × '.$addOnQuantity.' = R$ '.number_format($correctSubtotal, 2, ',', '.'));
+                        $this->line('      OrderItemMapping ID: '.($addon['order_item_mapping_id'] ?? 'N/A'));
+                        $this->line('      ❌ ATUAL (CMV): R$ '.number_format($currentCMV, 2, ',', '.').' × '.$mappingQuantity.' × '.$addonQuantity.' = R$ '.number_format($currentSubtotal, 2, ',', '.'));
+                        $this->line("      ✅ CORRETO ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.').' × '.$mappingQuantity.' × '.$addonQuantity.' = R$ '.number_format($correctSubtotal, 2, ',', '.'));
                         $hasIncorrectCost = true;
                     } else {
                         $this->line("   ├ ✅ {$fraction} {$product->name}");
                         $this->line('      💰 R$ '.number_format($currentSubtotal, 2, ',', '.'));
                     }
+                }
+
+                // Pular se não tem pizza
+                if (! $hasPizzaFlavor) {
+                    $this->comment('   ⏭️  Sem sabores de pizza - pulando');
+
+                    continue;
                 }
 
                 $this->line('');
@@ -213,7 +213,7 @@ class FixIncorrectPizzaFractions extends Command
 
         $this->line('');
         $this->info('═══════════════════════════════════════');
-        $this->info("📊 Total analisado: {$pizzaItems->count()} items");
+        $this->info("📊 Total analisado: {$orderItems->count()} items");
         $this->info("✅ Já corretos: {$alreadyCorrect}");
         $this->info('🔧 '.($dryRun ? 'Seriam corrigidos' : 'Corrigidos').": {$fixed}");
         $this->info('💰 Diferença total encontrada: R$ '.number_format($totalDifference, 2, ',', '.'));
