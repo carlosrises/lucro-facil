@@ -982,12 +982,18 @@ export function OrderFinancialCard({
                                                                                 addonClassName,
                                                                         } =
                                                                             getAddonIcon();
-                                                                        // Verificar se tem produto interno vinculado (não apenas classificação)
+                                                                        // Verificar se tem produto vinculado:
+                                                                        // 1. Via ProductMapping (classificação na Triagem)
+                                                                        // 2. OU via OrderItemMapping (unit_cost_override existe)
                                                                         const hasMapping =
-                                                                            !!addOn.product_mapping &&
-                                                                            !!addOn
-                                                                                .product_mapping
-                                                                                .internal_product;
+                                                                            (!!addOn.product_mapping &&
+                                                                                !!addOn
+                                                                                    .product_mapping
+                                                                                    .internal_product) ||
+                                                                            (addOn.unit_cost_override !==
+                                                                                undefined &&
+                                                                                addOn.unit_cost_override !==
+                                                                                    null);
 
                                                                         // Verificar se é sabor de pizza
                                                                         const isFlavor =
