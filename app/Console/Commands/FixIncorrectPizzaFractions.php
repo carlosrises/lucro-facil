@@ -142,22 +142,22 @@ class FixIncorrectPizzaFractions extends Command
                     $orderItemMapping = $addon['order_item_mapping'] ?? null;
                     $product = $addon['product'] ?? null;
 
-                    // Pular se NÃO é sabor de pizza (verificar pelo item_type do ProductMapping)
+                    // Verificar se é sabor de pizza
                     $isFlavor = $productMapping && $productMapping->item_type === 'flavor';
-
-                    if (!$isFlavor) {
-                        // Se não tem ProductMapping mas tem OrderItemMapping, pode ser sabor não classificado
-                        if ($orderItemMapping && (stripos($addon['name'], 'pizza') !== false || stripos($addon['name'], 'sabor') !== false)) {
-                            $this->line("   └ {$addon['name']} - ⚠️  Sabor não classificado (tem OrderItemMapping)");
-                            $isFlavor = true; // Processar como sabor mesmo sem classificação
-                        } else {
-                            $category = $productMapping ? ($productMapping->item_type ?? 'N/A') : 'N/A';
-                            $this->line("   └ {$addon['name']} ({$category}) - pulado");
-                            continue;
-                        }
+                    
+                    // Se não tem ProductMapping mas tem OrderItemMapping, pode ser sabor não classificado
+                    if (!$isFlavor && $orderItemMapping && (stripos($addon['name'], 'pizza') !== false || stripos($addon['name'], 'sabor') !== false)) {
+                        $this->line("   └ {$addon['name']} - ⚠️  Sabor não classificado (tem OrderItemMapping)");
+                        $isFlavor = true;
                     }
 
-                    $hasPizzaFlavor = true;
+                    // Se não tem nenhum mapping (nem ProductMapping nem OrderItemMapping), pular
+                    if (!$productMapping && !$orderItemMapping) {
+                        $this->line("   └ {$addon['name']} - ⚠️  Sem classificação");
+                        continue;
+                    }
+
+                    $hasPizzaFlavor = $hasPizzaFlavor || $isFlavor;
 
                     // Calcular como o frontend calcula (order-financial-card.tsx linha 1052-1070)
                     // const addonCost = (unitCost ?? 0) * (mappingQuantity ?? 1) * addonQuantity;
@@ -176,17 +176,21 @@ class FixIncorrectPizzaFractions extends Command
                         // Calcular CMV por tamanho se tem produto associado
                         $correctCMV = $pizzaSize ? $product->calculateCMV($pizzaSize) : $product->unit_cost;
                     }
-                    $correctSubtotal = $correctCMV * $correctFraction * $addonQuantity;
+                    
+                    // Aplicar fração APENAS para sabores de pizza
+                    // Outros add-ons (bebidas, complementos) são 100% completos
+                    $correctQuantity = $isFlavor ? $correctFraction : 1.0;
+                    $correctSubtotal = $correctCMV * $correctQuantity * $addonQuantity;
 
                     $currentTotal += $currentSubtotal;
                     $correctTotal += $correctSubtotal;
 
-                    // Formatar frações para exibição
+                    // Formatar frações para exibição (apenas para sabores)
                     $currentFractionText = $mappingQuantity == 0.5 ? '1/2' : ($mappingQuantity == 0.33 || abs($mappingQuantity - 0.33) < 0.01 ? '1/3' : ($mappingQuantity == 0.25 ? '1/4' : number_format($mappingQuantity, 2)));
-                    $correctFractionText = $correctFraction == 0.5 ? '1/2' : ($correctFraction == 0.33 || abs($correctFraction - 0.33) < 0.01 ? '1/3' : ($correctFraction == 0.25 ? '1/4' : number_format($correctFraction, 2)));
+                    $correctFractionText = $correctQuantity == 0.5 ? '1/2' : ($correctQuantity == 0.33 || abs($correctQuantity - 0.33) < 0.01 ? '1/3' : ($correctQuantity == 0.25 ? '1/4' : number_format($correctQuantity, 2)));
 
-                    // Verificar se está incorreto (CMV errado OU fração errada)
-                    $isIncorrect = abs($currentCMV - $correctCMV) > 0.01 || abs($mappingQuantity - $correctFraction) > 0.01;
+                    // Verificar se está incorreto (CMV errado OU fração errada para sabores)
+                    $isIncorrect = abs($currentCMV - $correctCMV) > 0.01 || ($isFlavor && abs($mappingQuantity - $correctQuantity) > 0.01);
 
                     $productName = $product ? $product->name : $addon['name'];
 
