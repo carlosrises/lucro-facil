@@ -347,31 +347,13 @@ class FixIncorrectPizzaFractions extends Command
             return (int) $matches[1];
         }
 
-        // Contar quantos sabores estão no add_ons (mesma lógica do frontend)
-        $flavorCount = 0;
-        foreach ($orderItem->add_ons as $addOn) {
-            $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
-
-            // Gerar SKU do addon como a Triagem faz
-            $addonSku = 'addon_'.md5($addOnName);
-
-            // Procurar ProductMapping para ver se é sabor
-            $mapping = \App\Models\ProductMapping::where('tenant_id', $orderItem->tenant_id)
-                ->where('external_item_id', $addonSku)
-                ->first();
-
-            // Contar como sabor se:
-            // 1. Tem ProductMapping com item_type='flavor' (mesma lógica do frontend linha 1118-1125)
-            // 2. OU se o nome contém "pizza" (fallback para itens não classificados)
-            if ($mapping && $mapping->item_type === 'flavor') {
-                $flavorCount++;
-            } elseif (stripos($addOnName, 'pizza') !== false || stripos($addOnName, 'sabor') !== false) {
-                // Adicionar sabores não classificados mas que claramente são sabores
-                $flavorCount++;
-            }
+        // Contar TODOS os add_ons da pizza, classificados ou não
+        // (Mesma lógica que o frontend usa para calcular frações)
+        if (!$orderItem->add_ons || !is_array($orderItem->add_ons)) {
+            return 1;
         }
 
-        return $flavorCount > 0 ? $flavorCount : 1;
+        return count($orderItem->add_ons);
     }
 
     protected function detectPizzaSize(OrderItem $orderItem): ?string
