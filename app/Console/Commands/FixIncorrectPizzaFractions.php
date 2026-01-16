@@ -30,32 +30,49 @@ class FixIncorrectPizzaFractions extends Command
         $this->info("🔍 Buscando pedidos com add_ons (pizzas)...");
         $this->line('');
 
-        // Buscar OrderItems que têm add_ons JSON
-        $query = OrderItem::whereNotNull('add_ons')
-            ->where('add_ons', '!=', '[]')
-            ->with(['mappings', 'order']);
+        // Contar total primeiro
+        $countQuery = OrderItem::whereNotNull('add_ons')
+            ->where('add_ons', '!=', '[]');
 
         if ($orderId) {
-            $query->where('order_id', $orderId);
+            $countQuery->where('order_id', $orderId);
         }
 
         if ($tenantId) {
-            $query->where('tenant_id', $tenantId);
+            $countQuery->where('tenant_id', $tenantId);
         }
 
-        $orderItems = $query->get();
+        $totalItems = $countQuery->count();
 
-        $this->info("📦 Encontrados {$orderItems->count()} items com add_ons");
+        $this->info("📦 Total de items com add_ons: {$totalItems}");
         $this->line('');
 
         $fixed = 0;
         $alreadyCorrect = 0;
         $errors = 0;
         $totalDifference = 0;
+        $processed = 0;
 
         $pizzaService = app(PizzaFractionService::class);
 
-        foreach ($orderItems as $orderItem) {
+        // Processar em lotes de 50 para não estourar memória
+        OrderItem::whereNotNull('add_ons')
+            ->where('add_ons', '!=', '[]')
+            ->when($orderId, fn($q) => $q->where('order_id', $orderId))
+            ->when($tenantId, fn($q) => $q->where('tenant_id', $tenantId))
+            ->with(['mappings', 'order'])
+            ->chunkById(50, function ($orderItems) use (
+                &$fixed, 
+                &$alreadyCorrect, 
+                &$errors, 
+                &$totalDifference,
+                &$processed,
+                $totalItems,
+                $threshold, 
+                $dryRun, 
+                $pizzaService
+            ) {
+                foreach ($orderItems as $orderItem) {
             try {
                 // Detectar tamanho da pizza
                 $pizzaSize = $this->detectPizzaSize($orderItem);
@@ -209,11 +226,19 @@ class FixIncorrectPizzaFractions extends Command
                 $this->error("   ❌ Erro ao processar item #{$orderItem->id}: {$e->getMessage()}");
                 $errors++;
             }
+
+            $processed++;
+            
+            // Mostrar progresso a cada 50 items
+            if ($processed % 50 === 0) {
+                $this->info("🔄 Processados: {$processed}/{$totalItems}...");
+            }
         }
+    });
 
         $this->line('');
         $this->info('═══════════════════════════════════════');
-        $this->info("📊 Total analisado: {$orderItems->count()} items");
+        $this->info("📊 Total processado: {$processed} items");
         $this->info("✅ Já corretos: {$alreadyCorrect}");
         $this->info('🔧 '.($dryRun ? 'Seriam corrigidos' : 'Corrigidos').": {$fixed}");
         $this->info('💰 Diferença total encontrada: R$ '.number_format($totalDifference, 2, ',', '.'));
