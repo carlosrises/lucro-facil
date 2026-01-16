@@ -28,7 +28,9 @@ class FixPizzaFlavorCosts extends Command
             ->whereHas('internalProduct', function ($q) {
                 $q->where('product_category', 'sabor_pizza');
             })
-            ->with(['orderItem', 'internalProduct']);
+            ->whereHas('orderItem.order') // Garantir que o pedido existe
+            ->with(['orderItem.order', 'internalProduct'])
+            ->orderBy('order_item_id'); // Ordenar para processar em sequência
 
         if ($orderId) {
             $query->whereHas('orderItem', function ($q) use ($orderId) {
@@ -43,6 +45,15 @@ class FixPizzaFlavorCosts extends Command
         $mappings = $query->get();
 
         $this->info("🔍 Encontrados {$mappings->count()} mappings de sabores de pizza");
+        $this->line('');
+
+        // Agrupar por pedido para melhor visualização
+        $groupedByOrder = $mappings->groupBy(function ($mapping) {
+            return $mapping->orderItem?->order_id ?? 'unknown';
+        });
+
+        $this->info("📊 Total de pedidos afetados: {$groupedByOrder->count()}");
+        $this->line('');
 
         $fixed = 0;
         $alreadyCorrect = 0;
@@ -84,22 +95,27 @@ class FixPizzaFlavorCosts extends Command
             }
 
             $this->line('');
-            $this->info("📦 Pedido {$orderItem->order_id} - Item: {$orderItem->name}");
-            $this->line("   Produto: {$product->name}");
-            $this->line("   Tamanho: {$pizzaSize}");
-            $this->line('   CMV Atual: R$ '.number_format($currentCMV, 2, ',', '.'));
-            $this->line('   CMV Genérico: R$ '.number_format($genericCMV, 2, ',', '.'));
-            $this->line("   CMV Correto ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.'));
+            $this->info("📦 Pedido {$orderItem->order_id} - Pizza: {$orderItem->name}");
+            $this->line("   🍕 Sabor (add-on): {$product->name}");
+            $this->line("   📏 Tamanho: {$pizzaSize}");
+            $this->line('   💰 CMV Atual: R$ '.number_format($currentCMV, 2, ',', '.'));
+            $this->line('   📊 CMV Genérico: R$ '.number_format($genericCMV, 2, ',', '.'));
+            $this->line("   ✅ CMV Correto ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.'));
 
             if ($isUsingGenericCost) {
-                $this->warn('   ⚠️  Usando CMV genérico (ERRADO)');
+                $this->warn('   ⚠️  Usando CMV genérico ao invés do CMV por tamanho (ERRADO)');
             }
 
             if (! $dryRun) {
-                $mapping->unit_cost_override = $correctCMV;
-                $mapping->save();
-                $this->info('   ✅ Corrigido!');
-                $fixed++;
+                try {
+                    $mapping->unit_cost_override = $correctCMV;
+                    $mapping->save();
+                    $this->info('   ✅ Corrigido!');
+                    $fixed++;
+                } catch (\Exception $e) {
+                    $this->error("   ❌ Erro ao salvar: {$e->getMessage()}");
+                    $errors++;
+                }
             } else {
                 $this->comment('   🔍 Seria corrigido (dry-run)');
                 $fixed++;
@@ -108,9 +124,14 @@ class FixPizzaFlavorCosts extends Command
 
         $this->line('');
         $this->info('═══════════════════════════════════════');
-        $this->info("✅ Corretos: {$alreadyCorrect}");
+        $this->info("📊 Total analisado: {$mappings->count()} sabores");
+        $this->info("✅ Já corretos: {$alreadyCorrect}");
         $this->info('🔧 '.($dryRun ? 'Seriam corrigidos' : 'Corrigidos').": {$fixed}");
-        $this->error("❌ Erros: {$errors}");
+
+        if ($errors > 0) {
+            $this->error("❌ Erros: {$errors}");
+        }
+
         $this->info('═══════════════════════════════════════');
 
         return 0;
