@@ -220,29 +220,36 @@ class FixIncorrectPizzaFractions extends Command
 
                     // Recriar mappings para cada sabor
                     $remappedCount = 0;
+                    $skippedCount = 0;
+                    $skippedNames = [];
+                    
                     foreach ($orderItem->add_ons as $index => $addOn) {
                         $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
-                        
+
                         // Gerar SKU do addon como a Triagem faz
                         $addonSku = 'addon_'.md5($addOnName);
-                        
+
                         // Buscar ProductMapping do sabor pelo SKU
                         $mapping = \App\Models\ProductMapping::where('tenant_id', $orderItem->tenant_id)
                             ->where('external_item_id', $addonSku)
                             ->where('item_type', 'flavor')
                             ->first();
-                        
-                        if (!$mapping || !$mapping->internal_product_id) continue;
-                        
+
+                        if (!$mapping || !$mapping->internal_product_id) {
+                            $skippedCount++;
+                            $skippedNames[] = $addOnName;
+                            continue;
+                        }
+
                         $product = $mapping->internalProduct;
                         if (!$product) continue;
-                        
+
                         // Calcular CMV correto baseado no tamanho (mesma lógica do FlavorMappingService)
                         $correctCMV = $pizzaSize ? $product->calculateCMV($pizzaSize) : $product->unit_cost;
-                        
+
                         // Obter quantidade do add-on
                         $addOnQuantity = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
-                        
+
                         // Criar novo OrderItemMapping (mesma estrutura do FlavorMappingService linha 227-239)
                         \App\Models\OrderItemMapping::create([
                             'tenant_id' => $orderItem->tenant_id,
@@ -256,11 +263,21 @@ class FixIncorrectPizzaFractions extends Command
                             'external_name' => $addOnName,
                             'unit_cost_override' => $correctCMV,
                         ]);
-                        
+
                         $remappedCount++;
                     }
 
-                    $this->info("   ✅ Remapeados {$remappedCount} sabores com frações corretas!");
+                    if ($remappedCount > 0) {
+                        $this->info("   ✅ Remapeados {$remappedCount} sabores com frações corretas!");
+                    }
+                    
+                    if ($skippedCount > 0) {
+                        $this->warn("   ⚠️  {$skippedCount} sabores NÃO CLASSIFICADOS na Triagem (pulados):");
+                        foreach ($skippedNames as $name) {
+                            $this->line("      - {$name}");
+                        }
+                        $this->comment("      💡 Classifique estes sabores em /triage para corrigir o CMV");
+                    }
 
                     // Verificar resultado
                     $orderItem->refresh();
