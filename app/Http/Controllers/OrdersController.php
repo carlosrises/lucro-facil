@@ -790,32 +790,46 @@ class OrdersController extends Controller
      */
     public function availablePaymentFees($id, Request $request)
     {
-        $order = Order::where('tenant_id', tenant_id())->findOrFail($id);
+        try {
+            $order = Order::where('tenant_id', tenant_id())->findOrFail($id);
 
-        $linkService = app(\App\Services\PaymentFeeLinkService::class);
+            $linkService = app(\App\Services\PaymentFeeLinkService::class);
 
-        // Para vínculo manual, listar TODAS as taxas sem filtros
-        $fees = $linkService->listAllPaymentFeesForManualLink(tenant_id());
+            // Para vínculo manual, listar TODAS as taxas sem filtros
+            $fees = $linkService->listAllPaymentFeesForManualLink(tenant_id());
 
-        // Se foi passado paymentMethod e paymentType, adicionar informações de compatibilidade
-        $paymentMethod = $request->query('payment_method');
-        $paymentType = $request->query('payment_type', 'offline');
+            // Se foi passado paymentMethod e paymentType, adicionar informações de compatibilidade
+            $paymentMethod = $request->query('payment_method');
+            $paymentType = $request->query('payment_type', 'offline');
 
-        if ($paymentMethod) {
-            $fees = $fees->map(function ($fee) use ($linkService, $paymentMethod, $paymentType, $order) {
-                $compatibility = $linkService->checkFeeCompatibility(
-                    $fee,
-                    $paymentMethod,
-                    $paymentType,
-                    $order
-                );
+            if ($paymentMethod) {
+                $fees = $fees->map(function ($fee) use ($linkService, $paymentMethod, $paymentType, $order) {
+                    $compatibility = $linkService->checkFeeCompatibility(
+                        $fee,
+                        $paymentMethod,
+                        $paymentType,
+                        $order
+                    );
 
-                return array_merge($fee->toArray(), [
-                    'compatibility' => $compatibility,
-                ]);
-            });
+                    return array_merge($fee->toArray(), [
+                        'compatibility' => $compatibility,
+                    ]);
+                });
+            }
+
+            return response()->json($fees);
+        } catch (\Exception $e) {
+            \Log::error('Erro ao carregar taxas de pagamento disponíveis', [
+                'order_id' => $id,
+                'tenant_id' => tenant_id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'error' => 'Erro ao carregar taxas de pagamento',
+                'message' => $e->getMessage(),
+            ], 500);
         }
-
-        return response()->json($fees);
     }
 }

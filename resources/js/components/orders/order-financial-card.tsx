@@ -1767,6 +1767,22 @@ export function OrderFinancialCard({
                                                                                     await fetch(
                                                                                         `/orders/${order.id}/available-payment-fees?payment_method=${paymentMethod}&payment_type=offline`,
                                                                                     );
+
+                                                                                if (
+                                                                                    !response.ok
+                                                                                ) {
+                                                                                    const errorText =
+                                                                                        await response.text();
+                                                                                    console.error(
+                                                                                        'Erro na resposta:',
+                                                                                        response.status,
+                                                                                        errorText,
+                                                                                    );
+                                                                                    throw new Error(
+                                                                                        `Erro ${response.status}: ${response.statusText}`,
+                                                                                    );
+                                                                                }
+
                                                                                 const fees =
                                                                                     await response.json();
                                                                                 setAvailableFees(
@@ -1779,6 +1795,9 @@ export function OrderFinancialCard({
                                                                                 console.error(
                                                                                     'Erro ao carregar taxas:',
                                                                                     error,
+                                                                                );
+                                                                                toast.error(
+                                                                                    'Erro ao carregar taxas de pagamento. Tente novamente.',
                                                                                 );
                                                                                 // Fallback: abrir dialog de criação
                                                                                 setIsCreateFeeDialogOpen(
