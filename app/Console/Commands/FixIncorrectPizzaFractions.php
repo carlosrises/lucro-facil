@@ -168,8 +168,14 @@ class FixIncorrectPizzaFractions extends Command
                     // Subtotal ATUAL (com fração atual do OrderItemMapping)
                     $currentSubtotal = $currentCMV * $mappingQuantity * $addonQuantity;
 
-                    // Calcular CMV e subtotal CORRETO (com fração correta e CMV por tamanho)
-                    $correctCMV = ($pizzaSize && $product) ? $product->calculateCMV($pizzaSize) : $currentCMV;
+                    // Calcular CMV e subtotal CORRETO
+                    // Se o ProductMapping não tem internal_product_id (desassociado), CMV correto = 0
+                    if (!$productMapping || !$productMapping->internal_product_id || !$product) {
+                        $correctCMV = 0;
+                    } else {
+                        // Calcular CMV por tamanho se tem produto associado
+                        $correctCMV = $pizzaSize ? $product->calculateCMV($pizzaSize) : $product->unit_cost;
+                    }
                     $correctSubtotal = $correctCMV * $correctFraction * $addonQuantity;
 
                     $currentTotal += $currentSubtotal;
