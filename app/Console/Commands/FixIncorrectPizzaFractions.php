@@ -222,7 +222,7 @@ class FixIncorrectPizzaFractions extends Command
                     $remappedCount = 0;
                     $skippedCount = 0;
                     $skippedNames = [];
-                    
+
                     foreach ($orderItem->add_ons as $index => $addOn) {
                         $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
 
@@ -270,7 +270,7 @@ class FixIncorrectPizzaFractions extends Command
                     if ($remappedCount > 0) {
                         $this->info("   ✅ Remapeados {$remappedCount} sabores com frações corretas!");
                     }
-                    
+
                     if ($skippedCount > 0) {
                         $this->warn("   ⚠️  {$skippedCount} sabores NÃO CLASSIFICADOS na Triagem (pulados):");
                         foreach ($skippedNames as $name) {
@@ -341,10 +341,12 @@ class FixIncorrectPizzaFractions extends Command
         foreach ($orderItem->add_ons as $addOn) {
             $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
 
+            // Gerar SKU do addon como a Triagem faz
+            $addonSku = 'addon_'.md5($addOnName);
+
             // Procurar ProductMapping para ver se é sabor
             $mapping = \App\Models\ProductMapping::where('tenant_id', $orderItem->tenant_id)
-                ->where('store_id', $orderItem->order->store_id)
-                ->where('external_name', $addOnName)
+                ->where('external_item_id', $addonSku)
                 ->first();
 
             $product = $mapping?->internalProduct;
