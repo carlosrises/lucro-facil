@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\InternalProduct;
 use App\Models\OrderItem;
 use App\Services\PizzaFractionService;
 use Illuminate\Console\Command;
@@ -58,25 +59,74 @@ class FixIncorrectPizzaFractions extends Command
 
         foreach ($orderItems as $orderItem) {
             try {
-                // Calcular total manual (soma de todos mappings)
-                $manualTotal = $this->calculateManualTotal($orderItem);
+                // Detectar tamanho da pizza
+                $pizzaSize = $this->detectPizzaSize($orderItem);
                 
-                // Calcular usando o método do model
-                $modelTotal = $orderItem->calculateTotalCost();
+                // Calcular total atual (o que está salvo)
+                $currentTotal = $this->calculateCurrentTotal($orderItem);
+                
+                // Calcular total correto (o que deveria estar)
+                $correctTotal = $this->calculateCorrectTotal($orderItem, $pizzaSize);
                 
                 // Calcular diferença
-                $difference = abs($manualTotal - $modelTotal);
+                $difference = abs($currentTotal - $correctTotal);
 
-                if ($difference < $threshold) {
+                // SEMPRE mostrar detalhes para debug
+                $this->line('');
+                $this->info("📦 Pedido #{$orderItem->order_id} - Item #{$orderItem->id}");
+                $this->line("   🍕 {$orderItem->name}");
+                $this->line("   📏 Tamanho detectado: " . ($pizzaSize ?: 'não detectado'));
+                $this->line('');
+                
+                // Mostrar detalhes dos mappings
+                $hasIncorrectCost = false;
+                foreach ($orderItem->mappings as $mapping) {
+                    $currentCost = $mapping->unit_cost_override ?? $mapping->internalProduct?->unit_cost ?? 0;
+                    $qty = $mapping->quantity ?? 1.0;
+                    $currentSubtotal = $currentCost * $qty;
+                    $prodName = $mapping->internalProduct?->name ?? 'N/A';
+                    
+                    if ($mapping->mapping_type === 'main') {
+                        $this->line("   📦 [{$mapping->mapping_type}] {$prodName}");
+                        $this->line("      💰 R$ " . number_format($currentSubtotal, 2, ',', '.'));
+                    } elseif ($mapping->option_type === 'pizza_flavor' && $pizzaSize) {
+                        // Para sabores de pizza, calcular o CMV correto
+                        $product = $mapping->internalProduct;
+                        if ($product) {
+                            $correctCMV = $product->calculateCMV($pizzaSize);
+                            $correctSubtotal = $correctCMV * $qty;
+                            $isIncorrect = abs($currentCost - $correctCMV) > 0.01;
+                            
+                            $fraction = $qty == 0.5 ? '1/2' : ($qty == 0.33 ? '1/3' : ($qty == 0.25 ? '1/4' : $qty));
+                            
+                            if ($isIncorrect) {
+                                $this->line("   ├ ⚠️  {$fraction} {$prodName}");
+                                $this->line("      ❌ ATUAL (genérico): R$ " . number_format($currentSubtotal, 2, ',', '.') . " (CMV: R$ " . number_format($currentCost, 2, ',', '.') . ")");
+                                $this->line("      ✅ CORRETO ({$pizzaSize}): R$ " . number_format($correctSubtotal, 2, ',', '.') . " (CMV: R$ " . number_format($correctCMV, 2, ',', '.') . ")");
+                                $hasIncorrectCost = true;
+                            } else {
+                                $this->line("   ├ ✅ {$fraction} {$prodName}");
+                                $this->line("      💰 R$ " . number_format($currentSubtotal, 2, ',', '.'));
+                            }
+                        }
+                    } else {
+                        $this->line("   └ {$prodName}");
+                        $this->line("      💰 R$ " . number_format($currentSubtotal, 2, ',', '.'));
+                    }
+                }
+                
+                $this->line('');
+                $this->line("   💰 Total ATUAL: R$ " . number_format($currentTotal, 2, ',', '.'));
+                $this->line("   ✅ Total CORRETO: R$ " . number_format($correctTotal, 2, ',', '.'));
+                $this->line("   📏 Diferença: R$ " . number_format($difference, 2, ',', '.'));
+
+                if (!$hasIncorrectCost || $difference < $threshold) {
+                    $this->comment("   ✅ OK");
                     $alreadyCorrect++;
                     continue;
                 }
 
-                $this->line('');
-                $this->warn("⚠️  Pedido #{$orderItem->order_id} - Item #{$orderItem->id}: {$orderItem->name}");
-                $this->line("   💰 Total manual: R$ " . number_format($manualTotal, 2, ',', '.'));
-                $this->line("   📊 Total modelo: R$ " . number_format($modelTotal, 2, ',', '.'));
-                $this->line("   ⚠️  Diferença: R$ " . number_format($difference, 2, ',', '.'));
+                $this->warn("   ⚠️  NECESSITA CORREÇÃO");
 
                 if (!$dryRun) {
                     // Recalcular frações (reassocia como se fosse na Triagem)
@@ -132,24 +182,72 @@ class FixIncorrectPizzaFractions extends Command
     }
 
     /**
-     * Calcular total manual somando todos os mappings
+     * Calcular total atual (o que está salvo no banco)
      */
-    protected function calculateManualTotal(OrderItem $orderItem): float
+    protected function calculateCurrentTotal(OrderItem $orderItem): float
     {
         $total = 0;
 
         foreach ($orderItem->mappings as $mapping) {
-            if ($mapping->mapping_type === 'main') {
-                // Item principal
+            $cost = $mapping->unit_cost_override ?? $mapping->internalProduct?->unit_cost ?? 0;
+            $quantity = $mapping->quantity ?? 1.0;
+            $total += $cost * $quantity;
+        }
+
+        return $total;
+    }
+
+    /**
+     * Calcular total correto (como deveria estar)
+     */
+    protected function calculateCorrectTotal(OrderItem $orderItem, ?string $pizzaSize): float
+    {
+        $total = 0;
+
+        foreach ($orderItem->mappings as $mapping) {
+            $quantity = $mapping->quantity ?? 1.0;
+            
+            if ($mapping->option_type === 'pizza_flavor' && $pizzaSize && $mapping->internalProduct) {
+                // Para sabores de pizza, usar CMV por tamanho
+                $correctCMV = $mapping->internalProduct->calculateCMV($pizzaSize);
+                $total += $correctCMV * $quantity;
+            } else {
+                // Para outros items, usar o valor atual
                 $cost = $mapping->unit_cost_override ?? $mapping->internalProduct?->unit_cost ?? 0;
-                $total += $cost * $mapping->quantity;
-            } elseif ($mapping->mapping_type === 'addon') {
-                // Add-ons (incluindo sabores de pizza)
-                $cost = $mapping->unit_cost_override ?? $mapping->internalProduct?->unit_cost ?? 0;
-                $total += $cost * $mapping->quantity;
+                $total += $cost * $quantity;
             }
         }
 
         return $total;
+    }
+
+    /**
+     * Detectar tamanho da pizza do OrderItem
+     */
+    protected function detectPizzaSize(OrderItem $orderItem): ?string
+    {
+        // 1. Tentar pelo produto pai (mapping principal)
+        $mainMapping = $orderItem->mappings()->where('mapping_type', 'main')->first();
+        if ($mainMapping && $mainMapping->internalProduct?->size) {
+            return $mainMapping->internalProduct->size;
+        }
+
+        // 2. Tentar detectar do nome do item
+        $itemName = strtolower($orderItem->name);
+        
+        if (preg_match('/\bbroto\b/', $itemName)) {
+            return 'broto';
+        }
+        if (preg_match('/\bgrande\b/', $itemName)) {
+            return 'grande';
+        }
+        if (preg_match('/\b(familia|big|don|70x35)\b/', $itemName)) {
+            return 'familia';
+        }
+        if (preg_match('/\b(media|média|m\b)/', $itemName)) {
+            return 'media';
+        }
+
+        return null;
     }
 }
