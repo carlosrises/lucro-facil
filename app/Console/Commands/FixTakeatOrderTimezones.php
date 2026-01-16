@@ -55,7 +55,7 @@ class FixTakeatOrderTimezones extends Command
                 foreach ($orders as $order) {
                     try {
                         $oldDate = $order->placed_at;
-                        
+
                         // Subtrair 3 horas
                         $newDate = Carbon::parse($oldDate)->subHours(3);
 
