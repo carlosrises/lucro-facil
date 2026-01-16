@@ -3,7 +3,6 @@ import { IconTrendingDown, IconTrendingUp } from '@tabler/icons-react';
 import { Badge } from '@/components/ui/badge';
 import {
     Card,
-    CardAction,
     CardDescription,
     CardHeader,
     CardTitle,
@@ -48,6 +47,12 @@ const getTrendVariant = (value: number): 'outline' | 'default' => {
     return 'outline';
 };
 
+const formatPercentage = (value: number, base: number): string => {
+    if (base === 0) return '0,0%';
+    const percentage = (value / base) * 100;
+    return percentage.toFixed(1).replace('.', ',') + '%';
+};
+
 export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
     const RevenueIcon = getTrendIcon(data.revenueChange);
     const RevenueAfterDeductionsIcon = getTrendIcon(
@@ -68,7 +73,10 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                     <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                         {formatCurrency(data.revenue)}
                     </CardTitle>
-                    <CardAction>
+                    <div className="flex items-center justify-between gap-2">
+                        <CardDescription className="text-sm">
+                            100,0%
+                        </CardDescription>
                         <Badge
                             variant={getTrendVariant(data.revenueChange)}
                             className={
@@ -81,7 +89,7 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                             {data.revenueChange >= 0 ? '+' : ''}
                             {data.revenueChange.toFixed(1)}%
                         </Badge>
-                    </CardAction>
+                    </div>
                 </CardHeader>
             </Card>
             <Card className="@container/card">
@@ -90,7 +98,13 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                     <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                         {formatCurrency(data.revenueAfterDeductions)}
                     </CardTitle>
-                    <CardAction>
+                    <div className="flex items-center justify-between gap-2">
+                        <CardDescription className="text-sm">
+                            {formatPercentage(
+                                data.revenueAfterDeductions,
+                                data.revenue,
+                            )}
+                        </CardDescription>
                         <Badge
                             variant={getTrendVariant(
                                 data.revenueAfterDeductionsChange,
@@ -105,7 +119,7 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                             {data.revenueAfterDeductionsChange >= 0 ? '+' : ''}
                             {data.revenueAfterDeductionsChange.toFixed(1)}%
                         </Badge>
-                    </CardAction>
+                    </div>
                 </CardHeader>
             </Card>
             <Card className="@container/card">
@@ -114,7 +128,10 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                     <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                         {formatCurrency(data.cmv)}
                     </CardTitle>
-                    <CardAction>
+                    <div className="flex items-center justify-between gap-2">
+                        <CardDescription className="text-sm">
+                            {formatPercentage(data.cmv, data.revenue)}
+                        </CardDescription>
                         <Badge
                             variant={getTrendVariant(data.cmvChange)}
                             className={
@@ -127,7 +144,7 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                             {data.cmvChange >= 0 ? '+' : ''}
                             {data.cmvChange.toFixed(1)}%
                         </Badge>
-                    </CardAction>
+                    </div>
                 </CardHeader>
             </Card>
             <Card className="@container/card">
@@ -136,7 +153,10 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                     <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                         {formatCurrency(data.deliveryFee)}
                     </CardTitle>
-                    <CardAction>
+                    <div className="flex items-center justify-between gap-2">
+                        <CardDescription className="text-sm">
+                            {formatPercentage(data.deliveryFee, data.revenue)}
+                        </CardDescription>
                         <Badge
                             variant={getTrendVariant(data.deliveryChange)}
                             className={
@@ -149,7 +169,7 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                             {data.deliveryChange >= 0 ? '+' : ''}
                             {data.deliveryChange.toFixed(1)}%
                         </Badge>
-                    </CardAction>
+                    </div>
                 </CardHeader>
             </Card>
             <Card className="@container/card">
@@ -158,7 +178,10 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                     <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                         {formatCurrency(data.taxes)}
                     </CardTitle>
-                    <CardAction>
+                    <div className="flex items-center justify-between gap-2">
+                        <CardDescription className="text-sm">
+                            {formatPercentage(data.taxes, data.revenue)}
+                        </CardDescription>
                         <Badge
                             variant={getTrendVariant(data.taxesChange)}
                             className={
@@ -171,7 +194,7 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                             {data.taxesChange >= 0 ? '+' : ''}
                             {data.taxesChange.toFixed(1)}%
                         </Badge>
-                    </CardAction>
+                    </div>
                 </CardHeader>
             </Card>
             <Card className="@container/card">
@@ -180,7 +203,13 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                     <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                         {formatCurrency(data.contributionMargin)}
                     </CardTitle>
-                    <CardAction>
+                    <div className="flex items-center justify-between gap-2">
+                        <CardDescription className="text-sm">
+                            {formatPercentage(
+                                data.contributionMargin,
+                                data.revenue,
+                            )}
+                        </CardDescription>
                         <Badge
                             variant={getTrendVariant(
                                 data.contributionMarginChange,
@@ -195,7 +224,7 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                             {data.contributionMarginChange >= 0 ? '+' : ''}
                             {data.contributionMarginChange.toFixed(1)}%
                         </Badge>
-                    </CardAction>
+                    </div>
                 </CardHeader>
             </Card>
             <Card className="@container/card">
@@ -204,7 +233,10 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                     <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                         {formatCurrency(data.fixedCosts)}
                     </CardTitle>
-                    <CardAction>
+                    <div className="flex items-center justify-between gap-2">
+                        <CardDescription className="text-sm">
+                            {formatPercentage(data.fixedCosts, data.revenue)}
+                        </CardDescription>
                         <Badge
                             variant={getTrendVariant(data.fixedCostsChange)}
                             className={
@@ -217,7 +249,7 @@ export function DashboardSectionCards({ data }: DashboardSectionCardsProps) {
                             {data.fixedCostsChange >= 0 ? '+' : ''}
                             {data.fixedCostsChange.toFixed(1)}%
                         </Badge>
-                    </CardAction>
+                    </div>
                 </CardHeader>
             </Card>
             <Card className="@container/card">
