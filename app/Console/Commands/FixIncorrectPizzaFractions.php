@@ -62,7 +62,7 @@ class FixIncorrectPizzaFractions extends Command
 
         $pizzaService = app(PizzaFractionService::class);
 
-        foreach ($pizzaItems as $orderItem) {
+        foreach ($orderItems as $orderItem) {
             try {
                 // Detectar tamanho da pizza
                 $pizzaSize = $this->detectPizzaSize($orderItem);
