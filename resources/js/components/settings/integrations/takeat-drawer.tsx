@@ -183,10 +183,10 @@ export function TakeatDrawer({
                     }, 1000);
                     return;
                 }
-                
+
                 throw new Error('Falha ao autenticar');
             }
-            
+
             const data = await res.json();
 
             toast.success('Integração concluída com sucesso!');

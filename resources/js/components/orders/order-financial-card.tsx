@@ -235,7 +235,8 @@ export function OrderFinancialCard({
             ) {
                 // Para Takeat, usar total_price (já com desconto) ao invés de old_total_price
                 // old_total_price é o valor antes do desconto
-                const totalPrice = parseFloat(String(order.raw.session.total_price)) || 0;
+                const totalPrice =
+                    parseFloat(String(order.raw.session.total_price)) || 0;
                 paidByClient = totalPrice;
             } else if (
                 order?.provider === 'takeat' &&
@@ -252,7 +253,8 @@ export function OrderFinancialCard({
         // Subtotal para cálculo de receita líquida
         // Se usar total_delivery_price, NÃO somar subsídio (já está incluído)
         // Se usar old_total_price ou total_price, SOMAR subsídio
-        let subtotal = grossTotal > 0 ? grossTotal : orderTotal;
+        // IMPORTANTE: usar grossTotal (após desconto), não orderTotal (antes do desconto)
+        let subtotal = grossTotal;
 
         // Verifica se usou total_delivery_price (que já inclui subsídio e delivery)
         const usedTotalDeliveryPrice =

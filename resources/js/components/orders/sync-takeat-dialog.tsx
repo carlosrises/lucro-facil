@@ -71,7 +71,7 @@ export function SyncTakeatDialog({
                     }, 1000);
                     return;
                 }
-                
+
                 throw new Error(data.message || 'Erro ao sincronizar');
             }
 
