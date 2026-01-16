@@ -1120,30 +1120,113 @@ export function OrderFinancialCard({
 
                                                                         // Calcular fração para exibição
                                                                         // PRIORIDADE: usar mapping_quantity (valor real salvo no OrderItemMapping)
-                                                                        let fractionText: string | null = null;
-                                                                        if (isFlavor && addOn.mapping_quantity !== undefined && addOn.mapping_quantity !== null) {
-                                                                            const fraction = addOn.mapping_quantity;
+                                                                        let fractionText:
+                                                                            | string
+                                                                            | null =
+                                                                            null;
+                                                                        if (
+                                                                            isFlavor &&
+                                                                            addOn.mapping_quantity !==
+                                                                                undefined &&
+                                                                            addOn.mapping_quantity !==
+                                                                                null
+                                                                        ) {
+                                                                            const fraction =
+                                                                                addOn.mapping_quantity;
                                                                             // Converter decimal para fração visual
-                                                                            if (Math.abs(fraction - 0.5) < 0.01) {
-                                                                                fractionText = '1/2';
-                                                                            } else if (Math.abs(fraction - 0.333) < 0.01 || Math.abs(fraction - 1/3) < 0.01) {
-                                                                                fractionText = '1/3';
-                                                                            } else if (Math.abs(fraction - 0.25) < 0.01) {
-                                                                                fractionText = '1/4';
-                                                                            } else if (Math.abs(fraction - 0.2) < 0.01) {
-                                                                                fractionText = '1/5';
-                                                                            } else if (Math.abs(fraction - 0.166) < 0.01 || Math.abs(fraction - 1/6) < 0.01) {
-                                                                                fractionText = '1/6';
-                                                                            } else if (fraction < 1) {
+                                                                            if (
+                                                                                Math.abs(
+                                                                                    fraction -
+                                                                                        0.5,
+                                                                                ) <
+                                                                                0.01
+                                                                            ) {
+                                                                                fractionText =
+                                                                                    '1/2';
+                                                                            } else if (
+                                                                                Math.abs(
+                                                                                    fraction -
+                                                                                        0.333,
+                                                                                ) <
+                                                                                    0.01 ||
+                                                                                Math.abs(
+                                                                                    fraction -
+                                                                                        1 /
+                                                                                            3,
+                                                                                ) <
+                                                                                    0.01
+                                                                            ) {
+                                                                                fractionText =
+                                                                                    '1/3';
+                                                                            } else if (
+                                                                                Math.abs(
+                                                                                    fraction -
+                                                                                        0.25,
+                                                                                ) <
+                                                                                0.01
+                                                                            ) {
+                                                                                fractionText =
+                                                                                    '1/4';
+                                                                            } else if (
+                                                                                Math.abs(
+                                                                                    fraction -
+                                                                                        0.2,
+                                                                                ) <
+                                                                                0.01
+                                                                            ) {
+                                                                                fractionText =
+                                                                                    '1/5';
+                                                                            } else if (
+                                                                                Math.abs(
+                                                                                    fraction -
+                                                                                        0.166,
+                                                                                ) <
+                                                                                    0.01 ||
+                                                                                Math.abs(
+                                                                                    fraction -
+                                                                                        1 /
+                                                                                            6,
+                                                                                ) <
+                                                                                    0.01
+                                                                            ) {
+                                                                                fractionText =
+                                                                                    '1/6';
+                                                                            } else if (
+                                                                                fraction <
+                                                                                1
+                                                                            ) {
                                                                                 fractionText = `${(fraction * 100).toFixed(0)}%`;
                                                                             }
-                                                                        } else if (isFlavor) {
+                                                                        } else if (
+                                                                            isFlavor
+                                                                        ) {
                                                                             // FALLBACK: contar sabores (sistema legado)
                                                                             // SOMA as quantidades: 2x Calabresa = 2 sabores
-                                                                            const totalFlavors = addOnsEnriched
-                                                                                .filter((a) => a.product_mapping?.item_type === 'flavor')
-                                                                                .reduce((sum, a) => sum + (a.quantity || 1), 0);
-                                                                            if (totalFlavors > 1) {
+                                                                            const totalFlavors =
+                                                                                addOnsEnriched
+                                                                                    .filter(
+                                                                                        (
+                                                                                            a,
+                                                                                        ) =>
+                                                                                            a
+                                                                                                .product_mapping
+                                                                                                ?.item_type ===
+                                                                                            'flavor',
+                                                                                    )
+                                                                                    .reduce(
+                                                                                        (
+                                                                                            sum,
+                                                                                            a,
+                                                                                        ) =>
+                                                                                            sum +
+                                                                                            (a.quantity ||
+                                                                                                1),
+                                                                                        0,
+                                                                                    );
+                                                                            if (
+                                                                                totalFlavors >
+                                                                                1
+                                                                            ) {
                                                                                 fractionText = `1/${totalFlavors}`;
                                                                             }
                                                                         }

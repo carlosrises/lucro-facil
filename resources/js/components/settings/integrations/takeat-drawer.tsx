@@ -172,7 +172,21 @@ export function TakeatDrawer({
                 }),
             });
 
-            if (!res.ok) throw new Error('Falha ao autenticar');
+            if (!res.ok) {
+                // Erro 419: Token CSRF expirado - recarregar página
+                if (res.status === 419) {
+                    toast.error('Sessão expirada. Recarregando a página...', {
+                        duration: 3000,
+                    });
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                    return;
+                }
+                
+                throw new Error('Falha ao autenticar');
+            }
+            
             const data = await res.json();
 
             toast.success('Integração concluída com sucesso!');
