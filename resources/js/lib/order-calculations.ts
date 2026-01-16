@@ -137,11 +137,13 @@ export function calculateOrderCMV(items: OrderItem[]): number {
                         addOn.unit_cost_override !== undefined &&
                         addOn.unit_cost_override !== null
                     ) {
-                        // Aplicar a fração (mapping_quantity) se existir
-                        const quantity = addOn.mapping_quantity || 1.0;
+                        // Aplicar a fração (mapping_quantity) e a quantidade do add-on
+                        const fraction = addOn.mapping_quantity || 1.0;
+                        const addOnQuantity = addOn.quantity || 1;
                         const cost =
                             parseFloat(String(addOn.unit_cost_override)) *
-                            quantity;
+                            fraction *
+                            addOnQuantity;
 
                         return addOnSum + cost;
                     }
