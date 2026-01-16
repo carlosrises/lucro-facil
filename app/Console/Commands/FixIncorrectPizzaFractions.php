@@ -218,11 +218,42 @@ class FixIncorrectPizzaFractions extends Command
                         $this->line("   🗑️  Deletados {$deletedCount} mappings antigos");
                     }
 
-                    // Reprocessar pela Triagem (cria novos mappings corretos)
-                    $triageService = app(\App\Services\TriageService::class);
-                    $triageService->processOrderItem($orderItem);
+                    // Recriar mappings para cada sabor
+                    $remappedCount = 0;
+                    foreach ($orderItem->add_ons as $index => $addOn) {
+                        $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
 
-                    $this->info('   ✅ Reprocessado pela Triagem!');
+                        // Buscar ProductMapping do sabor
+                        $mapping = \App\Models\ProductMapping::where('tenant_id', $orderItem->tenant_id)
+                            ->where('store_id', $orderItem->order->store_id)
+                            ->where('external_name', $addOnName)
+                            ->where('item_type', 'flavor')
+                            ->first();
+
+                        if (!$mapping || !$mapping->internal_product_id) continue;
+
+                        $product = $mapping->internalProduct;
+                        if (!$product) continue;
+
+                        // Calcular CMV correto baseado no tamanho
+                        $correctCMV = $pizzaSize ? $product->calculateCMV($pizzaSize) : $product->unit_cost;
+
+                        // Criar novo OrderItemMapping
+                        \App\Models\OrderItemMapping::create([
+                            'order_item_id' => $orderItem->id,
+                            'internal_product_id' => $product->id,
+                            'mapping_type' => 'addon',
+                            'external_reference' => (string) $index,
+                            'quantity' => $correctFraction, // Usar fração calculada
+                            'unit_cost_override' => $correctCMV,
+                            'option_type' => \App\Models\OrderItemMapping::OPTION_TYPE_PIZZA_FLAVOR,
+                            'auto_fraction' => true,
+                        ]);
+
+                        $remappedCount++;
+                    }
+
+                    $this->info("   ✅ Remapeados {$remappedCount} sabores com frações corretas!");
 
                     // Verificar resultado
                     $orderItem->refresh();
