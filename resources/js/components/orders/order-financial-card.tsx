@@ -233,8 +233,10 @@ export function OrderFinancialCard({
                 order?.provider === 'takeat' &&
                 order?.raw?.session?.old_total_price
             ) {
-                paidByClient =
-                    parseFloat(String(order.raw.session.old_total_price)) || 0;
+                // Para Takeat, usar total_price (já com desconto) ao invés de old_total_price
+                // old_total_price é o valor antes do desconto
+                const totalPrice = parseFloat(String(order.raw.session.total_price)) || 0;
+                paidByClient = totalPrice;
             } else if (
                 order?.provider === 'takeat' &&
                 order?.raw?.session?.total_price
