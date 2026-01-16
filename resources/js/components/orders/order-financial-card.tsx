@@ -1139,9 +1139,10 @@ export function OrderFinancialCard({
                                                                             }
                                                                         } else if (isFlavor) {
                                                                             // FALLBACK: contar sabores (sistema legado)
-                                                                            const totalFlavors = addOnsEnriched.filter(
-                                                                                (a) => a.product_mapping?.item_type === 'flavor',
-                                                                            ).length;
+                                                                            // SOMA as quantidades: 2x Calabresa = 2 sabores
+                                                                            const totalFlavors = addOnsEnriched
+                                                                                .filter((a) => a.product_mapping?.item_type === 'flavor')
+                                                                                .reduce((sum, a) => sum + (a.quantity || 1), 0);
                                                                             if (totalFlavors > 1) {
                                                                                 fractionText = `1/${totalFlavors}`;
                                                                             }
