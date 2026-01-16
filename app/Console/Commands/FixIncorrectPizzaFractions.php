@@ -278,7 +278,7 @@ class FixIncorrectPizzaFractions extends Command
                         // Calcular CMV correto baseado no tamanho (mesma lógica do FlavorMappingService)
                         $correctCMV = $pizzaSize ? $product->calculateCMV($pizzaSize) : $product->unit_cost;
 
-                        // Obter quantidade do add-on
+                        // Obter quantidade do add-on (não usar aqui, só para validação)
                         $addOnQuantity = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
 
                         // Criar novo OrderItemMapping (mesma estrutura do FlavorMappingService linha 227-239)
@@ -286,7 +286,7 @@ class FixIncorrectPizzaFractions extends Command
                             'tenant_id' => $orderItem->tenant_id,
                             'order_item_id' => $orderItem->id,
                             'internal_product_id' => $product->id,
-                            'quantity' => $correctFraction * $addOnQuantity, // Fração x Quantidade do add-on
+                            'quantity' => $correctFraction, // APENAS a fração (ex: 0.5), NÃO multiplica por addOnQuantity aqui
                             'mapping_type' => 'addon',
                             'option_type' => 'pizza_flavor',
                             'auto_fraction' => true,
