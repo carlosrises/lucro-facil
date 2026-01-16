@@ -224,9 +224,10 @@ class OrderCostService
                     $paymentValue = $matchedPayment['value'] ?? 0;
                     $calculatedValue = 0;
 
-                    // Para taxas percentuais, aplicar sobre o valor do pagamento individual
+                    // Para taxas percentuais, aplicar sobre o SUBTOTAL (não sobre valor pago)
+                    // Quando há subsídio, a taxa é cobrada sobre subtotal (pago + subsídio)
                     if ($tax->type === 'percentage') {
-                        $calculatedValue = ($paymentValue * $tax->value) / 100;
+                        $calculatedValue = ($subtotal * $tax->value) / 100;
                     } else {
                         // Para taxas fixas, aplicar valor fixo para cada pagamento
                         $calculatedValue = (float) $tax->value;
