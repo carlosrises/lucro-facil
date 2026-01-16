@@ -62,14 +62,14 @@ class FixIncorrectPizzaFractions extends Command
             ->when($tenantId, fn($q) => $q->where('tenant_id', $tenantId))
             ->with(['mappings', 'order'])
             ->chunkById(50, function ($orderItems) use (
-                &$fixed, 
-                &$alreadyCorrect, 
-                &$errors, 
+                &$fixed,
+                &$alreadyCorrect,
+                &$errors,
                 &$totalDifference,
                 &$processed,
                 $totalItems,
-                $threshold, 
-                $dryRun, 
+                $threshold,
+                $dryRun,
                 $pizzaService
             ) {
                 foreach ($orderItems as $orderItem) {
@@ -144,7 +144,7 @@ class FixIncorrectPizzaFractions extends Command
                     $prodCategory = $product->product_category ?? 'N/A';
 
                     // Pular se não for sabor de pizza
-                    if ($prodCategory !== 'Sabor') {
+                    if ($prodCategory !== 'Sabor' && $prodCategory !== 'sabor_pizza') {
                         $this->line("   └ {$addon['name']} ({$prodCategory}) - pulado");
 
                         continue;
@@ -228,7 +228,7 @@ class FixIncorrectPizzaFractions extends Command
             }
 
             $processed++;
-            
+
             // Mostrar progresso a cada 50 items
             if ($processed % 50 === 0) {
                 $this->info("🔄 Processados: {$processed}/{$totalItems}...");

@@ -26,7 +26,7 @@ class FixPizzaFromAddOns extends Command
             $this->warn('🔍 MODO DRY-RUN - Nenhuma alteração será feita');
         }
 
-        $this->info("🔍 Buscando pedidos com add_ons de pizza...");
+        $this->info('🔍 Buscando pedidos com add_ons de pizza...');
         $this->line('');
 
         // Buscar OrderItems que têm add_ons não vazio
@@ -34,7 +34,7 @@ class FixPizzaFromAddOns extends Command
             ->where('add_ons', '!=', '[]')
             ->with([
                 'mappings.internalProduct',
-                'order'
+                'order',
             ]);
 
         if ($orderId) {
@@ -48,7 +48,7 @@ class FixPizzaFromAddOns extends Command
         $orderItems = $query->get();
 
         // Filtrar apenas items que parecem ser pizzas
-        $pizzaItems = $orderItems->filter(function($item) {
+        $pizzaItems = $orderItems->filter(function ($item) {
             return $this->isPizzaItem($item);
         });
 
@@ -71,9 +71,10 @@ class FixPizzaFromAddOns extends Command
                 $pizzaSize = $this->detectPizzaSize($orderItem);
                 $this->line('   📏 Tamanho detectado: '.($pizzaSize ?: 'não detectado'));
 
-                if (!$pizzaSize) {
+                if (! $pizzaSize) {
                     $this->warn('   ⚠️  Não foi possível detectar o tamanho - pulando');
                     $skipped++;
+
                     continue;
                 }
 
@@ -94,8 +95,9 @@ class FixPizzaFromAddOns extends Command
                         ->with('internalProduct')
                         ->first();
 
-                    if (!$mapping || !$mapping->internalProduct) {
+                    if (! $mapping || ! $mapping->internalProduct) {
                         $this->line("      └ {$addonName} (qty: {$addonQuantity}) - ⚠️  Sem mapping");
+
                         continue;
                     }
 
@@ -117,8 +119,8 @@ class FixPizzaFromAddOns extends Command
 
                     if (abs($genericCMV - $correctCMV) > 0.01) {
                         $this->line("      ├ ⚠️  {$addonName} (qty: {$addonQuantity}, fração: {$fractionLabel})");
-                        $this->line("         ❌ CMV ATUAL (genérico): R$ ".number_format($currentSubtotal, 2, ',', '.')." (unit: R$ ".number_format($genericCMV, 2, ',', '.').")");
-                        $this->line("         ✅ CMV CORRETO ({$pizzaSize}): R$ ".number_format($correctSubtotal, 2, ',', '.')." (unit: R$ ".number_format($correctCMV, 2, ',', '.').")");
+                        $this->line('         ❌ CMV ATUAL (genérico): R$ '.number_format($currentSubtotal, 2, ',', '.').' (unit: R$ '.number_format($genericCMV, 2, ',', '.').')');
+                        $this->line("         ✅ CMV CORRETO ({$pizzaSize}): R$ ".number_format($correctSubtotal, 2, ',', '.').' (unit: R$ '.number_format($correctCMV, 2, ',', '.').')');
                     } else {
                         $this->line("      └ ✅ {$addonName} (qty: {$addonQuantity}, fração: {$fractionLabel}) - R$ ".number_format($correctSubtotal, 2, ',', '.'));
                     }
@@ -134,12 +136,13 @@ class FixPizzaFromAddOns extends Command
                 if ($difference < 1.0) {
                     $this->comment('   ✅ Diferença pequena - OK');
                     $skipped++;
+
                     continue;
                 }
 
                 $this->warn('   ⚠️  NECESSITA CORREÇÃO');
 
-                if (!$dryRun) {
+                if (! $dryRun) {
                     // Recalcular frações (cria os mappings corretos)
                     $result = $pizzaService->recalculateFractions($orderItem);
 
@@ -213,14 +216,14 @@ class FixPizzaFromAddOns extends Command
 
         // Verificar também nos add_ons
         $addOnsText = '';
-        if (!empty($orderItem->add_ons)) {
+        if (! empty($orderItem->add_ons)) {
             foreach ($orderItem->add_ons as $addon) {
                 $name = is_array($addon) ? ($addon['name'] ?? '') : $addon;
-                $addOnsText .= ' ' . strtolower($name);
+                $addOnsText .= ' '.strtolower($name);
             }
         }
 
-        $fullText = $itemName . ' ' . $addOnsText;
+        $fullText = $itemName.' '.$addOnsText;
 
         if (preg_match('/\bbroto\b/', $fullText)) {
             return 'broto';
