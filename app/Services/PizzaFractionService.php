@@ -215,11 +215,11 @@ class PizzaFractionService
      */
     public function applyAutoFractions(OrderItem $orderItem, array $newMappings): array
     {
-        // Contar quantos são pizza_flavor com auto_fraction
+        // Somar quantidade total de sabores (considera 2x = 2 sabores)
         $pizzaFlavorCount = collect($newMappings)
             ->where('option_type', OrderItemMapping::OPTION_TYPE_PIZZA_FLAVOR)
             ->where('auto_fraction', true)
-            ->count();
+            ->sum('quantity');
 
         if ($pizzaFlavorCount === 0) {
             return $newMappings;

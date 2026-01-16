@@ -436,7 +436,9 @@ class FlavorMappingService
                 ->first();
 
             if ($mapping) {
-                $flavorCount++;
+                // Somar a quantidade do add-on (2x = 2 sabores)
+                $addOnQty = $addOn['quantity'] ?? $addOn['qty'] ?? 1;
+                $flavorCount += $addOnQty;
             }
         }
 

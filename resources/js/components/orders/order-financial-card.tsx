@@ -1179,6 +1179,7 @@ export function OrderFinancialCard({
                                                                                             {
                                                                                                 addonQuantity
                                                                                             }
+
                                                                                             x
                                                                                         </span>
                                                                                     )}

@@ -372,6 +372,7 @@ class FixIncorrectPizzaFractions extends Command
         $flavorCount = 0;
         foreach ($orderItem->add_ons as $addOn) {
             $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
+            $addOnQty = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
 
             // Gerar SKU do addon como a Triagem faz
             $addonSku = 'addon_'.md5($addOnName);
@@ -383,8 +384,9 @@ class FixIncorrectPizzaFractions extends Command
 
             // Contar se está CLASSIFICADO como sabor (item_type='flavor')
             // NÃO importa se tem internal_product_id (associação)
+            // SOMA a quantidade: 2x Pizza Mozarela = +2 sabores
             if ($mapping && $mapping->item_type === 'flavor') {
-                $flavorCount++;
+                $flavorCount += $addOnQty;
             }
         }
 
