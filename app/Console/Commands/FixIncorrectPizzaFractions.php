@@ -50,27 +50,27 @@ class FixIncorrectPizzaFractions extends Command
         }
 
         $orderItems = $query->get();
-        
+
         // Filtrar apenas items que têm pizza nos add_ons (mesma lógica do controller)
         $pizzaItems = $orderItems->filter(function($item) {
             if (empty($item->add_ons)) {
                 return false;
             }
-            
+
             foreach ($item->add_ons as $index => $addOn) {
                 $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
                 $addOnSku = 'addon_'.md5($addOnName);
-                
+
                 $mapping = \App\Models\ProductMapping::where('external_item_id', $addOnSku)
                     ->where('tenant_id', $item->tenant_id)
                     ->with('internalProduct')
                     ->first();
-                
+
                 if ($mapping && $mapping->internalProduct && $mapping->internalProduct->product_category === 'Sabor') {
                     return true;
                 }
             }
-            
+
             return false;
         });
 
@@ -84,18 +84,23 @@ class FixIncorrectPizzaFractions extends Command
 
         $pizzaService = app(PizzaFractionService::class);
 
-        foreach ($orderItems as $orderItem) {
+        foreach ($pizzaItems as $orderItem) {
             try {
                 // Detectar tamanho da pizza
                 $pizzaSize = $this->detectPizzaSize($orderItem);
 
-                // Calcular total atual (o que está salvo)
-                $currentTotal = $this->calculateCurrentTotal($orderItem);
-add_ons (como o controller faz)
+                // SEMPRE mostrar detalhes para debug
+                $this->line('');
+                $this->info("📦 Pedido #{$orderItem->order_id} - Item #{$orderItem->id}");
+                $this->line("   🍕 {$orderItem->name}");
+                $this->line('   📏 Tamanho detectado: '.($pizzaSize ?: 'não detectado'));
+                $this->line('');
+
+                // Mostrar detalhes dos add_ons (como o controller faz)
                 $hasIncorrectCost = false;
 
                 $this->line('   🔍 Add-ons no JSON: '.count($orderItem->add_ons));
-                
+
                 $currentTotal = 0;
                 $correctTotal = 0;
 
@@ -151,7 +156,7 @@ add_ons (como o controller faz)
                     $correctTotal += $correctSubtotal;
  (sabores): R$ '.number_format($currentTotal, 2, ',', '.'));
                 $this->line('   ✅ Total CORRETO (sabores): R$ '.number_format($correctTotal, 2, ',', '.'));
-                
+
                 $difference = abs($currentTotal - $correctTotal1/3' : ($mappingQuantity == 0.25 ? '1/4' : $mappingQuantity));
                     $isIncorrect = abs($currentCMV - $correctCMV) > 0.01;
 
@@ -200,7 +205,7 @@ add_ons (como o controller faz)
                     $result = $pizzaService->recalculateFractions($orderItem);
 
                     $this->info('   ✅ Recalculado!');
-                    
+
                     // Verificar resultado
                     $orderItem->refresh();
                     $newTotal = $orderItem->calculateTotalCost();
