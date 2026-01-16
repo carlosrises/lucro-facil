@@ -230,7 +230,7 @@ class FixIncorrectPizzaFractions extends Command
                 $difference = abs($currentTotal - $correctTotal);
                 $this->line('   📏 Diferença: R$ '.number_format($difference, 2, ',', '.'));
 
-                if (! $hasIncorrectCost || $difference < $threshold) {
+                if (! $hasIncorrectCost && $difference < $threshold) {
                     $this->comment('   ✅ OK');
                     $alreadyCorrect++;
 
