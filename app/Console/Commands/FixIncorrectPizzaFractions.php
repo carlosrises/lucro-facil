@@ -121,7 +121,7 @@ class FixIncorrectPizzaFractions extends Command
                         'name' => $addOnName,
                         'quantity' => $addOnQuantity, // Quantidade do add-on (ex: 2 para "2x Don Rafaello")
                         'unit_cost_override' => $unitCost, // CMV unitário
-                        'mapping_quantity' => $correctFraction, // USAR FRAÇÃO CALCULADA, NÃO A DO MAPPING
+                        'mapping_quantity' => $mappingQuantity, // Fração ATUAL do OrderItemMapping (para diagnóstico)
                         'product' => $mapping?->internalProduct,
                         'product_mapping' => $mapping, // Adicionar ProductMapping completo
                         'order_item_mapping_id' => $orderItemMapping?->id,
@@ -165,28 +165,33 @@ class FixIncorrectPizzaFractions extends Command
                     $mappingQuantity = $addon['mapping_quantity'] ?? 1.0;
                     $addonQuantity = $addon['quantity'] ?? 1;
 
+                    // Subtotal ATUAL (com fração atual do OrderItemMapping)
                     $currentSubtotal = $currentCMV * $mappingQuantity * $addonQuantity;
 
-                    // Calcular CMV correto por tamanho (proteger contra product null)
+                    // Calcular CMV e subtotal CORRETO (com fração correta e CMV por tamanho)
                     $correctCMV = ($pizzaSize && $product) ? $product->calculateCMV($pizzaSize) : $currentCMV;
-                    $correctSubtotal = $correctCMV * $mappingQuantity * $addonQuantity;
+                    $correctSubtotal = $correctCMV * $correctFraction * $addonQuantity;
 
                     $currentTotal += $currentSubtotal;
                     $correctTotal += $correctSubtotal;
 
-                    $fraction = $mappingQuantity == 0.5 ? '1/2' : ($mappingQuantity == 0.33 ? '1/3' : ($mappingQuantity == 0.25 ? '1/4' : $mappingQuantity));
-                    $isIncorrect = abs($currentCMV - $correctCMV) > 0.01;
-                    
+                    // Formatar frações para exibição
+                    $currentFractionText = $mappingQuantity == 0.5 ? '1/2' : ($mappingQuantity == 0.33 || abs($mappingQuantity - 0.33) < 0.01 ? '1/3' : ($mappingQuantity == 0.25 ? '1/4' : number_format($mappingQuantity, 2)));
+                    $correctFractionText = $correctFraction == 0.5 ? '1/2' : ($correctFraction == 0.33 || abs($correctFraction - 0.33) < 0.01 ? '1/3' : ($correctFraction == 0.25 ? '1/4' : number_format($correctFraction, 2)));
+
+                    // Verificar se está incorreto (CMV errado OU fração errada)
+                    $isIncorrect = abs($currentCMV - $correctCMV) > 0.01 || abs($mappingQuantity - $correctFraction) > 0.01;
+
                     $productName = $product ? $product->name : $addon['name'];
 
                     if ($isIncorrect) {
-                        $this->line("   ├ ⚠️  {$fraction} {$productName}");
+                        $this->line("   ├ ⚠️  {$currentFractionText} {$productName}");
                         $this->line('      OrderItemMapping ID: '.($addon['order_item_mapping_id'] ?? 'N/A'));
-                        $this->line('      ❌ ATUAL (CMV): R$ '.number_format($currentCMV, 2, ',', '.').' × '.$mappingQuantity.' × '.$addonQuantity.' = R$ '.number_format($currentSubtotal, 2, ',', '.'));
-                        $this->line("      ✅ CORRETO ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.').' × '.$mappingQuantity.' × '.$addonQuantity.' = R$ '.number_format($correctSubtotal, 2, ',', '.'));
+                        $this->line('      ❌ ATUAL: R$ '.number_format($currentCMV, 2, ',', '.').' × '.$currentFractionText.' × '.$addonQuantity.' = R$ '.number_format($currentSubtotal, 2, ',', '.'));
+                        $this->line("      ✅ CORRETO ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.').' × '.$correctFractionText.' × '.$addonQuantity.' = R$ '.number_format($correctSubtotal, 2, ',', '.'));
                         $hasIncorrectCost = true;
                     } else {
-                        $this->line("   ├ ✅ {$fraction} {$productName}");
+                        $this->line("   ├ ✅ {$currentFractionText} {$productName}");
                         $this->line('      💰 R$ '.number_format($currentSubtotal, 2, ',', '.'));
                     }
                 }
