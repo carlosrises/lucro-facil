@@ -347,13 +347,28 @@ class FixIncorrectPizzaFractions extends Command
             return (int) $matches[1];
         }
 
-        // Contar TODOS os add_ons da pizza, classificados ou não
-        // (Mesma lógica que o frontend usa para calcular frações)
-        if (!$orderItem->add_ons || !is_array($orderItem->add_ons)) {
-            return 1;
+        // Contar sabores CLASSIFICADOS na Triagem (com ProductMapping item_type='flavor')
+        // Independente de estarem ASSOCIADOS ou não (internal_product_id pode ser null)
+        $flavorCount = 0;
+        foreach ($orderItem->add_ons as $addOn) {
+            $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
+
+            // Gerar SKU do addon como a Triagem faz
+            $addonSku = 'addon_'.md5($addOnName);
+
+            // Procurar ProductMapping (classificação na Triagem)
+            $mapping = \App\Models\ProductMapping::where('tenant_id', $orderItem->tenant_id)
+                ->where('external_item_id', $addonSku)
+                ->first();
+
+            // Contar se está CLASSIFICADO como sabor (item_type='flavor')
+            // NÃO importa se tem internal_product_id (associação)
+            if ($mapping && $mapping->item_type === 'flavor') {
+                $flavorCount++;
+            }
         }
 
-        return count($orderItem->add_ons);
+        return $flavorCount > 0 ? $flavorCount : 1;
     }
 
     protected function detectPizzaSize(OrderItem $orderItem): ?string
