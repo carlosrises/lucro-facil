@@ -144,7 +144,7 @@ class FixIncorrectPizzaFractions extends Command
 
                     // Pular se NÃO é sabor de pizza (verificar pelo item_type do ProductMapping)
                     $isFlavor = $productMapping && $productMapping->item_type === 'flavor';
-                    
+
                     if (!$isFlavor) {
                         // Se não tem ProductMapping mas tem OrderItemMapping, pode ser sabor não classificado
                         if ($orderItemMapping && (stripos($addon['name'], 'pizza') !== false || stripos($addon['name'], 'sabor') !== false)) {
@@ -167,8 +167,8 @@ class FixIncorrectPizzaFractions extends Command
 
                     $currentSubtotal = $currentCMV * $mappingQuantity * $addonQuantity;
 
-                    // Calcular CMV correto por tamanho
-                    $correctCMV = $pizzaSize ? $product->calculateCMV($pizzaSize) : $currentCMV;
+                    // Calcular CMV correto por tamanho (proteger contra product null)
+                    $correctCMV = ($pizzaSize && $product) ? $product->calculateCMV($pizzaSize) : $currentCMV;
                     $correctSubtotal = $correctCMV * $mappingQuantity * $addonQuantity;
 
                     $currentTotal += $currentSubtotal;
@@ -176,15 +176,17 @@ class FixIncorrectPizzaFractions extends Command
 
                     $fraction = $mappingQuantity == 0.5 ? '1/2' : ($mappingQuantity == 0.33 ? '1/3' : ($mappingQuantity == 0.25 ? '1/4' : $mappingQuantity));
                     $isIncorrect = abs($currentCMV - $correctCMV) > 0.01;
+                    
+                    $productName = $product ? $product->name : $addon['name'];
 
                     if ($isIncorrect) {
-                        $this->line("   ├ ⚠️  {$fraction} {$product->name}");
+                        $this->line("   ├ ⚠️  {$fraction} {$productName}");
                         $this->line('      OrderItemMapping ID: '.($addon['order_item_mapping_id'] ?? 'N/A'));
                         $this->line('      ❌ ATUAL (CMV): R$ '.number_format($currentCMV, 2, ',', '.').' × '.$mappingQuantity.' × '.$addonQuantity.' = R$ '.number_format($currentSubtotal, 2, ',', '.'));
                         $this->line("      ✅ CORRETO ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.').' × '.$mappingQuantity.' × '.$addonQuantity.' = R$ '.number_format($correctSubtotal, 2, ',', '.'));
                         $hasIncorrectCost = true;
                     } else {
-                        $this->line("   ├ ✅ {$fraction} {$product->name}");
+                        $this->line("   ├ ✅ {$fraction} {$productName}");
                         $this->line('      💰 R$ '.number_format($currentSubtotal, 2, ',', '.'));
                     }
                 }
