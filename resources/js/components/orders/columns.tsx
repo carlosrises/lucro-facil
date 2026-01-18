@@ -677,10 +677,13 @@ export const columns: ColumnDef<Order>[] = [
             const calculatedCosts = row.original.calculated_costs || null;
 
             // Se já temos o net_revenue calculado no backend, usar esse valor
-            if (calculatedCosts?.net_revenue !== undefined && calculatedCosts?.net_revenue !== null) {
+            if (
+                calculatedCosts?.net_revenue !== undefined &&
+                calculatedCosts?.net_revenue !== null
+            ) {
                 const netRevenue = calculatedCosts.net_revenue;
                 const isCancelled = row.original.status === 'CANCELLED';
-                
+
                 return (
                     <span
                         className={`${
