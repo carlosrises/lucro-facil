@@ -311,12 +311,17 @@ class ItemTriageController extends Controller
             ->unique()
             ->count();
 
-        $totalClassifiedMappings = ProductMapping::where('tenant_id', $tenantId)->count();
+        // Contar itens únicos classificados (distinct por external_item_id)
+        // Um item pode ter múltiplos mappings (main + flavor), mas deve contar como 1 item classificado
+        $totalClassifiedMappings = ProductMapping::where('tenant_id', $tenantId)
+            ->distinct('external_item_id')
+            ->count('external_item_id');
 
-        // Itens classificados mas sem produto interno vinculado
+        // Itens classificados mas sem produto interno vinculado (também distinct)
         $classifiedWithoutProduct = ProductMapping::where('tenant_id', $tenantId)
             ->whereNull('internal_product_id')
-            ->count();
+            ->distinct('external_item_id')
+            ->count('external_item_id');
 
         $stats = [
             'total_items' => $totalMainItems + $allAddOns,
