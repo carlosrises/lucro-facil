@@ -14,23 +14,23 @@ class TakeatIntegrationController extends Controller
     public function login(Request $request)
     {
         // Log inicial antes de qualquer processamento
-        logger()->info('🚀 Takeat: Requisição de login recebida', [
-            'tenant_id' => auth()->user()->tenant_id ?? 'N/A',
-            'user_id' => auth()->id() ?? 'N/A',
-            'email' => $request->input('email'),
-            'has_password' => ! empty($request->input('password')),
-        ]);
+        // logger()->info('🚀 Takeat: Requisição de login recebida', [
+        //     'tenant_id' => auth()->user()->tenant_id ?? 'N/A',
+        //     'user_id' => auth()->id() ?? 'N/A',
+        //     'email' => $request->input('email'),
+        //     'has_password' => ! empty($request->input('password')),
+        // ]);
 
         $validated = $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
         ]);
 
-        logger()->info('🔐 Takeat: Tentativa de login', [
-            'tenant_id' => auth()->user()->tenant_id,
-            'user_id' => auth()->id(),
-            'email' => $validated['email'],
-        ]);
+        // logger()->info('🔐 Takeat: Tentativa de login', [
+        //     'tenant_id' => auth()->user()->tenant_id,
+        //     'user_id' => auth()->id(),
+        //     'email' => $validated['email'],
+        // ]);
 
         try {
             $authData = TakeatClient::authenticate(
@@ -78,13 +78,13 @@ class TakeatIntegrationController extends Controller
             $oauthToken->setPassword($validated['password']);
             $oauthToken->save();
 
-            logger()->info('✅ Takeat: Login concluído com sucesso', [
-                'tenant_id' => $tenantId,
-                'store_id' => $store->id,
-                'restaurant_id' => $restaurantId,
-                'restaurant_name' => $store->display_name,
-                'token_expires_at' => $expiresAt->toIso8601String(),
-            ]);
+            // logger()->info('✅ Takeat: Login concluído com sucesso', [
+            //     'tenant_id' => $tenantId,
+            //     'store_id' => $store->id,
+            //     'restaurant_id' => $restaurantId,
+            //     'restaurant_name' => $store->display_name,
+            //     'token_expires_at' => $expiresAt->toIso8601String(),
+            // ]);
 
             return response()->json([
                 'success' => true,
@@ -153,11 +153,11 @@ class TakeatIntegrationController extends Controller
             'excluded_channels.*' => 'string|in:ifood,99food,neemo,keeta,pdv,delivery,totem',
         ]);
 
-        logger()->info('⚙️ Takeat: Atualizando canais excluídos', [
-            'tenant_id' => auth()->user()->tenant_id,
-            'store_id' => $id,
-            'excluded_channels' => $request->excluded_channels,
-        ]);
+        // logger()->info('⚙️ Takeat: Atualizando canais excluídos', [
+        //     'tenant_id' => auth()->user()->tenant_id,
+        //     'store_id' => $id,
+        //     'excluded_channels' => $request->excluded_channels,
+        // ]);
 
         try {
             $store = Store::where('tenant_id', auth()->user()->tenant_id)
@@ -168,12 +168,12 @@ class TakeatIntegrationController extends Controller
                 'excluded_channels' => $request->excluded_channels,
             ]);
 
-            logger()->info('✅ Takeat: Canais atualizados', [
-                'tenant_id' => auth()->user()->tenant_id,
-                'store_id' => $id,
-                'store_name' => $store->display_name,
-                'excluded_channels' => $request->excluded_channels,
-            ]);
+            // logger()->info('✅ Takeat: Canais atualizados', [
+            //     'tenant_id' => auth()->user()->tenant_id,
+            //     'store_id' => $id,
+            //     'store_name' => $store->display_name,
+            //     'excluded_channels' => $request->excluded_channels,
+            // ]);
 
             return response()->json([
                 'success' => true,
@@ -209,10 +209,10 @@ class TakeatIntegrationController extends Controller
      */
     public function destroy($id)
     {
-        logger()->info('🗑️ Takeat: Tentativa de remover loja', [
-            'tenant_id' => auth()->user()->tenant_id,
-            'store_id' => $id,
-        ]);
+        // logger()->info('🗑️ Takeat: Tentativa de remover loja', [
+        //     'tenant_id' => auth()->user()->tenant_id,
+        //     'store_id' => $id,
+        // ]);
 
         try {
             $store = Store::where('tenant_id', auth()->user()->tenant_id)
@@ -222,11 +222,11 @@ class TakeatIntegrationController extends Controller
             $storeName = $store->display_name;
             $store->delete();
 
-            logger()->info('✅ Takeat: Loja removida', [
-                'tenant_id' => auth()->user()->tenant_id,
-                'store_id' => $id,
-                'store_name' => $storeName,
-            ]);
+            // logger()->info('✅ Takeat: Loja removida', [
+            //     'tenant_id' => auth()->user()->tenant_id,
+            //     'store_id' => $id,
+            //     'store_name' => $storeName,
+            // ]);
 
             return response()->json([
                 'success' => true,

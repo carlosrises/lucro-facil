@@ -38,10 +38,10 @@ class TakeatClient
     {
         $baseUrl = config('services.takeat.base_url');
 
-        logger()->info('🔐 Takeat: Iniciando autenticação', [
-            'url' => $baseUrl.'/public/api/sessions',
-            'email' => $email,
-        ]);
+        // logger()->info('🔐 Takeat: Iniciando autenticação', [
+        //     'url' => $baseUrl.'/public/api/sessions',
+        //     'email' => $email,
+        // ]);
 
         try {
             $response = Http::acceptJson()
@@ -53,12 +53,12 @@ class TakeatClient
 
             $data = $response->json();
 
-            logger()->info('✅ Takeat: Autenticação bem-sucedida', [
-                'restaurant_id' => $data['restaurant']['id'] ?? null,
-                'restaurant_name' => $data['restaurant']['name'] ?? null,
-                'fantasy_name' => $data['restaurant']['fantasy_name'] ?? null,
-                'token_length' => strlen($data['token'] ?? ''),
-            ]);
+            // logger()->info('✅ Takeat: Autenticação bem-sucedida', [
+            //     'restaurant_id' => $data['restaurant']['id'] ?? null,
+            //     'restaurant_name' => $data['restaurant']['name'] ?? null,
+            //     'fantasy_name' => $data['restaurant']['fantasy_name'] ?? null,
+            //     'token_length' => strlen($data['token'] ?? ''),
+            // ]);
 
             return $data;
         } catch (RequestException $e) {
@@ -97,14 +97,14 @@ class TakeatClient
     {
         $baseUrl = config('services.takeat.base_url');
 
-        logger()->info('📦 Takeat: Buscando table_sessions', [
-            'tenant_id' => $this->tenantId,
-            'store_id' => $this->storeId,
-            'store_name' => $this->store->display_name,
-            'url' => $baseUrl.'/api/v1/table-sessions',
-            'start_date' => $startDate,
-            'end_date' => $endDate,
-        ]);
+        // logger()->info('📦 Takeat: Buscando table_sessions', [
+        //     'tenant_id' => $this->tenantId,
+        //     'store_id' => $this->storeId,
+        //     'store_name' => $this->store->display_name,
+        //     'url' => $baseUrl.'/api/v1/table-sessions',
+        //     'start_date' => $startDate,
+        //     'end_date' => $endDate,
+        // ]);
 
         try {
             $response = Http::withToken($this->token)
@@ -118,12 +118,12 @@ class TakeatClient
             $data = $response->json() ?? [];
             $count = count($data);
 
-            logger()->info('✅ Takeat: table_sessions recebidos', [
-                'tenant_id' => $this->tenantId,
-                'store_id' => $this->storeId,
-                'total_sessions' => $count,
-                'response_size' => strlen($response->body()),
-            ]);
+            // logger()->info('✅ Takeat: table_sessions recebidos', [
+            //     'tenant_id' => $this->tenantId,
+            //     'store_id' => $this->storeId,
+            //     'total_sessions' => $count,
+            //     'response_size' => strlen($response->body()),
+            // ]);
 
             return $data;
         } catch (RequestException $e) {
@@ -147,11 +147,11 @@ class TakeatClient
     {
         $baseUrl = config('services.takeat.base_url');
 
-        logger()->info('💳 Takeat: Buscando payment_methods', [
-            'tenant_id' => $this->tenantId,
-            'store_id' => $this->storeId,
-            'url' => $baseUrl.'/api/v1/payment-methods',
-        ]);
+        // logger()->info('💳 Takeat: Buscando payment_methods', [
+        //     'tenant_id' => $this->tenantId,
+        //     'store_id' => $this->storeId,
+        //     'url' => $baseUrl.'/api/v1/payment-methods',
+        // ]);
 
         try {
             $response = Http::withToken($this->token)
@@ -161,11 +161,11 @@ class TakeatClient
 
             $data = $response->json() ?? [];
 
-            logger()->info('✅ Takeat: payment_methods recebidos', [
-                'tenant_id' => $this->tenantId,
-                'store_id' => $this->storeId,
-                'total_methods' => count($data),
-            ]);
+            // logger()->info('✅ Takeat: payment_methods recebidos', [
+            //     'tenant_id' => $this->tenantId,
+            //     'store_id' => $this->storeId,
+            //     'total_methods' => count($data),
+            // ]);
 
             return $data;
         } catch (RequestException $e) {
@@ -189,11 +189,11 @@ class TakeatClient
     {
         $baseUrl = config('services.takeat.base_url');
 
-        logger()->info('🍔 Takeat: Buscando products', [
-            'tenant_id' => $this->tenantId,
-            'store_id' => $this->storeId,
-            'url' => $baseUrl.'/api/v1/products',
-        ]);
+        // logger()->info('🍔 Takeat: Buscando products', [
+        //     'tenant_id' => $this->tenantId,
+        //     'store_id' => $this->storeId,
+        //     'url' => $baseUrl.'/api/v1/products',
+        // ]);
 
         try {
             $response = Http::withToken($this->token)
@@ -203,11 +203,11 @@ class TakeatClient
 
             $data = $response->json() ?? [];
 
-            logger()->info('✅ Takeat: products recebidos', [
-                'tenant_id' => $this->tenantId,
-                'store_id' => $this->storeId,
-                'total_categories' => count($data),
-            ]);
+            // logger()->info('✅ Takeat: products recebidos', [
+            //     'tenant_id' => $this->tenantId,
+            //     'store_id' => $this->storeId,
+            //     'total_categories' => count($data),
+            // ]);
 
             return $data;
         } catch (RequestException $e) {
@@ -231,11 +231,11 @@ class TakeatClient
     {
         $baseUrl = config('services.takeat.base_url');
 
-        logger()->info('🧩 Takeat: Buscando complements', [
-            'tenant_id' => $this->tenantId,
-            'store_id' => $this->storeId,
-            'url' => $baseUrl.'/api/v1/complements',
-        ]);
+        // logger()->info('🧩 Takeat: Buscando complements', [
+        //     'tenant_id' => $this->tenantId,
+        //     'store_id' => $this->storeId,
+        //     'url' => $baseUrl.'/api/v1/complements',
+        // ]);
 
         try {
             $response = Http::withToken($this->token)
@@ -245,11 +245,11 @@ class TakeatClient
 
             $data = $response->json() ?? [];
 
-            logger()->info('✅ Takeat: complements recebidos', [
-                'tenant_id' => $this->tenantId,
-                'store_id' => $this->storeId,
-                'total_categories' => count($data),
-            ]);
+            // logger()->info('✅ Takeat: complements recebidos', [
+            //     'tenant_id' => $this->tenantId,
+            //     'store_id' => $this->storeId,
+            //     'total_categories' => count($data),
+            // ]);
 
             return $data;
         } catch (RequestException $e) {

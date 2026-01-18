@@ -29,10 +29,10 @@ class SyncMerchantJob implements ShouldQueue
     public function handle(): void
     {
         try {
-            logger()->info('🚀 Iniciando SyncMerchantJob', [
-                'tenant_id' => $this->tenantId,
-                'store_id' => $this->storeId,
-            ]);
+            // logger()->info('🚀 Iniciando SyncMerchantJob', [
+            //     'tenant_id' => $this->tenantId,
+            //     'store_id' => $this->storeId,
+            // ]);
 
             $store = Store::where('tenant_id', $this->tenantId)->findOrFail($this->storeId);
             $client = new IfoodClient($this->tenantId, $this->storeId);
@@ -40,10 +40,10 @@ class SyncMerchantJob implements ShouldQueue
             $merchant = $client->get("merchant/v1.0/merchants/{$store->external_store_id}");
 
             if (! $merchant) {
-                logger()->warning('⚠️ Nenhum dado retornado para merchant', [
-                    'tenant_id' => $this->tenantId,
-                    'store_id' => $this->storeId,
-                ]);
+                // logger()->warning('⚠️ Nenhum dado retornado para merchant', [
+                //     'tenant_id' => $this->tenantId,
+                //     'store_id' => $this->storeId,
+                // ]);
 
                 return;
             }
@@ -54,11 +54,11 @@ class SyncMerchantJob implements ShouldQueue
                 'raw' => $merchant, // mantém dump completo
             ]);
 
-            logger()->info('✅ Merchant atualizado com sucesso', [
-                'tenant_id' => $this->tenantId,
-                'store_id' => $this->storeId,
-                'status' => $merchant['status'] ?? null,
-            ]);
+            // logger()->info('✅ Merchant atualizado com sucesso', [
+            //     'tenant_id' => $this->tenantId,
+            //     'store_id' => $this->storeId,
+            //     'status' => $merchant['status'] ?? null,
+            // ]);
         } catch (Throwable $e) {
             logger()->error('❌ Erro ao sincronizar merchant iFood', [
                 'tenant_id' => $this->tenantId,

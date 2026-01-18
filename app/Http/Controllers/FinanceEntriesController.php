@@ -99,28 +99,28 @@ class FinanceEntriesController extends Controller
 
             // Verificar se é recorrente
             if ($validated['recurrence_type'] !== 'single') {
-                logger()->info('Criando movimentação recorrente', [
-                    'tenant_id' => $validated['tenant_id'],
-                    'recurrence_type' => $validated['recurrence_type'],
-                    'occurred_on' => $validated['occurred_on'],
-                    'recurrence_end_date' => $validated['recurrence_end_date'] ?? null,
-                ]);
+                // logger()->info('Criando movimentação recorrente', [
+                //     'tenant_id' => $validated['tenant_id'],
+                //     'recurrence_type' => $validated['recurrence_type'],
+                //     'occurred_on' => $validated['occurred_on'],
+                //     'recurrence_end_date' => $validated['recurrence_end_date'] ?? null,
+                // ]);
 
                 $template = $this->recurringService->createRecurringEntry($validated);
 
-                logger()->info('Template criado com sucesso', [
-                    'template_id' => $template->id,
-                    'children_count' => $template->children()->count(),
-                ]);
+                // logger()->info('Template criado com sucesso', [
+                //     'template_id' => $template->id,
+                //     'children_count' => $template->children()->count(),
+                // ]);
             } else {
                 // Garantir que is_recurring seja false para entradas únicas
                 $validated['is_recurring'] = false;
                 $entry = FinanceEntry::create($validated);
 
-                logger()->info('Movimentação única criada', [
-                    'entry_id' => $entry->id,
-                    'tenant_id' => $validated['tenant_id'],
-                ]);
+                // logger()->info('Movimentação única criada', [
+                //     'entry_id' => $entry->id,
+                //     'tenant_id' => $validated['tenant_id'],
+                // ]);
             }
 
             return redirect()->back()->with('success', 'Movimentação criada com sucesso!');
@@ -136,7 +136,8 @@ class FinanceEntriesController extends Controller
                 'trace' => $e->getTraceAsString(),
                 'data' => $request->all(),
             ]);
-            return redirect()->back()->withErrors(['error' => 'Erro ao salvar movimentação: ' . $e->getMessage()]);
+
+            return redirect()->back()->withErrors(['error' => 'Erro ao salvar movimentação: '.$e->getMessage()]);
         }
     }
 
@@ -178,6 +179,7 @@ class FinanceEntriesController extends Controller
                 if ($template && $template->is_recurring && $validated['recurrence_type'] !== 'single') {
                     // Atualizar o template com os novos dados
                     $this->recurringService->updateRecurringEntry($template, $validated);
+
                     return redirect()->back()->with('success', 'Recorrência atualizada! Todas as parcelas futuras foram regeneradas.');
                 }
             }
@@ -204,7 +206,8 @@ class FinanceEntriesController extends Controller
                 'trace' => $e->getTraceAsString(),
                 'data' => $request->all(),
             ]);
-            return redirect()->back()->withErrors(['error' => 'Erro ao atualizar movimentação: ' . $e->getMessage()]);
+
+            return redirect()->back()->withErrors(['error' => 'Erro ao atualizar movimentação: '.$e->getMessage()]);
         }
     }
 

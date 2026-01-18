@@ -44,12 +44,13 @@ class ProductMappingController extends Controller
         }
 
         $size = $this->detectPizzaSize($orderItem->name);
-        if (!$size) {
+        if (! $size) {
             return (float) $product->unit_cost;
         }
 
         // Calcular CMV dinamicamente pela ficha técnica
         $cmv = $product->calculateCMV($size);
+
         return $cmv > 0 ? $cmv : (float) $product->unit_cost;
     }
 
@@ -197,24 +198,24 @@ class ProductMappingController extends Controller
     private function applyMappingToHistoricalOrders(ProductMapping $mapping, int $tenantId): void
     {
         // Log para debug
-        logger()->info('🔍 Iniciando aplicação de mapeamento histórico', [
-            'tenant_id' => $tenantId,
-            'mapping_id' => $mapping->id,
-            'external_item_id' => $mapping->external_item_id,
-            'external_item_name' => $mapping->external_item_name,
-            'internal_product_id' => $mapping->internal_product_id,
-        ]);
+        // logger()->info('🔍 Iniciando aplicação de mapeamento histórico', [
+        //     'tenant_id' => $tenantId,
+        //     'mapping_id' => $mapping->id,
+        //     'external_item_id' => $mapping->external_item_id,
+        //     'external_item_name' => $mapping->external_item_name,
+        //     'internal_product_id' => $mapping->internal_product_id,
+        // ]);
 
         // Buscar TODOS os OrderItems com este SKU para debug
         $allItemsWithSku = OrderItem::where('tenant_id', $tenantId)
             ->where('sku', $mapping->external_item_id)
             ->get();
 
-        logger()->info('📊 OrderItems encontrados com este SKU', [
-            'sku' => $mapping->external_item_id,
-            'total_items' => $allItemsWithSku->count(),
-            'order_ids' => $allItemsWithSku->pluck('order_id')->unique()->values()->toArray(),
-        ]);
+        // logger()->info('📊 OrderItems encontrados com este SKU', [
+        //     'sku' => $mapping->external_item_id,
+        //     'total_items' => $allItemsWithSku->count(),
+        //     'order_ids' => $allItemsWithSku->pluck('order_id')->unique()->values()->toArray(),
+        // ]);
 
         // Buscar todos os OrderItems que têm o SKU mapeado e ainda não têm mapping principal
         $orderItems = OrderItem::where('tenant_id', $tenantId)
@@ -224,10 +225,10 @@ class ProductMappingController extends Controller
             })
             ->get();
 
-        logger()->info('📋 OrderItems sem mapeamento principal', [
-            'total_unmapped' => $orderItems->count(),
-            'order_ids' => $orderItems->pluck('order_id')->unique()->values()->toArray(),
-        ]);
+        // logger()->info('📋 OrderItems sem mapeamento principal', [
+        //     'total_unmapped' => $orderItems->count(),
+        //     'order_ids' => $orderItems->pluck('order_id')->unique()->values()->toArray(),
+        // ]);
 
         $mappedCount = 0;
 
@@ -294,15 +295,15 @@ class ProductMappingController extends Controller
             $mappedCount++;
         }
 
-        logger()->info('✅ Mapeamento aplicado retroativamente', [
-            'tenant_id' => $tenantId,
-            'mapping_id' => $mapping->id,
-            'external_item_id' => $mapping->external_item_id,
-            'internal_product_id' => $mapping->internal_product_id,
-            'total_items_with_sku' => $allItemsWithSku->count(),
-            'items_without_mapping' => $orderItems->count(),
-            'order_items_mapped' => $mappedCount,
-            'affected_orders' => $orderItems->pluck('order_id')->unique()->count(),
-        ]);
+        // logger()->info('✅ Mapeamento aplicado retroativamente', [
+        //     'tenant_id' => $tenantId,
+        //     'mapping_id' => $mapping->id,
+        //     'external_item_id' => $mapping->external_item_id,
+        //     'internal_product_id' => $mapping->internal_product_id,
+        //     'total_items_with_sku' => $allItemsWithSku->count(),
+        //     'items_without_mapping' => $orderItems->count(),
+        //     'order_items_mapped' => $mappedCount,
+        //     'affected_orders' => $orderItems->pluck('order_id')->unique()->count(),
+        // ]);
     }
 }

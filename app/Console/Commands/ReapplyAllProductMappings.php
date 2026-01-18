@@ -114,24 +114,25 @@ class ReapplyAllProductMappings extends Command
             // Buscar produto interno para calcular CMV
             $product = InternalProduct::find($mapping->internal_product_id);
 
-            if (!$product) {
+            if (! $product) {
                 $skipped++;
+
                 continue;
             }
 
             $correctCMV = $this->calculateCorrectCMV($product, $orderItem);
 
-            logger()->info('🔄 Reaplicando mapeamento', [
-                'order_item_id' => $orderItem->id,
-                'order_id' => $orderItem->order_id,
-                'sku' => $orderItem->sku,
-                'product_id' => $product->id,
-                'product_name' => $product->name,
-                'cmv' => $correctCMV,
-                'dry_run' => $isDryRun,
-            ]);
+            // logger()->info('🔄 Reaplicando mapeamento', [
+            //     'order_item_id' => $orderItem->id,
+            //     'order_id' => $orderItem->order_id,
+            //     'sku' => $orderItem->sku,
+            //     'product_id' => $product->id,
+            //     'product_name' => $product->name,
+            //     'cmv' => $correctCMV,
+            //     'dry_run' => $isDryRun,
+            // ]);
 
-            if (!$isDryRun) {
+            if (! $isDryRun) {
                 // Criar OrderItemMapping principal
                 OrderItemMapping::create([
                     'tenant_id' => $mapping->tenant_id,
@@ -197,7 +198,7 @@ class ReapplyAllProductMappings extends Command
                     ->where('external_reference', (string) $index)
                     ->first();
 
-                if (!$existingMapping) {
+                if (! $existingMapping) {
                     OrderItemMapping::create([
                         'tenant_id' => $orderItem->tenant_id,
                         'order_item_id' => $orderItem->id,
@@ -211,13 +212,13 @@ class ReapplyAllProductMappings extends Command
                         'unit_cost_override' => $addonCMV,
                     ]);
 
-                    logger()->info('🍕 Add-on mapeado', [
-                        'order_item' => $orderItem->id,
-                        'addon_name' => $addonName,
-                        'product_id' => $addonMapping->internal_product_id,
-                        'is_pizza_flavor' => $isPizzaFlavor,
-                        'cmv' => $addonCMV,
-                    ]);
+                    // logger()->info('🍕 Add-on mapeado', [
+                    //     'order_item' => $orderItem->id,
+                    //     'addon_name' => $addonName,
+                    //     'product_id' => $addonMapping->internal_product_id,
+                    //     'is_pizza_flavor' => $isPizzaFlavor,
+                    //     'cmv' => $addonCMV,
+                    // ]);
                 }
             }
         }
@@ -227,12 +228,12 @@ class ReapplyAllProductMappings extends Command
             $pizzaFractionService = app(PizzaFractionService::class);
             $result = $pizzaFractionService->recalculateFractions($orderItem);
 
-            logger()->info('🍕 Frações recalculadas', [
-                'order_item' => $orderItem->id,
-                'pizza_flavors' => $result['pizza_flavors'],
-                'fraction' => $result['fraction'],
-                'updated' => $result['updated'],
-            ]);
+            // logger()->info('🍕 Frações recalculadas', [
+            //     'order_item' => $orderItem->id,
+            //     'pizza_flavors' => $result['pizza_flavors'],
+            //     'fraction' => $result['fraction'],
+            //     'updated' => $result['updated'],
+            // ]);
         }
     }
 
@@ -250,7 +251,7 @@ class ReapplyAllProductMappings extends Command
         // Detectar tamanho da pizza
         $pizzaSize = $this->detectPizzaSize($product, $orderItem);
 
-        if (!$pizzaSize) {
+        if (! $pizzaSize) {
             logger()->warning('⚠️ Não foi possível detectar tamanho da pizza', [
                 'product_id' => $product->id,
                 'product_name' => $product->name,
@@ -263,13 +264,13 @@ class ReapplyAllProductMappings extends Command
         // Calcular CMV pelo tamanho
         $correctCMV = $product->calculateCMV($pizzaSize);
 
-        logger()->info('🍕 CMV calculado por tamanho', [
-            'product_id' => $product->id,
-            'product_name' => $product->name,
-            'size' => $pizzaSize,
-            'cmv' => $correctCMV,
-            'generic_unit_cost' => $product->unit_cost,
-        ]);
+        // logger()->info('🍕 CMV calculado por tamanho', [
+        //     'product_id' => $product->id,
+        //     'product_name' => $product->name,
+        //     'size' => $pizzaSize,
+        //     'cmv' => $correctCMV,
+        //     'generic_unit_cost' => $product->unit_cost,
+        // ]);
 
         return $correctCMV;
     }

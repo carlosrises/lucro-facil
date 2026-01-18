@@ -43,7 +43,7 @@ class OrderItemMappingsController extends Controller
         }
 
         $size = $this->detectPizzaSize($orderItem->name);
-        if (!$size) {
+        if (! $size) {
             return (float) $product->unit_cost;
         }
 
@@ -58,6 +58,7 @@ class OrderItemMappingsController extends Controller
 
         return (float) $product->unit_cost;
     }
+
     public function __construct(
         private PizzaFractionService $pizzaFractionService
     ) {}
@@ -97,22 +98,22 @@ class OrderItemMappingsController extends Controller
             $mainProduct = InternalProduct::find($mainMapping['internal_product_id']);
             if ($mainProduct && $mainProduct->size) {
                 $pizzaSize = $mainProduct->size;
-                logger()->info('🍕 Tamanho do produto pai', [
-                    'product_id' => $mainProduct->id,
-                    'product_name' => $mainProduct->name,
-                    'size_field' => $mainProduct->size,
-                    'detected_size' => $pizzaSize,
-                ]);
+                // logger()->info('🍕 Tamanho do produto pai', [
+                //     'product_id' => $mainProduct->id,
+                //     'product_name' => $mainProduct->name,
+                //     'size_field' => $mainProduct->size,
+                //     'detected_size' => $pizzaSize,
+                // ]);
             }
         }
 
         // Fallback: detectar do nome se produto pai não tiver size
-        if (!$pizzaSize) {
+        if (! $pizzaSize) {
             $pizzaSize = $this->detectPizzaSize($orderItem->name);
-            logger()->info('🍕 Tamanho detectado do nome (fallback)', [
-                'item_name' => $orderItem->name,
-                'detected_size' => $pizzaSize,
-            ]);
+            // logger()->info('🍕 Tamanho detectado do nome (fallback)', [
+            //     'item_name' => $orderItem->name,
+            //     'detected_size' => $pizzaSize,
+            // ]);
         }
 
         // Buscar mappings existentes antes de deletar (para preservar os que não foram enviados)
@@ -129,7 +130,7 @@ class OrderItemMappingsController extends Controller
 
         foreach ($existingMappings as $existing) {
             $isBeingUpdated = collect($validated['mappings'])->contains('id', $existing->id);
-            if (!$isBeingUpdated) {
+            if (! $isBeingUpdated) {
                 // Recalcular CMV dos sabores existentes com o novo tamanho
                 $product = $existing->internalProduct;
                 $correctCMV = null;
@@ -150,13 +151,13 @@ class OrderItemMappingsController extends Controller
         foreach ($mappingsData as $mapping) {
             $product = InternalProduct::find($mapping['internal_product_id']);
 
-            logger()->info('🔍 Processando mapping', [
-                'product_id' => $product?->id,
-                'product_name' => $product?->name,
-                'product_category' => $product?->product_category,
-                'mapping_type' => $mapping['mapping_type'],
-                'pizza_size' => $pizzaSize,
-            ]);
+            // logger()->info('🔍 Processando mapping', [
+            //     'product_id' => $product?->id,
+            //     'product_name' => $product?->name,
+            //     'product_category' => $product?->product_category,
+            //     'mapping_type' => $mapping['mapping_type'],
+            //     'pizza_size' => $pizzaSize,
+            // ]);
 
             // Calcular CMV correto: sabores de pizza usam tamanho do produto pai
             $correctCMV = null;
@@ -164,24 +165,24 @@ class OrderItemMappingsController extends Controller
                 if ($product->product_category === 'sabor_pizza' && $pizzaSize) {
                     $cmv = $product->calculateCMV($pizzaSize);
 
-                    logger()->info('💰 CMV calculado para sabor', [
-                        'product_id' => $product->id,
-                        'product_name' => $product->name,
-                        'product_category' => $product->product_category,
-                        'size' => $pizzaSize,
-                        'cmv_calculated' => $cmv,
-                        'unit_cost' => $product->unit_cost,
-                        'has_costs' => $product->costs()->exists(),
-                    ]);
+                    // logger()->info('💰 CMV calculado para sabor', [
+                    //     'product_id' => $product->id,
+                    //     'product_name' => $product->name,
+                    //     'product_category' => $product->product_category,
+                    //     'size' => $pizzaSize,
+                    //     'cmv_calculated' => $cmv,
+                    //     'unit_cost' => $product->unit_cost,
+                    //     'has_costs' => $product->costs()->exists(),
+                    // ]);
 
                     $correctCMV = $cmv > 0 ? $cmv : (float) $product->unit_cost;
                 } else {
                     $correctCMV = (float) $product->unit_cost;
 
-                    logger()->info('💰 Usando unit_cost (não é sabor)', [
-                        'product_category' => $product->product_category,
-                        'unit_cost' => $correctCMV,
-                    ]);
+                    // logger()->info('💰 Usando unit_cost (não é sabor)', [
+                    //     'product_category' => $product->product_category,
+                    //     'unit_cost' => $correctCMV,
+                    // ]);
                 }
             }
 

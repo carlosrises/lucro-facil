@@ -28,18 +28,18 @@ class SyncOrdersJob implements ShouldQueue
     public function handle(): void
     {
         try {
-            logger()->info('🚀 Iniciando SyncOrdersJob', [
-                'tenant' => $this->tenantId,
-                'store' => $this->storeId,
-            ]);
+            // logger()->info('🚀 Iniciando SyncOrdersJob', [
+            //     'tenant' => $this->tenantId,
+            //     'store' => $this->storeId,
+            // ]);
 
             $store = Store::where('tenant_id', $this->tenantId)->findOrFail($this->storeId);
             $client = new IfoodClient($this->tenantId, $this->storeId);
 
-            logger()->info('🔑 Store encontrada', [
-                'store_id' => $store->id,
-                'tenant_id' => $store->tenant_id,
-            ]);
+            // logger()->info('🔑 Store encontrada', [
+            //     'store_id' => $store->id,
+            //     'tenant_id' => $store->tenant_id,
+            // ]);
 
             $cursor = SyncCursor::firstOrCreate([
                 'tenant_id' => $this->tenantId,
@@ -47,10 +47,10 @@ class SyncOrdersJob implements ShouldQueue
                 'module' => 'orders',
             ]);
 
-            logger()->info('🔑 Store encontrada', [
-                'store_id' => $store->id,
-                'tenant_id' => $store->tenant_id,
-            ]);
+            // logger()->info('🔑 Store encontrada', [
+            //     'store_id' => $store->id,
+            //     'tenant_id' => $store->tenant_id,
+            // ]);
 
             // Header x-polling-merchants: IDs das lojas separadas por vírgula
             // Inclui apenas lojas que possuem token OAuth válido
@@ -70,9 +70,9 @@ class SyncOrdersJob implements ShouldQueue
                 return;
             }
 
-            logger()->info('📡 Merchant IDs para polling', [
-                'merchant_ids' => $merchantIds,
-            ]);
+            // logger()->info('📡 Merchant IDs para polling', [
+            //     'merchant_ids' => $merchantIds,
+            // ]);
 
             $events = $client->get('events/v1.0/events:polling', [], [
                 'x-polling-merchants' => $merchantIds,
@@ -82,20 +82,20 @@ class SyncOrdersJob implements ShouldQueue
             $eventsList = isset($events['events']) ? $events['events'] : $events;
 
             if (empty($eventsList)) {
-                logger()->info('iFood sync: Nenhum evento encontrado', [
-                    'tenant_id' => $this->tenantId,
-                    'store_id' => $this->storeId,
-                    'raw' => $events, // loga a resposta crua para debug
-                ]);
+                // logger()->info('iFood sync: Nenhum evento encontrado', [
+                //     'tenant_id' => $this->tenantId,
+                //     'store_id' => $this->storeId,
+                //     'raw' => $events, // loga a resposta crua para debug
+                // ]);
 
                 return;
             }
 
-            logger()->info('📦 Eventos para processar', [
-                'tenant_id' => $this->tenantId,
-                'store_id' => $this->storeId,
-                'qtd' => count($eventsList),
-            ]);
+            // logger()->info('📦 Eventos para processar', [
+            //     'tenant_id' => $this->tenantId,
+            //     'store_id' => $this->storeId,
+            //     'qtd' => count($eventsList),
+            // ]);
 
             DB::transaction(function () use ($eventsList, $client, $store, $cursor) {
                 $last = $cursor->cursor_key;
@@ -176,15 +176,15 @@ class SyncOrdersJob implements ShouldQueue
 
                         // Log de mudanças de status (Critérios 12-13)
                         if ($existingOrder && $oldStatus !== $newStatus) {
-                            logger()->info('🔄 Status do pedido atualizado', [
-                                'tenant_id' => $this->tenantId,
-                                'order_id' => $order->id,
-                                'order_code' => $order->code,
-                                'old_status' => $oldStatus,
-                                'new_status' => $newStatus,
-                                'event_code' => $eventCode,
-                                'cancelled_by_customer' => in_array($newStatus, ['CANCELLED', 'CANCELLATION_REQUESTED']),
-                            ]);
+                            // logger()->info('🔄 Status do pedido atualizado', [
+                            //     'tenant_id' => $this->tenantId,
+                            //     'order_id' => $order->id,
+                            //     'order_code' => $order->code,
+                            //     'old_status' => $oldStatus,
+                            //     'new_status' => $newStatus,
+                            //     'event_code' => $eventCode,
+                            //     'cancelled_by_customer' => in_array($newStatus, ['CANCELLED', 'CANCELLATION_REQUESTED']),
+                            // ]);
 
                             // Eventos específicos de cancelamento
                             if (in_array($newStatus, ['CANCELLED', 'CANCELLATION_REQUESTED'])) {
@@ -245,11 +245,11 @@ class SyncOrdersJob implements ShouldQueue
             $ackPayload = collect($eventsList)->pluck('id')->map(fn ($id) => ['id' => $id])->values()->all();
             try {
                 $client->post('events/v1.0/events/acknowledgment', $ackPayload);
-                logger()->info('✅ ACK enviado para eventos', [
-                    'tenant_id' => $this->tenantId,
-                    'store_id' => $this->storeId,
-                    'event_ids' => collect($eventsList)->pluck('id'),
-                ]);
+                // logger()->info('✅ ACK enviado para eventos', [
+                //     'tenant_id' => $this->tenantId,
+                //     'store_id' => $this->storeId,
+                //     'event_ids' => collect($eventsList)->pluck('id'),
+                // ]);
 
             } catch (\Throwable $e) {
                 logger()->error('❌ Falha ao enviar ACK de eventos iFood', [
@@ -260,11 +260,11 @@ class SyncOrdersJob implements ShouldQueue
                 ]);
             }
 
-            logger()->info('iFood sync concluída', [
-                'tenant_id' => $this->tenantId,
-                'store_id' => $this->storeId,
-                'events' => count($eventsList),
-            ]);
+            // logger()->info('iFood sync concluída', [
+            //     'tenant_id' => $this->tenantId,
+            //     'store_id' => $this->storeId,
+            //     'events' => count($eventsList),
+            // ]);
         } catch (Throwable $e) {
             logger()->error('Erro fatal na sync de pedidos iFood', [
                 'tenant_id' => $this->tenantId,

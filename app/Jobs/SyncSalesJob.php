@@ -24,7 +24,7 @@ class SyncSalesJob implements ShouldQueue
     public function handle(): void
     {
         try {
-            logger()->info('🚀 Iniciando SyncSalesJob (multi-tenant)');
+            // logger()->info('🚀 Iniciando SyncSalesJob (multi-tenant)');
 
             // Busca todas as lojas integradas ao iFood (provider = 'ifood')
             $stores = Store::where('provider', 'ifood')
@@ -62,23 +62,23 @@ class SyncSalesJob implements ShouldQueue
                         } catch (Throwable $e) {
                             // Se 404, considera como resultado vazio (sem vendas no período)
                             if (str_contains($e->getMessage(), '404')) {
-                                logger()->info('📊 Nenhuma venda encontrada (404)', [
-                                    'tenant_id' => $tenantId,
-                                    'store_id' => $storeId,
-                                    'page' => $page,
-                                ]);
+                                // logger()->info('📊 Nenhuma venda encontrada (404)', [
+                                //     'tenant_id' => $tenantId,
+                                //     'store_id' => $storeId,
+                                //     'page' => $page,
+                                // ]);
                                 $sales = [];
                             } else {
                                 throw $e; // Re-lança outros erros
                             }
                         }
 
-                        logger()->info('📊 Sales recebidos', [
-                            'tenant_id' => $tenantId,
-                            'store_id' => $storeId,
-                            'page' => $page,
-                            'qtd' => count($sales),
-                        ]);
+                        // logger()->info('📊 Sales recebidos', [
+                        //     'tenant_id' => $tenantId,
+                        //     'store_id' => $storeId,
+                        //     'page' => $page,
+                        //     'qtd' => count($sales),
+                        // ]);
 
                         DB::transaction(function () use ($sales, $tenantId, $storeId) {
                             foreach ($sales as $sale) {
@@ -161,7 +161,7 @@ class SyncSalesJob implements ShouldQueue
                 }
             }
 
-            logger()->info('✅ SyncSalesJob multi-tenant concluído');
+            // logger()->info('✅ SyncSalesJob multi-tenant concluído');
         } catch (Throwable $e) {
             logger()->error('❌ Erro na sync de Sales iFood', [
                 'error' => $e->getMessage(),

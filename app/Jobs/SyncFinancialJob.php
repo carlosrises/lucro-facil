@@ -23,10 +23,10 @@ class SyncFinancialJob implements ShouldQueue
     public function handle(): void
     {
         try {
-            logger()->info('🚀 Iniciando SyncFinancialJob', [
-                'tenant' => $this->tenantId,
-                'store' => $this->storeId,
-            ]);
+            // logger()->info('🚀 Iniciando SyncFinancialJob', [
+            //     'tenant' => $this->tenantId,
+            //     'store' => $this->storeId,
+            // ]);
 
             $store = Store::where('tenant_id', $this->tenantId)->findOrFail($this->storeId);
             $client = new IfoodClient($this->tenantId, $this->storeId);
@@ -57,12 +57,12 @@ class SyncFinancialJob implements ShouldQueue
                 $data = $client->get("financial/v3.0/merchants/{$store->external_id}/financial-events", $params);
 
                 $events = $data['financialEvents'] ?? [];
-                logger()->info('📊 Eventos financeiros recebidos', [
-                    'tenant_id' => $this->tenantId,
-                    'store_id' => $this->storeId,
-                    'page' => $page,
-                    'qtd' => count($events),
-                ]);
+                // logger()->info('📊 Eventos financeiros recebidos', [
+                //     'tenant_id' => $this->tenantId,
+                //     'store_id' => $this->storeId,
+                //     'page' => $page,
+                //     'qtd' => count($events),
+                // ]);
 
                 DB::transaction(function () use ($events) {
                     foreach ($events as $ev) {
@@ -94,10 +94,10 @@ class SyncFinancialJob implements ShouldQueue
 
             $cursor->update(['last_synced_at' => now()]);
 
-            logger()->info('✅ SyncFinancialJob concluído', [
-                'tenant_id' => $this->tenantId,
-                'store_id' => $this->storeId,
-            ]);
+            // logger()->info('✅ SyncFinancialJob concluído', [
+            //     'tenant_id' => $this->tenantId,
+            //     'store_id' => $this->storeId,
+            // ]);
         } catch (Throwable $e) {
             logger()->error('❌ Erro fatal na sync financeira iFood', [
                 'tenant_id' => $this->tenantId,
