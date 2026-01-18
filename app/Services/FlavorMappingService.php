@@ -44,19 +44,8 @@ class FlavorMappingService
      */
     protected function calculateCorrectCMV(InternalProduct $product, OrderItem $orderItem): float
     {
-        \Log::info('💰 FlavorMappingService - calculateCorrectCMV', [
-            'product_id' => $product->id,
-            'product_name' => $product->name,
-            'product_category' => $product->product_category,
-            'order_item_id' => $orderItem->id,
-            'order_item_name' => $orderItem->name,
-        ]);
-
         // Se não for sabor de pizza, usar unit_cost normal
         if ($product->product_category !== 'sabor_pizza') {
-            \Log::info('💰 Não é sabor_pizza, usando unit_cost', [
-                'unit_cost' => $product->unit_cost,
-            ]);
             return (float) $product->unit_cost;
         }
 
@@ -64,52 +53,26 @@ class FlavorMappingService
         $pizzaSize = null;
         $mainMapping = $orderItem->mappings()->where('mapping_type', 'main')->first();
 
-        \Log::info('🔍 Buscando produto pai', [
-            'has_main_mapping' => $mainMapping !== null,
-            'main_product_id' => $mainMapping?->internal_product_id,
-        ]);
-
         if ($mainMapping && $mainMapping->internalProduct) {
             $pizzaSize = $mainMapping->internalProduct->size;
-
-            \Log::info('🍕 FlavorMappingService - Tamanho do produto pai via mapping', [
-                'main_product_id' => $mainMapping->internalProduct->id,
-                'main_product_name' => $mainMapping->internalProduct->name,
-                'main_product_size' => $pizzaSize,
-            ]);
         }
 
         // FALLBACK: Detectar o tamanho do nome do item pai
-        if (!$pizzaSize) {
+        if (! $pizzaSize) {
             $pizzaSize = $this->detectPizzaSize($orderItem->name);
-
-            \Log::info('🍕 FlavorMappingService - Tamanho detectado do nome (fallback)', [
-                'order_item_name' => $orderItem->name,
-                'detected_size' => $pizzaSize,
-            ]);
         }
 
         // Se não detectou tamanho, usar unit_cost genérico
-        if (!$pizzaSize) {
-            \Log::info('⚠️ Tamanho não detectado, usando unit_cost', [
-                'unit_cost' => $product->unit_cost,
-            ]);
+        if (! $pizzaSize) {
             return (float) $product->unit_cost;
         }
 
         // Calcular CMV dinamicamente pela ficha técnica
         $cmv = $product->calculateCMV($pizzaSize);
 
-        \Log::info('💰 FlavorMappingService - CMV calculado', [
-            'product_name' => $product->name,
-            'size' => $pizzaSize,
-            'cmv_calculated' => $cmv,
-            'unit_cost' => $product->unit_cost,
-            'has_costs' => $product->costs()->exists(),
-        ]);
-
         return $cmv > 0 ? $cmv : (float) $product->unit_cost;
     }
+
     /**
      * Aplicar mapeamento de sabor a todos os add_ons com o mesmo nome
      */
@@ -117,26 +80,14 @@ class FlavorMappingService
         ProductMapping $mapping,
         int $tenantId
     ): int {
-        \Log::info('🍕 FlavorMappingService - Iniciando mapFlavorToAllOccurrences', [
-            'mapping_id' => $mapping->id,
-            'external_item_id' => $mapping->external_item_id,
-            'internal_product_id' => $mapping->internal_product_id,
-        ]);
-
         if ($mapping->item_type !== 'flavor') {
-            \Log::info('⚠️ Não é flavor, abortando');
             return 0;
         }
 
         // Extrair o nome do sabor do SKU do add-on
         $flavorName = $this->extractFlavorNameFromSku($mapping->external_item_id);
 
-        \Log::info('🍕 Nome do sabor extraído', [
-            'flavor_name' => $flavorName,
-        ]);
-
         if (! $flavorName) {
-            \Log::info('⚠️ Nome do sabor não extraído, abortando');
             return 0;
         }
 
@@ -147,10 +98,6 @@ class FlavorMappingService
             ->whereNotNull('add_ons')
             ->whereRaw('JSON_LENGTH(add_ons) > 0')
             ->get();
-
-        \Log::info('🔍 OrderItems com add_ons encontrados', [
-            'count' => $orderItems->count(),
-        ]);
 
         foreach ($orderItems as $orderItem) {
             $addOns = $orderItem->add_ons;
@@ -166,13 +113,6 @@ class FlavorMappingService
                     continue;
                 }
 
-                \Log::info('🎯 Add-on encontrado', [
-                    'order_item_id' => $orderItem->id,
-                    'order_item_name' => $orderItem->name,
-                    'add_on_name' => $addOnName,
-                    'add_on_index' => $index,
-                ]);
-
                 // Verificar se já tem mapping para este add-on específico
                 $existingMapping = OrderItemMapping::where('order_item_id', $orderItem->id)
                     ->where('mapping_type', 'addon')
@@ -183,21 +123,7 @@ class FlavorMappingService
                 $product = InternalProduct::find($mapping->internal_product_id);
                 $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : 0;
 
-                \Log::info('💰 CMV calculado', [
-                    'product_id' => $product?->id,
-                    'product_name' => $product?->name,
-                    'cmv_calculated' => $correctCMV,
-                ]);
-
                 if ($existingMapping) {
-                    \Log::info('🔄 Atualizando mapping existente', [
-                        'mapping_id' => $existingMapping->id,
-                        'old_internal_product_id' => $existingMapping->internal_product_id,
-                        'new_internal_product_id' => $mapping->internal_product_id,
-                        'old_unit_cost_override' => $existingMapping->unit_cost_override,
-                        'new_unit_cost_override' => $correctCMV,
-                    ]);
-
                     // ATUALIZAR mapping existente com novo produto e CMV
                     $existingMapping->update([
                         'internal_product_id' => $mapping->internal_product_id,
@@ -205,6 +131,7 @@ class FlavorMappingService
                     ]);
 
                     $mappedCount++;
+
                     continue;
                 }
 
@@ -213,13 +140,6 @@ class FlavorMappingService
 
                 // Obter quantidade do add-on (quantas unidades deste add-on no pedido)
                 $addOnQuantity = $addOn['quantity'] ?? $addOn['qty'] ?? 1;
-
-                \Log::info('✨ Criando novo mapping', [
-                    'order_item_id' => $orderItem->id,
-                    'fraction' => $fraction,
-                    'add_on_quantity' => $addOnQuantity,
-                    'unit_cost_override' => $correctCMV,
-                ]);
 
                 // Criar o mapeamento com CMV correto
                 OrderItemMapping::create([
@@ -242,10 +162,6 @@ class FlavorMappingService
             }
         }
 
-        \Log::info('✅ FlavorMappingService - Mappings concluídos', [
-            'mapped_count' => $mappedCount,
-        ]);
-
         return $mappedCount;
     }
 
@@ -254,15 +170,9 @@ class FlavorMappingService
      * Cria mappings para sabores classificados que ainda não têm, e atualiza frações de todos
      */
     protected function recalculateAllFlavorsForOrderItem(OrderItem $orderItem): void
-    {
-        \Log::info('🔄 recalculateAllFlavorsForOrderItem', [
-            'order_item_id' => $orderItem->id,
-            'order_item_name' => $orderItem->name,
-        ]);
-
-        // Buscar todos os add-ons que são sabores (têm ProductMapping tipo 'flavor')
+    {        // Buscar todos os add-ons que são sabores (têm ProductMapping tipo 'flavor')
         $addOns = $orderItem->add_ons;
-        if (!is_array($addOns) || empty($addOns)) {
+        if (! is_array($addOns) || empty($addOns)) {
             return;
         }
 
@@ -270,7 +180,7 @@ class FlavorMappingService
 
         foreach ($addOns as $index => $addOn) {
             $addOnName = $addOn['name'] ?? '';
-            if (!$addOnName) {
+            if (! $addOnName) {
                 continue;
             }
 
@@ -292,19 +202,11 @@ class FlavorMappingService
         }
 
         if (empty($classifiedFlavors)) {
-            \Log::info('⚠️ Nenhum sabor classificado encontrado');
             return;
         }
 
         $totalFlavors = count($classifiedFlavors);
-        $newFraction = 1.0 / $totalFlavors;
-
-        \Log::info('📊 Frações calculadas', [
-            'total_flavors' => $totalFlavors,
-            'fraction' => $newFraction,
-        ]);
-
-        // Para cada sabor classificado, criar ou atualizar OrderItemMapping
+        $newFraction = 1.0 / $totalFlavors;        // Para cada sabor classificado, criar ou atualizar OrderItemMapping
         foreach ($classifiedFlavors as $flavor) {
             $existingMapping = OrderItemMapping::where('order_item_id', $orderItem->id)
                 ->where('mapping_type', 'addon')
@@ -321,12 +223,6 @@ class FlavorMappingService
                     'quantity' => $newFraction * $flavor['quantity'],
                     'unit_cost_override' => $correctCMV,
                 ]);
-
-                \Log::info('✅ Mapping atualizado', [
-                    'index' => $flavor['index'],
-                    'name' => $flavor['name'],
-                    'new_quantity' => $newFraction * $flavor['quantity'],
-                ]);
             } else {
                 // Criar novo mapping
                 OrderItemMapping::create([
@@ -340,12 +236,6 @@ class FlavorMappingService
                     'external_reference' => (string) $flavor['index'],
                     'external_name' => $flavor['name'],
                     'unit_cost_override' => $correctCMV,
-                ]);
-
-                \Log::info('✨ Mapping criado', [
-                    'index' => $flavor['index'],
-                    'name' => $flavor['name'],
-                    'quantity' => $newFraction * $flavor['quantity'],
                 ]);
             }
         }
@@ -365,7 +255,7 @@ class FlavorMappingService
             ->first();
 
         // Se não é sabor de pizza (item_type='flavor'), retorna 100%
-        if (!$mapping || $mapping->item_type !== 'flavor') {
+        if (! $mapping || $mapping->item_type !== 'flavor') {
             return 1.0;
         }
 

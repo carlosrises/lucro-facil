@@ -56,15 +56,7 @@ class PizzaFractionService
             if (abs((float) $mapping->quantity - 1.0) > 0.0001) {
                 $mapping->quantity = 1.0;
                 $mapping->save();
-                $updated++;
-
-                \Log::info('🔄 Não-sabor corrigido para 100%', [
-                    'mapping_id' => $mapping->id,
-                    'option_type' => $mapping->option_type,
-                    'external_name' => $mapping->external_name,
-                    'old_quantity' => $mapping->getOriginal('quantity'),
-                ]);
-            }
+                $updated++;            }
         }
 
         // Depois, atualizar cada sabor com a fração calculada
@@ -99,18 +91,7 @@ class PizzaFractionService
                     $mapping->unit_cost_override = $newCMV;
                 }
                 $mapping->save();
-                $updated++;
-
-                \Log::info('🔄 Fração e CMV atualizados', [
-                    'mapping_id' => $mapping->id,
-                    'product_name' => $product?->name,
-                    'fraction' => $fraction,
-                    'addon_quantity' => $addOnQuantity,
-                    'new_quantity' => $newQuantity,
-                    'old_cmv' => $mapping->getOriginal('unit_cost_override'),
-                    'new_cmv' => $newCMV,
-                ]);
-            }
+                $updated++;            }
         }
 
         return [
@@ -135,24 +116,11 @@ class PizzaFractionService
         $mainMapping = $orderItem->mappings()->where('mapping_type', 'main')->first();
 
         if ($mainMapping && $mainMapping->internalProduct) {
-            $pizzaSize = $mainMapping->internalProduct->size;
-
-            \Log::info('🍕 PizzaFractionService - Tamanho do produto pai', [
-                'main_product_id' => $mainMapping->internalProduct->id,
-                'main_product_name' => $mainMapping->internalProduct->name,
-                'main_product_size' => $pizzaSize,
-            ]);
-        }
+            $pizzaSize = $mainMapping->internalProduct->size;        }
 
         // FALLBACK: Detectar o tamanho do nome do item pai
         if (!$pizzaSize) {
-            $pizzaSize = $this->detectPizzaSize($orderItem->name);
-
-            \Log::info('🍕 PizzaFractionService - Tamanho detectado do nome (fallback)', [
-                'order_item_name' => $orderItem->name,
-                'detected_size' => $pizzaSize,
-            ]);
-        }
+            $pizzaSize = $this->detectPizzaSize($orderItem->name);        }
 
         // Se não detectou tamanho, usar unit_cost genérico
         if (!$pizzaSize) {
@@ -160,16 +128,7 @@ class PizzaFractionService
         }
 
         // Calcular CMV dinamicamente pela ficha técnica
-        $cmv = $product->calculateCMV($pizzaSize);
-
-        \Log::info('💰 PizzaFractionService - CMV calculado', [
-            'product_name' => $product->name,
-            'size' => $pizzaSize,
-            'cmv_calculated' => $cmv,
-            'unit_cost' => $product->unit_cost,
-        ]);
-
-        return $cmv > 0 ? $cmv : (float) $product->unit_cost;
+        $cmv = $product->calculateCMV($pizzaSize);        return $cmv > 0 ? $cmv : (float) $product->unit_cost;
     }
 
     /**

@@ -293,19 +293,6 @@ class SyncTakeatOrders extends Command
                 'error' => $e->getMessage(),
             ]);
         }
-
-        logger()->info('✅ Pedido Takeat salvo', [
-            'order_id' => $order->id,
-            'order_uuid' => $orderUuid,
-            'basket_id' => $basketId,
-            'origin' => $origin,
-            'sales_channel' => $session['sales_channel'] ?? null,
-            'basket_channel' => $basket['channel'] ?? null,
-            'gross_total' => $grossTotal,
-            'net_total' => $netTotal,
-            'real_payment_total' => $realPaymentTotal,
-            'payments_count' => count($payments),
-        ]);
     }
 
     /**
@@ -428,13 +415,13 @@ class SyncTakeatOrders extends Command
                     'unit_cost_override' => $addonCMV,
                 ]);
 
-                logger()->info('🍕 Auto-mapeamento Takeat: complemento aplicado', [
-                    'order_item' => $orderItem->id,
-                    'addon_name' => $addonName,
-                    'product_id' => $addonMapping->internal_product_id,
-                    'is_pizza_flavor' => $isPizzaFlavor,
-                    'cmv' => $addonCMV,
-                ]);
+                // logger()->info('🍕 Auto-mapeamento Takeat: complemento aplicado', [
+                //     'order_item' => $orderItem->id,
+                //     'addon_name' => $addonName,
+                //     'product_id' => $addonMapping->internal_product_id,
+                //     'is_pizza_flavor' => $isPizzaFlavor,
+                //     'cmv' => $addonCMV,
+                // ]);
             }
         }
 
@@ -443,22 +430,22 @@ class SyncTakeatOrders extends Command
             $pizzaFractionService = app(PizzaFractionService::class);
             $result = $pizzaFractionService->recalculateFractions($orderItem);
 
-            logger()->info('🍕 Auto-mapeamento Takeat: frações recalculadas', [
-                'order_item' => $orderItem->id,
-                'pizza_flavors' => $result['pizza_flavors'],
-                'fraction' => $result['fraction'],
-                'updated' => $result['updated'],
-            ]);
+            // logger()->info('🍕 Auto-mapeamento Takeat: frações recalculadas', [
+            //     'order_item' => $orderItem->id,
+            //     'pizza_flavors' => $result['pizza_flavors'],
+            //     'fraction' => $result['fraction'],
+            //     'updated' => $result['updated'],
+            // ]);
         }
 
-        logger()->info('✅ Auto-mapeamento Takeat aplicado', [
-            'order_item' => $orderItem->id,
-            'sku' => $orderItem->sku,
-            'product_id' => $productMapping->internal_product_id,
-            'cmv' => $correctCMV,
-            'addons_mapped' => count($addOns),
-            'has_pizza_flavors' => $hasPizzaFlavors,
-        ]);
+        // logger()->info('✅ Auto-mapeamento Takeat aplicado', [
+        //     'order_item' => $orderItem->id,
+        //     'sku' => $orderItem->sku,
+        //     'product_id' => $productMapping->internal_product_id,
+        //     'cmv' => $correctCMV,
+        //     'addons_mapped' => count($addOns),
+        //     'has_pizza_flavors' => $hasPizzaFlavors,
+        // ]);
     }
 
     /**
@@ -488,13 +475,13 @@ class SyncTakeatOrders extends Command
         // Calcular CMV pelo tamanho
         $correctCMV = $product->calculateCMV($pizzaSize);
 
-        logger()->info('🍕 Takeat: CMV calculado por tamanho', [
-            'product_id' => $product->id,
-            'product_name' => $product->name,
-            'size' => $pizzaSize,
-            'cmv' => $correctCMV,
-            'generic_unit_cost' => $product->unit_cost,
-        ]);
+        // logger()->info('🍕 Takeat: CMV calculado por tamanho', [
+        //     'product_id' => $product->id,
+        //     'product_name' => $product->name,
+        //     'size' => $pizzaSize,
+        //     'cmv' => $correctCMV,
+        //     'generic_unit_cost' => $product->unit_cost,
+        // ]);
 
         return $correctCMV;
     }
