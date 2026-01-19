@@ -11,7 +11,11 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { calculateItemCost, calculateOrderCMV } from '@/lib/order-calculations';
+import {
+    calculateItemCost,
+    calculateNetRevenue,
+    calculateOrderCMV,
+} from '@/lib/order-calculations';
 import { IconChevronDown } from '@tabler/icons-react';
 import { ColumnDef } from '@tanstack/react-table';
 import { endOfDay, startOfDay } from 'date-fns';
@@ -672,210 +676,11 @@ export const columns: ColumnDef<Order>[] = [
         accessorKey: 'net_total',
         header: 'Total líquido',
         cell: ({ row }) => {
-            const items = row.original.items || [];
-            const raw = row.original.raw;
-            const calculatedCosts = row.original.calculated_costs || null;
-
-            // Se já temos o net_revenue calculado no backend, usar esse valor
-            if (
-                calculatedCosts?.net_revenue !== undefined &&
-                calculatedCosts?.net_revenue !== null
-            ) {
-                const netRevenue = calculatedCosts.net_revenue;
-                const isCancelled = row.original.status === 'CANCELLED';
-
-                return (
-                    <span
-                        className={`${
-                            isCancelled
-                                ? 'font-semibold text-muted-foreground line-through'
-                                : 'font-semibold'
-                        } text-end`}
-                    >
-                        {new Intl.NumberFormat('pt-BR', {
-                            style: 'currency',
-                            currency: 'BRL',
-                        }).format(netRevenue)}
-                    </span>
-                );
-            }
-
-            // Fallback: calcular manualmente (para pedidos antigos sem calculated_costs)
-            // Para Takeat, calcular net_total considerando custos, impostos e taxas
-            if (row.original.provider === 'takeat') {
-                // Usar a mesma lógica do "Total do Pedido" para a base de cálculo
-                let orderTotal = 0;
-                if (raw?.session?.total_delivery_price) {
-                    orderTotal = parseFloat(
-                        String(raw.session.total_delivery_price),
-                    );
-                } else if (raw?.session?.old_total_price) {
-                    orderTotal = parseFloat(
-                        String(raw.session.old_total_price),
-                    );
-                } else if (raw?.session?.total_price) {
-                    orderTotal = parseFloat(String(raw.session.total_price));
-                } else {
-                    orderTotal = parseFloat(row.original.gross_total || '0');
-                }
-
-                // Calcular custo total dos produtos (CMV)
-                const totalCost = calculateOrderCMV(items);
-
-                // Calcular impostos totais
-                const totalTax = items.reduce((sum, item) => {
-                    if (
-                        item.internal_product?.tax_category?.total_tax_rate !==
-                            undefined &&
-                        item.internal_product?.tax_category?.total_tax_rate !==
-                            null
-                    ) {
-                        const quantity = item.qty || item.quantity || 0;
-                        const unitPrice = item.unit_price || item.price || 0;
-                        const itemTotal = quantity * unitPrice;
-                        const taxRate =
-                            item.internal_product.tax_category.total_tax_rate /
-                            100;
-                        return sum + itemTotal * taxRate;
-                    }
-                    return sum;
-                }, 0);
-
-                // Adicionar custos e comissões personalizadas
-                const extraCosts =
-                    typeof row.original.total_costs === 'string'
-                        ? parseFloat(row.original.total_costs)
-                        : (row.original.total_costs ?? 0);
-                const commissions =
-                    typeof row.original.total_commissions === 'string'
-                        ? parseFloat(row.original.total_commissions)
-                        : (row.original.total_commissions ?? 0);
-
-                // Impostos adicionais (categoria 'tax' em calculated_costs)
-                const calculatedCosts = row.original.calculated_costs || null;
-                const additionalTaxes = calculatedCosts?.taxes || [];
-                const totalAdditionalTax = additionalTaxes.reduce(
-                    (sum: number, tax: any) =>
-                        sum + (tax.calculated_value || 0),
-                    0,
-                );
-
-                // Taxas de pagamento (categoria 'payment_method' em calculated_costs)
-                const paymentFees = calculatedCosts?.payment_methods || [];
-                const totalPaymentFees = paymentFees.reduce(
-                    (sum: number, fee: any) =>
-                        sum + (fee.calculated_value || 0),
-                    0,
-                );
-
-                // Calcular subsídio dos pagamentos
-                const payments = raw?.session?.payments || [];
-                const totalSubsidy = payments.reduce(
-                    (sum: number, payment: any) => {
-                        const paymentName = (
-                            payment.payment_method?.name || ''
-                        ).toLowerCase();
-                        const paymentKeyword = (
-                            payment.payment_method?.keyword || ''
-                        ).toLowerCase();
-                        const isSubsidy =
-                            paymentName.includes('subsidiado') ||
-                            paymentName.includes('desconto') ||
-                            paymentName.includes('cupom') ||
-                            paymentKeyword.includes('subsidiado') ||
-                            paymentKeyword.includes('desconto') ||
-                            paymentKeyword.includes('cupom');
-
-                        return isSubsidy
-                            ? sum + parseFloat(payment.payment_value || '0')
-                            : sum;
-                    },
-                    0,
-                );
-
-                // Calcular subtotal para Total líquido
-                // Se usar total_delivery_price, NÃO somar subsídio (já está incluído)
-                const deliveryFee = parseFloat(
-                    String(row.original.delivery_fee || '0'),
-                );
-                let subtotal = orderTotal;
-                const usedTotalDeliveryPrice =
-                    raw?.session?.total_delivery_price;
-                if (!usedTotalDeliveryPrice) {
-                    subtotal += totalSubsidy + deliveryFee;
-                }
-
-                // Líquido = Subtotal - CMV - Impostos - Custos - Comissões - Taxas de Pagamento
-                const netTotal =
-                    subtotal -
-                    totalCost -
-                    totalTax -
-                    totalAdditionalTax -
-                    extraCosts -
-                    commissions -
-                    totalPaymentFees;
-                const isCancelled = row.original.status === 'CANCELLED';
-
-                return orderTotal > 0 ? (
-                    <span
-                        className={`${
-                            isCancelled
-                                ? 'font-semibold text-muted-foreground line-through'
-                                : 'font-semibold'
-                        } text-end`}
-                    >
-                        {new Intl.NumberFormat('pt-BR', {
-                            style: 'currency',
-                            currency: 'BRL',
-                        }).format(netTotal)}
-                    </span>
-                ) : (
-                    <div className="text-right">
-                        <span className="text-muted-foreground">--</span>
-                    </div>
-                );
-            }
-
-            // Para iFood e outros, calcular net_total
-            const orderTotal = raw?.total?.orderAmount ?? 0;
-
-            // Calcular custo total dos produtos
-            const totalCost = items.reduce((sum, item) => {
-                return sum + calculateItemCost(item);
-            }, 0);
-
-            // Calcular impostos totais
-            const totalTax = items.reduce((sum, item) => {
-                if (
-                    item.internal_product?.tax_category?.total_tax_rate !==
-                        undefined &&
-                    item.internal_product?.tax_category?.total_tax_rate !== null
-                ) {
-                    const quantity = item.qty || item.quantity || 0;
-                    const unitPrice = item.unit_price || item.price || 0;
-                    const itemTotal = quantity * unitPrice;
-                    const taxRate =
-                        item.internal_product.tax_category.total_tax_rate / 100;
-                    return sum + itemTotal * taxRate;
-                }
-                return sum;
-            }, 0);
-
-            // Adicionar custos e comissões da página "Custos e Comissões"
-            const extraCosts =
-                typeof row.original.total_costs === 'string'
-                    ? parseFloat(row.original.total_costs)
-                    : (row.original.total_costs ?? 0);
-            const commissions =
-                typeof row.original.total_commissions === 'string'
-                    ? parseFloat(row.original.total_commissions)
-                    : (row.original.total_commissions ?? 0);
-
-            const netTotal =
-                orderTotal - totalCost - totalTax - extraCosts - commissions;
+            // Usar o mesmo cálculo do card de detalhamento financeiro
+            const netRevenue = calculateNetRevenue(row.original);
             const isCancelled = row.original.status === 'CANCELLED';
 
-            return orderTotal > 0 ? (
+            return (
                 <span
                     className={`${
                         isCancelled
@@ -886,12 +691,8 @@ export const columns: ColumnDef<Order>[] = [
                     {new Intl.NumberFormat('pt-BR', {
                         style: 'currency',
                         currency: 'BRL',
-                    }).format(netTotal)}
+                    }).format(netRevenue)}
                 </span>
-            ) : (
-                <div className="text-right">
-                    <span className="text-muted-foreground">--</span>
-                </div>
             );
         },
     },
