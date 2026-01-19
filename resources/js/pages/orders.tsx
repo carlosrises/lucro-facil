@@ -39,6 +39,13 @@ type OrdersPageProps = {
         next_page_url?: string | null;
         prev_page_url?: string | null;
     };
+    indicators: {
+        subtotal: number;
+        averageTicket: number;
+        cmv: number;
+        netRevenue: number;
+        orderCount: number;
+    };
     filters: Record<string, any>;
     stores: Store[];
     providerOptions: Array<{ value: string; label: string }>;
@@ -57,6 +64,7 @@ type OrdersPageProps = {
 export default function Orders() {
     const {
         orders,
+        indicators,
         filters,
         stores,
         providerOptions,
@@ -99,6 +107,7 @@ export default function Orders() {
                             noPaymentInfoCount={noPaymentInfoCount}
                             internalProducts={internalProducts}
                             marginSettings={marginSettings}
+                            indicators={indicators}
                         />
                     </div>
                 </div>

@@ -59,9 +59,11 @@ class OrdersController extends Controller
                 $startDate = $request->input('start_date', now()->startOfMonth()->format('Y-m-d'));
                 $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
 
-                // Usar whereDate para comparar apenas a data, considerando o timezone da aplicação
-                return $q->whereDate('placed_at', '>=', $startDate)
-                    ->whereDate('placed_at', '<=', $endDate);
+                // Converter datas do horário de Brasília para UTC para filtrar corretamente
+                $startDateUtc = \Carbon\Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+                $endDateUtc = \Carbon\Carbon::parse($endDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+
+                return $q->whereBetween('placed_at', [$startDateUtc, $endDateUtc]);
             })
             ->when($request->input('unmapped_only'), function ($q) {
                 // Filtrar apenas pedidos com itens não mapeados
@@ -289,8 +291,12 @@ class OrdersController extends Controller
             ->unique('value')
             ->values();
 
+        // Calcular indicadores do período (apenas pedidos não cancelados)
+        $indicators = $this->calculatePeriodIndicators($request);
+
         return Inertia::render('orders', [
             'orders' => $orders,
+            'indicators' => $indicators,
             'filters' => [
                 'search' => $request->input('search'),
                 'status' => $request->input('status'),
@@ -831,5 +837,104 @@ class OrdersController extends Controller
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Calcular indicadores do período (Subtotal, Ticket Médio, CMV, Total Líquido)
+     */
+    private function calculatePeriodIndicators(Request $request): array
+    {
+        // Construir query base com os mesmos filtros da listagem
+        $query = Order::query()
+            ->with([
+                'items.internalProduct',
+                'items.mappings.internalProduct',
+            ])
+            ->where('tenant_id', tenant_id())
+            ->where('status', '!=', 'CANCELLED') // Excluir cancelados dos indicadores
+            ->when($request->input('store_id'), fn ($q, $storeId) => $q->where('store_id', $storeId))
+            ->when($request->input('provider'), function ($q, $providerFilter) {
+                if (str_contains($providerFilter, ':')) {
+                    [$provider, $origin] = explode(':', $providerFilter, 2);
+                    $q->where('provider', $provider)->where('origin', $origin);
+                } else {
+                    $q->where('provider', $providerFilter);
+                }
+            })
+            ->when(true, function ($q) use ($request) {
+                $startDate = $request->input('start_date', now()->startOfMonth()->format('Y-m-d'));
+                $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
+
+                $startDateUtc = \Carbon\Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+                $endDateUtc = \Carbon\Carbon::parse($endDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+
+                return $q->whereBetween('placed_at', [$startDateUtc, $endDateUtc]);
+            })
+            ->when($request->input('order_type'), function ($q, $orderType) {
+                $normalizedType = strtoupper($orderType);
+                $q->where(function ($query) use ($normalizedType) {
+                    $query->where(function ($q) use ($normalizedType) {
+                        $q->where('provider', 'takeat')
+                            ->whereRaw("UPPER(JSON_UNQUOTE(JSON_EXTRACT(raw, '$.session.table.table_type'))) = ?", [$normalizedType]);
+                    })
+                        ->orWhereRaw("UPPER(JSON_UNQUOTE(JSON_EXTRACT(raw, '$.orderType'))) = ?", [$normalizedType]);
+                });
+            });
+
+        // Calcular totais agregados
+        $aggregates = $query->get();
+        
+        $orderCount = $aggregates->count();
+        $subtotal = $aggregates->sum('gross_total');
+        
+        // Calcular CMV e Total Líquido (mesma lógica do frontend)
+        $cmv = 0;
+        $netRevenue = 0;
+        
+        foreach ($aggregates as $order) {
+            // ========== CMV ==========
+            foreach ($order->items as $item) {
+                // Usar total_cost se disponível (mais confiável)
+                if ($item->total_cost !== null) {
+                    $cmv += (float) $item->total_cost;
+                    continue;
+                }
+                
+                // Fallback: calcular manualmente
+                $itemQuantity = $item->qty ?? $item->quantity ?? 0;
+                
+                // Sistema novo: usar mappings
+                if (!empty($item->mappings)) {
+                    $mappingsCost = 0;
+                    foreach ($item->mappings as $mapping) {
+                        if (isset($mapping->internal_product->unit_cost)) {
+                            $unitCost = (float) $mapping->internal_product->unit_cost;
+                            $mappingQuantity = $mapping->quantity ?? 1;
+                            $mappingsCost += $unitCost * $mappingQuantity;
+                        }
+                    }
+                    $cmv += $mappingsCost * $itemQuantity;
+                } 
+                // Sistema legado: internal_product direto
+                elseif (isset($item->internal_product->unit_cost)) {
+                    $unitCost = (float) $item->internal_product->unit_cost;
+                    $cmv += $unitCost * $itemQuantity;
+                }
+            }
+            
+            // ========== Total Líquido (usar net_revenue calculado) ==========
+            $netRevenue += (float) ($order->net_revenue ?? 0);
+        }
+
+        // Calcular ticket médio
+        $averageTicket = $orderCount > 0 ? $subtotal / $orderCount : 0;
+
+        return [
+            'subtotal' => $subtotal,
+            'averageTicket' => $averageTicket,
+            'cmv' => $cmv,
+            'netRevenue' => $netRevenue,
+            'orderCount' => $orderCount,
+        ];
     }
 }
