@@ -161,18 +161,76 @@ export function OrderExpandedDetails({ order }: OrderExpandedDetailsProps) {
         }
     };
 
+    // Detecta tipo de pedido (delivery, takeout ou indoor)
+    const orderType = order.raw?.orderType; // DELIVERY, TAKEOUT, INDOOR
+    const isDelivery = orderType === 'DELIVERY' || deliveryMode === 'DEFAULT';
+    const isTakeout =
+        orderType === 'TAKEOUT' ||
+        deliveryMode === 'PICKUP' ||
+        deliveryMode === 'TAKEOUT';
+
+    // Detecta quem realiza a entrega (apenas para delivery)
+    // deliveredByMarketplace: true significa que o marketplace entrega
+    // deliveredByMarketplace: false significa que a loja entrega
+    const deliveredByMarketplace =
+        order.raw?.delivery?.deliveredByMarketplace ?? false;
+
     // Se não há dados adicionais, não renderiza
     if (
         benefitsList.length === 0 &&
         !cpfCnpj &&
         orderTiming !== 'SCHEDULED' &&
-        !takeoutCode
+        !takeoutCode &&
+        !orderType
     ) {
         return null;
     }
 
     return (
         <>
+            {/* Tipo de Pedido (Delivery/Retirada) */}
+            {orderType && (
+                <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+                    <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                        <CardTitle className="flex h-[18px] items-center font-semibold">
+                            Tipo de Pedido
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="rounded-md bg-card p-0">
+                        <ul className="m-0 flex w-full flex-col ps-0">
+                            <li className="flex flex-row items-center justify-between gap-2 px-3 py-4">
+                                <span className="text-sm leading-4 font-normal text-muted-foreground">
+                                    Modalidade
+                                </span>
+                                <span className="text-sm leading-4 font-semibold whitespace-nowrap">
+                                    {isDelivery
+                                        ? '🚗 Delivery'
+                                        : isTakeout
+                                          ? '🏪 Retirada no Local'
+                                          : orderType === 'INDOOR'
+                                            ? '🪑 Consumo no Local'
+                                            : orderType}
+                                </span>
+                            </li>
+                            {isDelivery && (
+                                <li className="flex flex-row items-center justify-between gap-2 border-t-1 px-3 py-4">
+                                    <span className="text-sm leading-4 font-normal text-muted-foreground">
+                                        Entrega realizada por
+                                    </span>
+                                    <span className="text-sm leading-4 font-medium whitespace-nowrap">
+                                        {deliveredByMarketplace
+                                            ? order.provider === 'ifood'
+                                                ? 'iFood Entrega'
+                                                : 'Marketplace'
+                                            : 'Loja'}
+                                    </span>
+                                </li>
+                            )}
+                        </ul>
+                    </CardContent>
+                </Card>
+            )}
+
             {/* Cupons/Descontos */}
             {benefitsList.length > 0 && (
                 <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
