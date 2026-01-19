@@ -14,6 +14,9 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         try {
+            // Aumentar limite de memória para processar grandes volumes de pedidos
+            ini_set('memory_limit', '512M');
+            
             $tenantId = $request->user()->tenant_id;
 
             // Filtro de período (mês atual por padrão)
@@ -28,10 +31,12 @@ class DashboardController extends Controller
 
         // Buscar pedidos do período
         try {
+            // Usar select específico ao invés de carregar tudo
             $orders = Order::where('tenant_id', $tenantId)
-                ->with([
-                    'items.internalProduct.taxCategory',
-                    'items.mappings.internalProduct'
+                ->select([
+                    'id', 'tenant_id', 'store_id', 'code', 'provider', 'origin',
+                    'placed_at', 'gross_total', 'discount_total', 'total_commissions',
+                    'total_costs', 'raw', 'calculated_costs'
                 ])
                 ->whereBetween('placed_at', [$startDateUtc, $endDateUtc])
             ->when($storeId, fn($q) => $q->where('store_id', $storeId))
@@ -121,7 +126,15 @@ class DashboardController extends Controller
 
             // Calcular CMV e Impostos dos produtos a partir dos itens
             try {
-                foreach ($order->items as $item) {
+                // Carregar items com relacionamentos apenas quando necessário (lazy loading)
+                $items = $order->items()
+                    ->with([
+                        'internalProduct.taxCategory',
+                        'mappings.internalProduct'
+                    ])
+                    ->get();
+                    
+                foreach ($items as $item) {
                     $itemQuantity = $item->qty ?? $item->quantity ?? 0;
                     $itemCost = 0;
 
@@ -269,7 +282,11 @@ class DashboardController extends Controller
         $previousEndDateUtc = Carbon::parse($previousEndDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
 
         $previousOrders = Order::where('tenant_id', $tenantId)
-            ->with(['items.internalProduct', 'items.mappings.internalProduct'])
+            ->select([
+                'id', 'tenant_id', 'store_id', 'code', 'provider', 'origin',
+                'placed_at', 'gross_total', 'discount_total', 'total_commissions',
+                'total_costs', 'raw', 'calculated_costs'
+            ])
             ->whereBetween('placed_at', [$previousStartDateUtc, $previousEndDateUtc])
             ->when($storeId, fn($q) => $q->where('store_id', $storeId))
             ->when($providerFilter, function ($q, $providerFilter) {
@@ -328,7 +345,15 @@ class DashboardController extends Controller
             $previousDeliveryFee += $prevDeliveryFromCosts;
 
             // Calcular CMV e impostos dos produtos do período anterior
-            foreach ($order->items as $item) {
+            // Lazy load items apenas quando necessário
+            $items = $order->items()
+                ->with([
+                    'internalProduct.taxCategory',
+                    'mappings.internalProduct'
+                ])
+                ->get();
+                
+            foreach ($items as $item) {
                 $itemQuantity = $item->qty ?? $item->quantity ?? 0;
                 $itemCost = 0;
 
@@ -475,7 +500,15 @@ class DashboardController extends Controller
                 $dayCmv = 0;
                 $dayProductTax = 0;
 
-                foreach ($order->items as $item) {
+                // Lazy load items apenas quando necessário
+                $items = $order->items()
+                    ->with([
+                        'internalProduct.taxCategory',
+                        'mappings.internalProduct'
+                    ])
+                    ->get();
+
+                foreach ($items as $item) {
                     $itemQuantity = $item->qty ?? $item->quantity ?? 0;
                     $itemCost = 0;
 
