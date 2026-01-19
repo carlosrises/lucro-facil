@@ -43,7 +43,9 @@ export function OrderIndicators({ data }: OrderIndicatorsProps) {
                     <div className="flex items-center justify-between gap-2">
                         <CardDescription className="text-sm">
                             {data.orderCount}{' '}
-                            {data.orderCount === 1 ? 'pedido' : 'pedidos'}
+                            {data.orderCount === 1
+                                ? 'pedido concluído'
+                                : 'pedidos concluídos'}
                         </CardDescription>
                     </div>
                 </CardHeader>
