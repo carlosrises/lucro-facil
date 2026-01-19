@@ -172,8 +172,8 @@ export function OrderFinancialCard({
         // Subsídio e métodos de pagamento (dos pagamentos da sessão)
         const sessionPayments = order?.raw?.session?.payments || [];
 
-        // Filtrar pagamentos subsidiados
-        const subsidyPayments = sessionPayments.filter((payment: unknown) => {
+        // Filtrar pagamentos de cashback (desconto da loja, não subsídio)
+        const cashbackPayments = sessionPayments.filter((payment: unknown) => {
             const p = payment as {
                 payment_method?: { name?: string; keyword?: string };
             };
@@ -181,14 +181,31 @@ export function OrderFinancialCard({
             const paymentKeyword =
                 p.payment_method?.keyword?.toLowerCase() || '';
             return (
-                paymentName.includes('subsid') ||
-                paymentName.includes('cupom') ||
-                paymentKeyword.includes('subsid') ||
-                paymentKeyword.includes('cupom')
+                paymentName.includes('cashback') ||
+                paymentKeyword.includes('clube')
             );
         });
 
-        // Filtrar pagamentos reais (não subsidiados)
+        // Filtrar pagamentos subsidiados (excluindo cashback)
+        const subsidyPayments = sessionPayments.filter((payment: unknown) => {
+            const p = payment as {
+                payment_method?: { name?: string; keyword?: string };
+            };
+            const paymentName = p.payment_method?.name?.toLowerCase() || '';
+            const paymentKeyword =
+                p.payment_method?.keyword?.toLowerCase() || '';
+            const isCashback =
+                paymentName.includes('cashback') ||
+                paymentKeyword.includes('clube');
+            const isSubsidy =
+                paymentName.includes('subsid') ||
+                paymentName.includes('cupom') ||
+                paymentKeyword.includes('subsid') ||
+                paymentKeyword.includes('cupom');
+            return isSubsidy && !isCashback;
+        });
+
+        // Filtrar pagamentos reais (não subsidiados e não cashback)
         const realPayments = sessionPayments.filter((payment: unknown) => {
             const p = payment as {
                 payment_method?: { name?: string; keyword?: string };
@@ -197,12 +214,15 @@ export function OrderFinancialCard({
             const paymentName = p.payment_method?.name?.toLowerCase() || '';
             const paymentKeyword =
                 p.payment_method?.keyword?.toLowerCase() || '';
+            const isCashback =
+                paymentName.includes('cashback') ||
+                paymentKeyword.includes('clube');
             const isSubsidized =
                 paymentName.includes('subsid') ||
                 paymentName.includes('cupom') ||
                 paymentKeyword.includes('subsid') ||
                 paymentKeyword.includes('cupom');
-            return !isSubsidized && (p.payment_value || 0) > 0;
+            return !isSubsidized && !isCashback && (p.payment_value || 0) > 0;
         });
 
         const totalSubsidy = subsidyPayments.reduce(
@@ -214,8 +234,18 @@ export function OrderFinancialCard({
             0,
         );
 
-        // Desconto loja = desconto - subsídio
-        const storeDiscount = discountTotal - totalSubsidy;
+        // Total de cashback (desconto da loja)
+        const totalCashback = cashbackPayments.reduce(
+            (sum: number, payment: unknown) => {
+                const p = payment as { payment_value?: string | number };
+                const value = parseFloat(String(p.payment_value || '0')) || 0;
+                return sum + value;
+            },
+            0,
+        );
+
+        // Desconto loja = desconto - subsídio + cashback
+        const storeDiscount = discountTotal - totalSubsidy + totalCashback;
 
         // Pago pelo cliente (soma dos pagamentos reais)
         let paidByClient = realPayments.reduce(
@@ -265,6 +295,9 @@ export function OrderFinancialCard({
         if (!usedTotalDeliveryPrice) {
             subtotal += totalSubsidy + deliveryFee;
         }
+
+        // Descontar cashback do subtotal (é desconto da loja)
+        subtotal -= totalCashback;
 
         // CMV (custo dos produtos + add-ons)
         const items = order?.items || [];
@@ -332,6 +365,7 @@ export function OrderFinancialCard({
             storeDiscount,
             paidByClient,
             totalSubsidy,
+            totalCashback,
             subtotal,
             cmv,
             productTax,
@@ -450,6 +484,32 @@ export function OrderFinancialCard({
                                 </li>
                             )}
 
+                            {/* Cashback */}
+                            {financials.totalCashback > 0 && (
+                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                        <div className="flex items-center justify-center rounded-full bg-red-100 p-0.5 text-red-900">
+                                            <ArrowDownLeft className="h-4 w-4" />
+                                        </div>
+                                        <span className="flex-grow text-sm leading-4 font-semibold">
+                                            Cashback (desconto da loja)
+                                        </span>
+                                        <span className="text-sm leading-4 font-semibold whitespace-nowrap">
+                                            -
+                                            {formatCurrency(
+                                                financials.totalCashback,
+                                            )}
+                                        </span>
+                                        <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                            {formatPercentage(
+                                                financials.totalCashback,
+                                                financials.grossTotal,
+                                            )}
+                                        </span>
+                                    </div>
+                                </li>
+                            )}
+
                             {/* Descontos */}
                             {financials.discountTotal > 0 && (
                                 <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
@@ -483,6 +543,19 @@ export function OrderFinancialCard({
                                                     -
                                                     {formatCurrency(
                                                         financials.storeDiscount,
+                                                    )}
+                                                </span>
+                                            </li>
+                                        )}
+                                        {financials.totalCashback > 0 && (
+                                            <li className="flex w-full flex-row items-start justify-between px-3 py-0">
+                                                <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                    Cashback (desconto da loja)
+                                                </span>
+                                                <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                    -
+                                                    {formatCurrency(
+                                                        financials.totalCashback,
                                                     )}
                                                 </span>
                                             </li>

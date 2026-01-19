@@ -173,3 +173,135 @@ export function calculateOrderCMV(items: OrderItem[]): number {
         return sum + itemTotal;
     }, 0);
 }
+
+/**
+ * Calcula a receita líquida de um pedido (mesma lógica do card financeiro)
+ */
+export function calculateNetRevenue(order: any): number {
+    const items = order.items || [];
+    const raw = order.raw || {};
+    const calculatedCosts = order.calculated_costs || null;
+
+    // Calcular grossTotal (receita base após descontos)
+    let grossTotal = 0;
+    if (order.provider === 'takeat') {
+        if (raw?.session?.total_delivery_price) {
+            grossTotal =
+                parseFloat(String(raw.session.total_delivery_price)) || 0;
+        } else if (raw?.session?.total_price) {
+            grossTotal = parseFloat(String(raw.session.total_price)) || 0;
+        }
+    } else if (raw?.total?.orderAmount) {
+        grossTotal = parseFloat(String(raw.total.orderAmount)) || 0;
+    } else {
+        grossTotal = parseFloat(String(order.gross_total || '0')) || 0;
+    }
+
+    const deliveryFee = parseFloat(String(order.delivery_fee || '0')) || 0;
+
+    // Cashback (desconto da loja)
+    const sessionPayments = raw?.session?.payments || [];
+    const totalCashback = sessionPayments.reduce(
+        (sum: number, payment: any) => {
+            const paymentName = (
+                payment.payment_method?.name || ''
+            ).toLowerCase();
+            const paymentKeyword = (
+                payment.payment_method?.keyword || ''
+            ).toLowerCase();
+            const isCashback =
+                paymentName.includes('cashback') ||
+                paymentKeyword.includes('clube');
+            return isCashback
+                ? sum + (parseFloat(String(payment.payment_value || '0')) || 0)
+                : sum;
+        },
+        0,
+    );
+
+    // Subsídios (excluindo cashback)
+    const totalSubsidy = sessionPayments.reduce((sum: number, payment: any) => {
+        const paymentName = (payment.payment_method?.name || '').toLowerCase();
+        const paymentKeyword = (
+            payment.payment_method?.keyword || ''
+        ).toLowerCase();
+        const isCashback =
+            paymentName.includes('cashback') ||
+            paymentKeyword.includes('clube');
+        const isSubsidy =
+            paymentName.includes('subsid') ||
+            paymentName.includes('cupom') ||
+            paymentKeyword.includes('subsid') ||
+            paymentKeyword.includes('cupom');
+        return isSubsidy && !isCashback
+            ? sum + (parseFloat(String(payment.payment_value || '0')) || 0)
+            : sum;
+    }, 0);
+
+    // Subtotal para cálculo de receita líquida
+    let subtotal = grossTotal;
+    const usedTotalDeliveryPrice =
+        order.provider === 'takeat' && raw?.session?.total_delivery_price;
+    if (!usedTotalDeliveryPrice) {
+        subtotal += totalSubsidy + deliveryFee;
+    }
+
+    // Descontar cashback do subtotal (é desconto da loja)
+    subtotal -= totalCashback;
+
+    // CMV (custo dos produtos)
+    const cmv = calculateOrderCMV(items);
+
+    // Impostos dos produtos
+    const productTax = items.reduce((sum: number, item: any) => {
+        if (item.internal_product?.tax_category?.total_tax_rate) {
+            const quantity = item.qty || item.quantity || 0;
+            const unitPrice = item.unit_price || item.price || 0;
+            const taxRate =
+                item.internal_product.tax_category.total_tax_rate || 0;
+            const taxValue = (quantity * unitPrice * taxRate) / 100;
+            return sum + (isNaN(taxValue) ? 0 : taxValue);
+        }
+        return sum;
+    }, 0);
+
+    // Impostos adicionais
+    const additionalTaxes = calculatedCosts?.taxes || [];
+    const totalAdditionalTax = additionalTaxes.reduce(
+        (sum: number, tax: any) => sum + (tax.calculated_value || 0),
+        0,
+    );
+
+    // Total de impostos
+    const totalTax = productTax + totalAdditionalTax;
+
+    // Custos operacionais
+    const totalCosts =
+        typeof order.total_costs === 'string'
+            ? parseFloat(order.total_costs)
+            : (order.total_costs ?? 0);
+
+    // Comissões
+    const totalCommissions =
+        typeof order.total_commissions === 'string'
+            ? parseFloat(order.total_commissions)
+            : (order.total_commissions ?? 0);
+
+    // Taxas de pagamento
+    const paymentMethodFees = calculatedCosts?.payment_methods || [];
+    const totalPaymentMethodFee = paymentMethodFees.reduce(
+        (sum: number, fee: any) => sum + (fee.calculated_value || 0),
+        0,
+    );
+
+    // Líquido = Subtotal - CMV - Impostos - Custos - Comissão - Taxas de Pagamento
+    const netRevenue =
+        subtotal -
+        cmv -
+        totalTax -
+        totalCosts -
+        totalCommissions -
+        totalPaymentMethodFee;
+
+    return netRevenue;
+}
