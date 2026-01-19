@@ -43,5 +43,19 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // Garantir que todos os erros sejam logados, incluindo 500
+        $exceptions->report(function (Throwable $e) {
+            if ($e->getCode() === 500 || $e instanceof \Error) {
+                logger()->error('❌ ERRO 500 CAPTURADO', [
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'trace' => $e->getTraceAsString(),
+                    'url' => request()->fullUrl(),
+                    'method' => request()->method(),
+                    'user_id' => auth()->id(),
+                    'tenant_id' => auth()->user()->tenant_id ?? null,
+                ]);
+            }
+        });
     })->create();

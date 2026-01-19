@@ -13,22 +13,27 @@ class DashboardController extends Controller
 {
     public function index(Request $request)
     {
-        $tenantId = $request->user()->tenant_id;
+        try {
+            $tenantId = $request->user()->tenant_id;
 
-        // Filtro de período (mês atual por padrão)
-        $startDate = $request->input('start_date', now()->startOfMonth()->format('Y-m-d'));
-        $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
-        $storeId = $request->input('store_id');
-        $providerFilter = $request->input('provider');
+            // Filtro de período (mês atual por padrão)
+            $startDate = $request->input('start_date', now()->startOfMonth()->format('Y-m-d'));
+            $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
+            $storeId = $request->input('store_id');
+            $providerFilter = $request->input('provider');
 
         // Converter datas do horário de Brasília para UTC para filtrar corretamente
         $startDateUtc = Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
         $endDateUtc = Carbon::parse($endDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
 
         // Buscar pedidos do período
-        $orders = Order::where('tenant_id', $tenantId)
-            ->with(['items.internalProduct', 'items.mappings.internalProduct'])
-            ->whereBetween('placed_at', [$startDateUtc, $endDateUtc])
+        try {
+            $orders = Order::where('tenant_id', $tenantId)
+                ->with([
+                    'items.internalProduct.taxCategory',
+                    'items.mappings.internalProduct'
+                ])
+                ->whereBetween('placed_at', [$startDateUtc, $endDateUtc])
             ->when($storeId, fn($q) => $q->where('store_id', $storeId))
             ->when($providerFilter, function ($q, $providerFilter) {
                 // Formato: "provider" ou "provider:origin"
@@ -40,6 +45,18 @@ class DashboardController extends Controller
                 }
             })
             ->get();
+        } catch (\Exception $e) {
+            logger()->error('❌ Dashboard - Erro ao buscar pedidos do período', [
+                'tenant_id' => $tenantId,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'store_id' => $storeId,
+                'provider' => $providerFilter,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            throw $e;
+        }
 
         // Inicializar acumuladores
         $totalRevenue = 0;
@@ -57,20 +74,30 @@ class DashboardController extends Controller
             // Total do pedido: mesma lógica do DRE
             $orderRevenue = 0;
 
-            if ($order->provider === 'takeat') {
-                // Takeat: usar total_delivery_price (inclui entrega e subsídios)
-                if (isset($order->raw['session']['total_delivery_price'])) {
-                    $orderRevenue = (float) $order->raw['session']['total_delivery_price'];
-                } elseif (isset($order->raw['session']['total_price'])) {
-                    $orderRevenue = (float) $order->raw['session']['total_price'];
+            try {
+                if ($order->provider === 'takeat') {
+                    // Takeat: usar total_delivery_price (inclui entrega e subsídios)
+                    $raw = is_array($order->raw) ? $order->raw : [];
+                    if (isset($raw['session']['total_delivery_price'])) {
+                        $orderRevenue = (float) $raw['session']['total_delivery_price'];
+                    } elseif (isset($raw['session']['total_price'])) {
+                        $orderRevenue = (float) $raw['session']['total_price'];
+                    } else {
+                        $orderRevenue = (float) ($order->gross_total ?? 0);
+                    }
+                } elseif (isset($order->raw['total']['orderAmount'])) {
+                    // iFood: orderAmount inclui produtos + entrega + taxas
+                    $orderRevenue = (float) $order->raw['total']['orderAmount'];
                 } else {
+                    // Fallback: usar gross_total
                     $orderRevenue = (float) ($order->gross_total ?? 0);
                 }
-            } elseif (isset($order->raw['total']['orderAmount'])) {
-                // iFood: orderAmount inclui produtos + entrega + taxas
-                $orderRevenue = (float) $order->raw['total']['orderAmount'];
-            } else {
-                // Fallback: usar gross_total
+            } catch (\Exception $e) {
+                logger()->error('❌ Dashboard - Erro ao calcular revenue do pedido', [
+                    'order_id' => $order->id,
+                    'provider' => $order->provider,
+                    'error' => $e->getMessage()
+                ]);
                 $orderRevenue = (float) ($order->gross_total ?? 0);
             }
 
@@ -93,33 +120,40 @@ class DashboardController extends Controller
             $totalDeliveryFee += $deliveryFromCosts;
 
             // Calcular CMV e Impostos dos produtos a partir dos itens
-            foreach ($order->items as $item) {
-                $itemQuantity = $item->qty ?? $item->quantity ?? 0;
-                $itemCost = 0;
+            try {
+                foreach ($order->items as $item) {
+                    $itemQuantity = $item->qty ?? $item->quantity ?? 0;
+                    $itemCost = 0;
 
-                // Calcular CMV
-                if ($item->mappings && $item->mappings->count() > 0) {
-                    foreach ($item->mappings as $mapping) {
-                        if ($mapping->internalProduct && $mapping->internalProduct->unit_cost) {
-                            $unitCost = (float) $mapping->internalProduct->unit_cost;
-                            $mappingQuantity = $mapping->quantity ?? 1;
-                            $itemCost += $unitCost * $mappingQuantity;
+                    // Calcular CMV
+                    if ($item->mappings && $item->mappings->count() > 0) {
+                        foreach ($item->mappings as $mapping) {
+                            if (isset($mapping->internalProduct) && isset($mapping->internalProduct->unit_cost)) {
+                                $unitCost = (float) $mapping->internalProduct->unit_cost;
+                                $mappingQuantity = $mapping->quantity ?? 1;
+                                $itemCost += $unitCost * $mappingQuantity;
+                            }
+                        }
+                        $totalCmv += $itemCost * $itemQuantity;
+                    } elseif (isset($item->internalProduct) && isset($item->internalProduct->unit_cost)) {
+                        $unitCost = (float) $item->internalProduct->unit_cost;
+                        $totalCmv += $unitCost * $itemQuantity;
+                    }
+
+                    // Calcular Impostos dos produtos (se tiver categoria de imposto)
+                    if (isset($item->internalProduct) && isset($item->internalProduct->taxCategory)) {
+                        $taxRate = (float) ($item->internalProduct->taxCategory->total_tax_rate ?? 0);
+                        if ($taxRate > 0) {
+                            $unitPrice = (float) ($item->unit_price ?? $item->price ?? 0);
+                            $totalProductTax += ($itemQuantity * $unitPrice * $taxRate) / 100;
                         }
                     }
-                    $totalCmv += $itemCost * $itemQuantity;
-                } elseif ($item->internalProduct && $item->internalProduct->unit_cost) {
-                    $unitCost = (float) $item->internalProduct->unit_cost;
-                    $totalCmv += $unitCost * $itemQuantity;
                 }
-
-                // Calcular Impostos dos produtos (se tiver categoria de imposto)
-                if ($item->internalProduct && $item->internalProduct->taxCategory) {
-                    $taxRate = (float) ($item->internalProduct->taxCategory->total_tax_rate ?? 0);
-                    if ($taxRate > 0) {
-                        $unitPrice = (float) ($item->unit_price ?? $item->price ?? 0);
-                        $totalProductTax += ($itemQuantity * $unitPrice * $taxRate) / 100;
-                    }
-                }
+            } catch (\Exception $e) {
+                logger()->error('❌ Dashboard - Erro ao calcular CMV/impostos dos itens', [
+                    'order_id' => $order->id,
+                    'error' => $e->getMessage()
+                ]);
             }
 
             // Custos do calculated_costs
@@ -150,20 +184,30 @@ class DashboardController extends Controller
             $discountTotal = (float) ($order->discount_total ?? 0);
 
             // Extrair subsídios dos pagamentos da sessão
-            $sessionPayments = $order->raw['session']['payments'] ?? [];
+            $raw = is_array($order->raw) ? $order->raw : [];
+            $sessionPayments = $raw['session']['payments'] ?? [];
             $subsidy = 0;
 
-            foreach ($sessionPayments as $payment) {
-                $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
+            try {
+                foreach ($sessionPayments as $payment) {
+                    if (!is_array($payment)) continue;
+                    
+                    $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+                    $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
 
-                // Verificar se é subsídio (contém "subsid" ou "cupom")
-                if (str_contains($paymentName, 'subsid') ||
-                    str_contains($paymentName, 'cupom') ||
-                    str_contains($paymentKeyword, 'subsid') ||
-                    str_contains($paymentKeyword, 'cupom')) {
-                    $subsidy += (float) ($payment['payment_value'] ?? 0);
+                    // Verificar se é subsídio (contém "subsid" ou "cupom")
+                    if (str_contains($paymentName, 'subsid') ||
+                        str_contains($paymentName, 'cupom') ||
+                        str_contains($paymentKeyword, 'subsid') ||
+                        str_contains($paymentKeyword, 'cupom')) {
+                        $subsidy += (float) ($payment['payment_value'] ?? 0);
+                    }
                 }
+            } catch (\Exception $e) {
+                logger()->error('❌ Dashboard - Erro ao calcular subsídios', [
+                    'order_id' => $order->id,
+                    'error' => $e->getMessage()
+                ]);
             }
 
             // Desconto da loja = discount_total - subsídio
@@ -602,5 +646,21 @@ class DashboardController extends Controller
                 'provider' => $providerFilter,
             ],
         ]);
+        } catch (\Exception $e) {
+            logger()->error('❌ Dashboard - Erro fatal ao processar dashboard', [
+                'tenant_id' => $request->user()->tenant_id ?? null,
+                'start_date' => $startDate ?? null,
+                'end_date' => $endDate ?? null,
+                'store_id' => $storeId ?? null,
+                'provider' => $providerFilter ?? null,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Re-lançar para Laravel processar adequadamente
+            throw $e;
+        }
     }
 }
