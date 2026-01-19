@@ -191,7 +191,7 @@ class DashboardController extends Controller
             try {
                 foreach ($sessionPayments as $payment) {
                     if (!is_array($payment)) continue;
-                    
+
                     $paymentName = strtolower($payment['payment_method']['name'] ?? '');
                     $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
 
@@ -658,7 +658,7 @@ class DashboardController extends Controller
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             // Re-lançar para Laravel processar adequadamente
             throw $e;
         }
