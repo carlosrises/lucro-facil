@@ -14,8 +14,9 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         try {
-            // Aumentar limite de memória para processar grandes volumes de pedidos
+            // Aumentar limite de memória e timeout
             ini_set('memory_limit', '512M');
+            ini_set('max_execution_time', '120'); // 2 minutos
             
             $tenantId = $request->user()->tenant_id;
 
@@ -29,10 +30,26 @@ class DashboardController extends Controller
         $startDateUtc = Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
         $endDateUtc = Carbon::parse($endDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
 
-        // Buscar pedidos do período
+        // Buscar pedidos do período com eager loading otimizado
         try {
-            // Usar select específico ao invés de carregar tudo
             $orders = Order::where('tenant_id', $tenantId)
+                ->with([
+                    'items' => function ($query) {
+                        $query->select('id', 'order_id', 'tenant_id', 'sku', 'name', 'qty', 'quantity', 'unit_price', 'price', 'total', 'add_ons');
+                    },
+                    'items.internalProduct' => function ($query) {
+                        $query->select('id', 'tenant_id', 'name', 'unit_cost', 'product_category', 'size');
+                    },
+                    'items.internalProduct.taxCategory' => function ($query) {
+                        $query->select('id', 'total_tax_rate');
+                    },
+                    'items.mappings' => function ($query) {
+                        $query->select('id', 'order_item_id', 'internal_product_id', 'quantity', 'unit_cost_override');
+                    },
+                    'items.mappings.internalProduct' => function ($query) {
+                        $query->select('id', 'name', 'unit_cost');
+                    }
+                ])
                 ->select([
                     'id', 'tenant_id', 'store_id', 'code', 'provider', 'origin',
                     'placed_at', 'gross_total', 'discount_total', 'total_commissions',
@@ -126,15 +143,7 @@ class DashboardController extends Controller
 
             // Calcular CMV e Impostos dos produtos a partir dos itens
             try {
-                // Carregar items com relacionamentos apenas quando necessário (lazy loading)
-                $items = $order->items()
-                    ->with([
-                        'internalProduct.taxCategory',
-                        'mappings.internalProduct'
-                    ])
-                    ->get();
-                    
-                foreach ($items as $item) {
+                foreach ($order->items as $item) {
                     $itemQuantity = $item->qty ?? $item->quantity ?? 0;
                     $itemCost = 0;
 
@@ -282,6 +291,23 @@ class DashboardController extends Controller
         $previousEndDateUtc = Carbon::parse($previousEndDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
 
         $previousOrders = Order::where('tenant_id', $tenantId)
+            ->with([
+                'items' => function ($query) {
+                    $query->select('id', 'order_id', 'tenant_id', 'sku', 'name', 'qty', 'quantity', 'unit_price', 'price', 'total', 'add_ons');
+                },
+                'items.internalProduct' => function ($query) {
+                    $query->select('id', 'tenant_id', 'name', 'unit_cost', 'product_category', 'size');
+                },
+                'items.internalProduct.taxCategory' => function ($query) {
+                    $query->select('id', 'total_tax_rate');
+                },
+                'items.mappings' => function ($query) {
+                    $query->select('id', 'order_item_id', 'internal_product_id', 'quantity', 'unit_cost_override');
+                },
+                'items.mappings.internalProduct' => function ($query) {
+                    $query->select('id', 'name', 'unit_cost');
+                }
+            ])
             ->select([
                 'id', 'tenant_id', 'store_id', 'code', 'provider', 'origin',
                 'placed_at', 'gross_total', 'discount_total', 'total_commissions',
@@ -345,15 +371,7 @@ class DashboardController extends Controller
             $previousDeliveryFee += $prevDeliveryFromCosts;
 
             // Calcular CMV e impostos dos produtos do período anterior
-            // Lazy load items apenas quando necessário
-            $items = $order->items()
-                ->with([
-                    'internalProduct.taxCategory',
-                    'mappings.internalProduct'
-                ])
-                ->get();
-                
-            foreach ($items as $item) {
+            foreach ($order->items as $item) {
                 $itemQuantity = $item->qty ?? $item->quantity ?? 0;
                 $itemCost = 0;
 
@@ -500,15 +518,7 @@ class DashboardController extends Controller
                 $dayCmv = 0;
                 $dayProductTax = 0;
 
-                // Lazy load items apenas quando necessário
-                $items = $order->items()
-                    ->with([
-                        'internalProduct.taxCategory',
-                        'mappings.internalProduct'
-                    ])
-                    ->get();
-
-                foreach ($items as $item) {
+                foreach ($order->items as $item) {
                     $itemQuantity = $item->qty ?? $item->quantity ?? 0;
                     $itemCost = 0;
 
