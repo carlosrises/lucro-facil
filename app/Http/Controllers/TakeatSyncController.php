@@ -16,28 +16,20 @@ class TakeatSyncController extends Controller
         try {
             $tenantId = $request->user()->tenant_id;
 
-            Log::info("Sincronização rápida Takeat iniciada", [
+            Log::info("Sincronização rápida Takeat iniciada (em background)", [
                 'tenant_id' => $tenantId,
                 'user_id' => $request->user()->id,
             ]);
 
-            // Executar comando de sincronização para o dia atual
-            Artisan::call('takeat:sync-orders', [
+            // Despachar job em background para não bloquear a requisição HTTP
+            Artisan::queue('takeat:sync-orders', [
                 '--tenant-id' => $tenantId,
                 '--date' => now()->format('Y-m-d'),
             ]);
 
-            $output = Artisan::output();
-
-            Log::info("Sincronização rápida Takeat concluída", [
-                'tenant_id' => $tenantId,
-                'output' => $output,
-            ]);
-
             return response()->json([
                 'success' => true,
-                'message' => 'Pedidos sincronizados com sucesso!',
-                'output' => $output,
+                'message' => 'Sincronização iniciada! Os pedidos serão processados em segundo plano.',
             ]);
         } catch (\Exception $e) {
             Log::error("Erro na sincronização rápida Takeat", [
@@ -47,7 +39,7 @@ class TakeatSyncController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao sincronizar pedidos: '.$e->getMessage(),
+                'message' => 'Erro ao iniciar sincronização: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -65,30 +57,21 @@ class TakeatSyncController extends Controller
             $tenantId = $request->user()->tenant_id;
             $date = $request->input('date');
 
-            Log::info("Sincronização Takeat por data iniciada", [
+            Log::info("Sincronização Takeat por data iniciada (em background)", [
                 'tenant_id' => $tenantId,
                 'user_id' => $request->user()->id,
                 'date' => $date,
             ]);
 
-            // Executar comando de sincronização para a data específica
-            Artisan::call('takeat:sync-orders', [
+            // Despachar job em background para não bloquear a requisição HTTP
+            \Artisan::queue('takeat:sync-orders', [
                 '--tenant-id' => $tenantId,
                 '--date' => $date,
             ]);
 
-            $output = Artisan::output();
-
-            Log::info("Sincronização Takeat por data concluída", [
-                'tenant_id' => $tenantId,
-                'date' => $date,
-                'output' => $output,
-            ]);
-
             return response()->json([
                 'success' => true,
-                'message' => 'Pedidos sincronizados com sucesso!',
-                'output' => $output,
+                'message' => 'Sincronização iniciada! Os pedidos serão processados em segundo plano.',
             ]);
         } catch (\Exception $e) {
             Log::error("Erro na sincronização Takeat por data", [
@@ -99,7 +82,7 @@ class TakeatSyncController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao sincronizar pedidos: '.$e->getMessage(),
+                'message' => 'Erro ao iniciar sincronização: '.$e->getMessage(),
             ], 500);
         }
     }
