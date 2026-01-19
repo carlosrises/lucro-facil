@@ -956,9 +956,16 @@ class OrderCostService
                     $totalPaid += $value;
                 }
 
-                // Total pago = cliente + subsídio = subtotal correto
+                // Se totalPaid > 0, usar esse valor (cliente + subsídio)
+                // Se totalPaid = 0 (desconto 100%), usar old_total_price para calcular prejuízo real
                 if ($totalPaid > 0) {
                     return $totalPaid;
+                }
+
+                // Desconto 100%: usar old_total_price para base de cálculo
+                // Isso permite calcular o prejuízo real (custos - receita zero)
+                if (isset($order->raw['session']['old_total_price'])) {
+                    return (float) $order->raw['session']['old_total_price'];
                 }
             }
 
