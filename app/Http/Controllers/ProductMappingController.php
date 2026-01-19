@@ -6,54 +6,12 @@ use App\Models\InternalProduct;
 use App\Models\OrderItem;
 use App\Models\OrderItemMapping;
 use App\Models\ProductMapping;
+use App\Services\FlavorMappingService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class ProductMappingController extends Controller
 {
-    /**
-     * Detectar tamanho da pizza a partir do nome do item
-     */
-    private function detectPizzaSize(string $itemName): ?string
-    {
-        $itemNameLower = mb_strtolower($itemName);
-
-        if (preg_match('/\bbroto\b/', $itemNameLower)) {
-            return 'broto';
-        }
-        if (preg_match('/\bgrande\b/', $itemNameLower)) {
-            return 'grande';
-        }
-        if (preg_match('/\b(familia|big|don|70x35)\b/', $itemNameLower)) {
-            return 'familia';
-        }
-        if (preg_match('/\b(media|média|m\b)/', $itemNameLower)) {
-            return 'media';
-        }
-
-        return null;
-    }
-
-    /**
-     * Calcular o CMV correto do produto baseado no tamanho
-     */
-    private function calculateCorrectCMV(InternalProduct $product, OrderItem $orderItem): float
-    {
-        if ($product->product_category !== 'sabor_pizza') {
-            return (float) $product->unit_cost;
-        }
-
-        $size = $this->detectPizzaSize($orderItem->name);
-        if (! $size) {
-            return (float) $product->unit_cost;
-        }
-
-        // Calcular CMV dinamicamente pela ficha técnica
-        $cmv = $product->calculateCMV($size);
-
-        return $cmv > 0 ? $cmv : (float) $product->unit_cost;
-    }
-
     public function index(Request $request)
     {
         $tenantId = $request->user()->tenant_id;
@@ -197,26 +155,6 @@ class ProductMappingController extends Controller
      */
     private function applyMappingToHistoricalOrders(ProductMapping $mapping, int $tenantId): void
     {
-        // Log para debug
-        // logger()->info('🔍 Iniciando aplicação de mapeamento histórico', [
-        //     'tenant_id' => $tenantId,
-        //     'mapping_id' => $mapping->id,
-        //     'external_item_id' => $mapping->external_item_id,
-        //     'external_item_name' => $mapping->external_item_name,
-        //     'internal_product_id' => $mapping->internal_product_id,
-        // ]);
-
-        // Buscar TODOS os OrderItems com este SKU para debug
-        $allItemsWithSku = OrderItem::where('tenant_id', $tenantId)
-            ->where('sku', $mapping->external_item_id)
-            ->get();
-
-        // logger()->info('📊 OrderItems encontrados com este SKU', [
-        //     'sku' => $mapping->external_item_id,
-        //     'total_items' => $allItemsWithSku->count(),
-        //     'order_ids' => $allItemsWithSku->pluck('order_id')->unique()->values()->toArray(),
-        // ]);
-
         // Buscar todos os OrderItems que têm o SKU mapeado e ainda não têm mapping principal
         $orderItems = OrderItem::where('tenant_id', $tenantId)
             ->where('sku', $mapping->external_item_id)
@@ -225,18 +163,8 @@ class ProductMappingController extends Controller
             })
             ->get();
 
-        // logger()->info('📋 OrderItems sem mapeamento principal', [
-        //     'total_unmapped' => $orderItems->count(),
-        //     'order_ids' => $orderItems->pluck('order_id')->unique()->values()->toArray(),
-        // ]);
-
-        $mappedCount = 0;
-
         foreach ($orderItems as $orderItem) {
-            $product = InternalProduct::find($mapping->internal_product_id);
-            $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
-
-            // Criar OrderItemMapping principal
+            // Criar OrderItemMapping principal (sem unit_cost_override, será calculado depois se necessário)
             OrderItemMapping::create([
                 'tenant_id' => $tenantId,
                 'order_item_id' => $orderItem->id,
@@ -245,65 +173,57 @@ class ProductMappingController extends Controller
                 'mapping_type' => 'main',
                 'option_type' => 'regular',
                 'auto_fraction' => false,
-                'unit_cost_override' => $correctCMV,
             ]);
 
             // Auto-mapear complementos (add_ons) se houverem
             $addOns = $orderItem->add_ons ?? [];
+            $flavorMappingService = app(FlavorMappingService::class);
+
             foreach ($addOns as $index => $addOn) {
                 $addonName = $addOn['name'] ?? '';
-                $addonQty = $addOn['quantity'] ?? 1;
+                if (!$addonName) {
+                    continue;
+                }
+
+                // Criar SKU único para o add-on baseado no nome (mesmo padrão da Triagem)
+                $addonSku = 'addon_'.md5($addonName);
 
                 // Tentar encontrar mapeamento para o complemento
                 $addonMapping = ProductMapping::where('tenant_id', $tenantId)
-                    ->where(function ($q) use ($addonName) {
-                        $q->where('external_item_name', 'LIKE', "%{$addonName}%");
-                    })
+                    ->where('external_item_id', $addonSku)
                     ->first();
 
-                if ($addonMapping) {
-                    // Verificar se já existe mapping para este complemento
-                    $existingAddonMapping = OrderItemMapping::where('order_item_id', $orderItem->id)
-                        ->where('mapping_type', 'addon')
-                        ->where('external_reference', (string) $index)
-                        ->first();
+                if ($addonMapping && $addonMapping->internal_product_id) {
+                    // Se for sabor (flavor), usar FlavorMappingService para aplicar corretamente
+                    if ($addonMapping->item_type === 'flavor') {
+                        // FlavorMappingService cuida de criar o mapping com CMV correto e fração
+                        $flavorMappingService->mapFlavorToAllOccurrences($addonMapping, $tenantId);
+                    } else {
+                        // Verificar se já existe mapping para este complemento
+                        $existingAddonMapping = OrderItemMapping::where('order_item_id', $orderItem->id)
+                            ->where('mapping_type', 'addon')
+                            ->where('external_reference', (string) $index)
+                            ->first();
 
-                    if (! $existingAddonMapping) {
-                        // Detectar se é sabor de pizza
-                        $isPizzaFlavor = stripos($addOn['name'] ?? '', 'pizza') !== false
-                            || stripos($mapping->external_item_name ?? '', 'pizza') !== false;
+                        if (!$existingAddonMapping) {
+                            // Para outros tipos de add-on, criar mapping normal
+                            $addonQty = $addOn['quantity'] ?? 1;
 
-                        $addonProduct = InternalProduct::find($addonMapping->internal_product_id);
-                        $addonCMV = $addonProduct ? $this->calculateCorrectCMV($addonProduct, $orderItem) : null;
-
-                        OrderItemMapping::create([
-                            'tenant_id' => $tenantId,
-                            'order_item_id' => $orderItem->id,
-                            'internal_product_id' => $addonMapping->internal_product_id,
-                            'quantity' => $addonQty,
-                            'mapping_type' => 'addon',
-                            'option_type' => $isPizzaFlavor ? 'pizza_flavor' : 'addon',
-                            'auto_fraction' => $isPizzaFlavor,
-                            'external_reference' => (string) $index,
-                            'external_name' => $addonName,
-                            'unit_cost_override' => $addonCMV,
-                        ]);
+                            OrderItemMapping::create([
+                                'tenant_id' => $tenantId,
+                                'order_item_id' => $orderItem->id,
+                                'internal_product_id' => $addonMapping->internal_product_id,
+                                'quantity' => $addonQty,
+                                'mapping_type' => 'addon',
+                                'option_type' => 'addon',
+                                'auto_fraction' => false,
+                                'external_reference' => (string) $index,
+                                'external_name' => $addonName,
+                            ]);
+                        }
                     }
                 }
             }
-
-            $mappedCount++;
         }
-
-        // logger()->info('✅ Mapeamento aplicado retroativamente', [
-        //     'tenant_id' => $tenantId,
-        //     'mapping_id' => $mapping->id,
-        //     'external_item_id' => $mapping->external_item_id,
-        //     'internal_product_id' => $mapping->internal_product_id,
-        //     'total_items_with_sku' => $allItemsWithSku->count(),
-        //     'items_without_mapping' => $orderItems->count(),
-        //     'order_items_mapped' => $mappedCount,
-        //     'affected_orders' => $orderItems->pluck('order_id')->unique()->count(),
-        // ]);
     }
 }

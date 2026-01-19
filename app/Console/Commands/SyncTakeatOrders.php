@@ -6,6 +6,7 @@ use App\Models\InternalProduct;
 use App\Models\OrderItemMapping;
 use App\Models\ProductMapping;
 use App\Models\Store;
+use App\Services\FlavorMappingService;
 use App\Services\OrderCostService;
 use App\Services\PizzaFractionService;
 use App\Services\TakeatClient;
@@ -375,77 +376,50 @@ class SyncTakeatOrders extends Command
 
         // Auto-mapear complementos (add_ons) se houverem
         $addOns = $orderItem->add_ons ?? [];
-        $hasPizzaFlavors = false;
+        $flavorMappingService = app(FlavorMappingService::class);
 
         foreach ($addOns as $index => $addOn) {
             $addonName = $addOn['name'] ?? '';
-            $addonQty = $addOn['quantity'] ?? 1;
+            if (!$addonName) {
+                continue;
+            }
+
+            // Criar SKU único para o add-on baseado no nome (mesmo padrão da Triagem)
+            $addonSku = 'addon_'.md5($addonName);
 
             // Tentar encontrar mapeamento para o complemento
             $addonMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
-                ->where(function ($q) use ($addonName) {
-                    $q->where('external_item_name', 'LIKE', "%{$addonName}%");
-                })
+                ->where('external_item_id', $addonSku)
                 ->first();
 
             if ($addonMapping && $addonMapping->internal_product_id) {
-                // Detectar se é sabor de pizza
-                $isPizzaFlavor = stripos($addOn['name'] ?? '', 'pizza') !== false
-                    || stripos($productMapping->external_item_name ?? '', 'pizza') !== false
-                    || $addonMapping->item_type === 'flavor';
+                // Se for sabor (flavor), usar FlavorMappingService para aplicar corretamente
+                if ($addonMapping->item_type === 'flavor') {
+                    // FlavorMappingService cuida de criar o mapping com CMV correto e fração
+                    $flavorMappingService->mapFlavorToAllOccurrences($addonMapping, $orderItem->tenant_id);
+                } else {
+                    // Para outros tipos de add-on, criar mapping normal
+                    $addonQty = $addOn['quantity'] ?? 1;
 
-                if ($isPizzaFlavor) {
-                    $hasPizzaFlavors = true;
+                    // Buscar produto do addon para calcular CMV
+                    $addonProduct = InternalProduct::find($addonMapping->internal_product_id);
+                    $addonCMV = $addonProduct ? $this->calculateCorrectCMV($addonProduct, $orderItem) : null;
+
+                    OrderItemMapping::create([
+                        'tenant_id' => $orderItem->tenant_id,
+                        'order_item_id' => $orderItem->id,
+                        'internal_product_id' => $addonMapping->internal_product_id,
+                        'quantity' => $addonQty,
+                        'mapping_type' => 'addon',
+                        'option_type' => 'addon',
+                        'auto_fraction' => false,
+                        'external_reference' => (string) $index,
+                        'external_name' => $addonName,
+                        'unit_cost_override' => $addonCMV,
+                    ]);
                 }
-
-                // Buscar produto do addon para calcular CMV
-                $addonProduct = InternalProduct::find($addonMapping->internal_product_id);
-                $addonCMV = $addonProduct ? $this->calculateCorrectCMV($addonProduct, $orderItem) : null;
-
-                OrderItemMapping::create([
-                    'tenant_id' => $orderItem->tenant_id,
-                    'order_item_id' => $orderItem->id,
-                    'internal_product_id' => $addonMapping->internal_product_id,
-                    'quantity' => $addonQty,
-                    'mapping_type' => 'addon',
-                    'option_type' => $isPizzaFlavor ? 'pizza_flavor' : 'addon',
-                    'auto_fraction' => $isPizzaFlavor,
-                    'external_reference' => (string) $index,
-                    'external_name' => $addonName,
-                    'unit_cost_override' => $addonCMV,
-                ]);
-
-                // logger()->info('🍕 Auto-mapeamento Takeat: complemento aplicado', [
-                //     'order_item' => $orderItem->id,
-                //     'addon_name' => $addonName,
-                //     'product_id' => $addonMapping->internal_product_id,
-                //     'is_pizza_flavor' => $isPizzaFlavor,
-                //     'cmv' => $addonCMV,
-                // ]);
             }
         }
-
-        // Se houver sabores de pizza, recalcular frações automaticamente
-        if ($hasPizzaFlavors) {
-            $pizzaFractionService = app(PizzaFractionService::class);
-            $result = $pizzaFractionService->recalculateFractions($orderItem);
-
-            // logger()->info('🍕 Auto-mapeamento Takeat: frações recalculadas', [
-            //     'order_item' => $orderItem->id,
-            //     'pizza_flavors' => $result['pizza_flavors'],
-            //     'fraction' => $result['fraction'],
-            //     'updated' => $result['updated'],
-            // ]);
-        }
-
-        // logger()->info('✅ Auto-mapeamento Takeat aplicado', [
-        //     'order_item' => $orderItem->id,
-        //     'sku' => $orderItem->sku,
-        //     'product_id' => $productMapping->internal_product_id,
-        //     'cmv' => $correctCMV,
-        //     'addons_mapped' => count($addOns),
-        //     'has_pizza_flavors' => $hasPizzaFlavors,
-        // ]);
     }
 
     /**
