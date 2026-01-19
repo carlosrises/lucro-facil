@@ -17,7 +17,7 @@ class DashboardController extends Controller
             // Aumentar limite de memória e timeout
             ini_set('memory_limit', '512M');
             ini_set('max_execution_time', '120'); // 2 minutos
-            
+
             $tenantId = $request->user()->tenant_id;
 
             // Filtro de período (mês atual por padrão)
@@ -30,217 +30,186 @@ class DashboardController extends Controller
         $startDateUtc = Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
         $endDateUtc = Carbon::parse($endDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
 
-        // Buscar pedidos do período com eager loading otimizado
-        try {
-            $orders = Order::where('tenant_id', $tenantId)
-                ->with([
-                    'items' => function ($query) {
-                        $query->select('id', 'order_id', 'tenant_id', 'sku', 'name', 'qty', 'quantity', 'unit_price', 'price', 'total', 'add_ons');
-                    },
-                    'items.internalProduct' => function ($query) {
-                        $query->select('id', 'tenant_id', 'name', 'unit_cost', 'product_category', 'size');
-                    },
-                    'items.internalProduct.taxCategory' => function ($query) {
-                        $query->select('id', 'total_tax_rate');
-                    },
-                    'items.mappings' => function ($query) {
-                        $query->select('id', 'order_item_id', 'internal_product_id', 'quantity', 'unit_cost_override');
-                    },
-                    'items.mappings.internalProduct' => function ($query) {
-                        $query->select('id', 'name', 'unit_cost');
-                    }
-                ])
-                ->select([
-                    'id', 'tenant_id', 'store_id', 'code', 'provider', 'origin',
-                    'placed_at', 'gross_total', 'discount_total', 'total_commissions',
-                    'total_costs', 'raw', 'calculated_costs'
-                ])
-                ->whereBetween('placed_at', [$startDateUtc, $endDateUtc])
+        // Base query para reutilizar
+        $baseQuery = Order::where('tenant_id', $tenantId)
+            ->whereBetween('placed_at', [$startDateUtc, $endDateUtc])
             ->when($storeId, fn($q) => $q->where('store_id', $storeId))
             ->when($providerFilter, function ($q, $providerFilter) {
-                // Formato: "provider" ou "provider:origin"
                 if (str_contains($providerFilter, ':')) {
                     [$provider, $origin] = explode(':', $providerFilter, 2);
                     $q->where('provider', $provider)->where('origin', $origin);
                 } else {
                     $q->where('provider', $providerFilter);
                 }
-            })
-            ->get();
-        } catch (\Exception $e) {
-            logger()->error('❌ Dashboard - Erro ao buscar pedidos do período', [
-                'tenant_id' => $tenantId,
-                'start_date' => $startDate,
-                'end_date' => $endDate,
-                'store_id' => $storeId,
-                'provider' => $providerFilter,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            throw $e;
-        }
+            });
 
-        // Inicializar acumuladores
-        $totalRevenue = 0;
-        $totalCmv = 0;
-        $totalDeliveryFee = 0;
-        $totalProductTax = 0; // Impostos dos produtos
-        $totalAdditionalTax = 0; // Impostos adicionais
-        $totalCommissions = 0;
-        $totalPaymentMethodFees = 0;
-        $totalCosts = 0; // Custos operacionais (despesas operacionais)
-        $totalDiscounts = 0;
-        $totalSubsidies = 0;
+        // Agregação SQL: totais básicos dos pedidos
+        $simpleTotals = (clone $baseQuery)
+            ->selectRaw('
+                COUNT(*) as total_orders,
+                SUM(gross_total) as sum_gross_total,
+                SUM(discount_total) as sum_discount_total,
+                SUM(total_commissions) as sum_total_commissions,
+                SUM(total_costs) as sum_total_costs
+            ')
+            ->first();
 
-        foreach ($orders as $order) {
-            // Total do pedido: mesma lógica do DRE
-            $orderRevenue = 0;
+        $totalOrders = (int) ($simpleTotals->total_orders ?? 0);
+        $totalCommissions = (float) ($simpleTotals->sum_total_commissions ?? 0);
+        $totalCosts = (float) ($simpleTotals->sum_total_costs ?? 0);
+        $totalDiscounts = (float) ($simpleTotals->sum_discount_total ?? 0);
 
-            try {
-                if ($order->provider === 'takeat') {
-                    // Takeat: usar total_delivery_price (inclui entrega e subsídios)
-                    $raw = is_array($order->raw) ? $order->raw : [];
-                    if (isset($raw['session']['total_delivery_price'])) {
-                        $orderRevenue = (float) $raw['session']['total_delivery_price'];
-                    } elseif (isset($raw['session']['total_price'])) {
-                        $orderRevenue = (float) $raw['session']['total_price'];
-                    } else {
-                        $orderRevenue = (float) ($order->gross_total ?? 0);
-                    }
-                } elseif (isset($order->raw['total']['orderAmount'])) {
-                    // iFood: orderAmount inclui produtos + entrega + taxas
-                    $orderRevenue = (float) $order->raw['total']['orderAmount'];
+        // Agregação SQL: CMV via mappings
+        $cmvData = \DB::table('orders')
+            ->join('order_items', 'order_items.order_id', '=', 'orders.id')
+            ->join('order_item_mappings', 'order_item_mappings.order_item_id', '=', 'order_items.id')
+            ->join('internal_products', 'internal_products.id', '=', 'order_item_mappings.internal_product_id')
+            ->where('orders.tenant_id', $tenantId)
+            ->whereBetween('orders.placed_at', [$startDateUtc, $endDateUtc])
+            ->when($storeId, fn($q) => $q->where('orders.store_id', $storeId))
+            ->when($providerFilter, function ($q, $providerFilter) {
+                if (str_contains($providerFilter, ':')) {
+                    [$provider, $origin] = explode(':', $providerFilter, 2);
+                    $q->where('orders.provider', $provider)->where('orders.origin', $origin);
                 } else {
-                    // Fallback: usar gross_total
-                    $orderRevenue = (float) ($order->gross_total ?? 0);
+                    $q->where('orders.provider', $providerFilter);
                 }
-            } catch (\Exception $e) {
-                logger()->error('❌ Dashboard - Erro ao calcular revenue do pedido', [
-                    'order_id' => $order->id,
-                    'provider' => $order->provider,
-                    'error' => $e->getMessage()
-                ]);
-                $orderRevenue = (float) ($order->gross_total ?? 0);
-            }
+            })
+            ->selectRaw('
+                SUM(order_items.qty * order_item_mappings.quantity * internal_products.unit_cost) as total_cmv
+            ')
+            ->first();
 
-            $totalRevenue += $orderRevenue;
+        $totalCmv = (float) ($cmvData->total_cmv ?? 0);
 
-            // Taxa de entrega (CUSTOS de entrega, não receita)
-            // Buscar apenas em calculated_costs.costs (custos operacionais de entrega)
-            // NÃO usar order->delivery_fee (é receita cobrada do cliente, não custo)
-            $deliveryFromCosts = 0;
-            $costs = $order->calculated_costs ?? null;
-            if ($costs && isset($costs['costs']) && is_array($costs['costs'])) {
-                foreach ($costs['costs'] as $c) {
-                    $cname = strtolower($c['name'] ?? '');
-                    if (strpos($cname, 'entreg') !== false || strpos($cname, 'delivery') !== false) {
-                        $deliveryFromCosts += (float) ($c['calculated_value'] ?? 0);
+        // Para revenue, impostos e outros campos complexos, usar chunk MAS sem eager loading
+        // Carregar apenas os campos JSON necessários
+        $totalRevenue = 0;
+        $totalProductTax = 0;
+        $totalAdditionalTax = 0;
+        $totalPaymentMethodFees = 0;
+        $totalSubsidies = 0;
+        $totalDeliveryFee = 0;
+
+        (clone $baseQuery)
+            ->select(['id', 'provider', 'gross_total', 'raw', 'calculated_costs'])
+            ->chunkById(200, function ($orders) use (
+                &$totalRevenue,
+                &$totalProductTax,
+                &$totalAdditionalTax,
+                &$totalPaymentMethodFees,
+                &$totalSubsidies,
+                &$totalDeliveryFee
+            ) {
+                foreach ($orders as $order) {
+                    // Calcular revenue (precisa acessar raw JSON)
+                    $raw = is_array($order->raw) ? $order->raw : [];
+
+                    if ($order->provider === 'takeat') {
+                        if (isset($raw['session']['total_delivery_price'])) {
+                            $totalRevenue += (float) $raw['session']['total_delivery_price'];
+                        } elseif (isset($raw['session']['total_price'])) {
+                            $totalRevenue += (float) $raw['session']['total_price'];
+                        } else {
+                            $totalRevenue += (float) ($order->gross_total ?? 0);
+                        }
+                    } elseif (isset($raw['total']['orderAmount'])) {
+                        $totalRevenue += (float) $raw['total']['orderAmount'];
+                    } else {
+                        $totalRevenue += (float) ($order->gross_total ?? 0);
                     }
-                }
-            }
 
-            $totalDeliveryFee += $deliveryFromCosts;
+                    // Extrair subsídios (precisa acessar raw JSON)
+                    $sessionPayments = $raw['session']['payments'] ?? [];
+                    foreach ($sessionPayments as $payment) {
+                        if (!is_array($payment)) continue;
 
-            // Calcular CMV e Impostos dos produtos a partir dos itens
-            try {
-                foreach ($order->items as $item) {
-                    $itemQuantity = $item->qty ?? $item->quantity ?? 0;
-                    $itemCost = 0;
+                        $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+                        $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
 
-                    // Calcular CMV
-                    if ($item->mappings && $item->mappings->count() > 0) {
-                        foreach ($item->mappings as $mapping) {
-                            if (isset($mapping->internalProduct) && isset($mapping->internalProduct->unit_cost)) {
-                                $unitCost = (float) $mapping->internalProduct->unit_cost;
-                                $mappingQuantity = $mapping->quantity ?? 1;
-                                $itemCost += $unitCost * $mappingQuantity;
+                        if (str_contains($paymentName, 'subsid') ||
+                            str_contains($paymentName, 'cupom') ||
+                            str_contains($paymentKeyword, 'subsid') ||
+                            str_contains($paymentKeyword, 'cupom')) {
+                            $totalSubsidies += (float) ($payment['payment_value'] ?? 0);
+                        }
+                    }
+
+                    // Processar calculated_costs JSON
+                    $costs = $order->calculated_costs;
+                    if ($costs) {
+                        // Impostos adicionais
+                        if (isset($costs['taxes']) && is_array($costs['taxes'])) {
+                            foreach ($costs['taxes'] as $tax) {
+                                $totalAdditionalTax += (float) ($tax['calculated_value'] ?? 0);
                             }
                         }
-                        $totalCmv += $itemCost * $itemQuantity;
-                    } elseif (isset($item->internalProduct) && isset($item->internalProduct->unit_cost)) {
-                        $unitCost = (float) $item->internalProduct->unit_cost;
-                        $totalCmv += $unitCost * $itemQuantity;
-                    }
 
-                    // Calcular Impostos dos produtos (se tiver categoria de imposto)
-                    if (isset($item->internalProduct) && isset($item->internalProduct->taxCategory)) {
-                        $taxRate = (float) ($item->internalProduct->taxCategory->total_tax_rate ?? 0);
-                        if ($taxRate > 0) {
-                            $unitPrice = (float) ($item->unit_price ?? $item->price ?? 0);
-                            $totalProductTax += ($itemQuantity * $unitPrice * $taxRate) / 100;
+                        // Taxas de pagamento
+                        if (isset($costs['payment_methods']) && is_array($costs['payment_methods'])) {
+                            foreach ($costs['payment_methods'] as $pm) {
+                                $totalPaymentMethodFees += (float) ($pm['calculated_value'] ?? 0);
+                            }
+                        }
+
+                        // Taxa de entrega
+                        if (isset($costs['costs']) && is_array($costs['costs'])) {
+                            foreach ($costs['costs'] as $c) {
+                                $cname = strtolower($c['name'] ?? '');
+                                if (strpos($cname, 'entreg') !== false || strpos($cname, 'delivery') !== false) {
+                                    $totalDeliveryFee += (float) ($c['calculated_value'] ?? 0);
+                                }
+                            }
                         }
                     }
                 }
-            } catch (\Exception $e) {
-                logger()->error('❌ Dashboard - Erro ao calcular CMV/impostos dos itens', [
-                    'order_id' => $order->id,
-                    'error' => $e->getMessage()
-                ]);
-            }
+            });
 
-            // Custos do calculated_costs
-            $costs = $order->calculated_costs;
-            if ($costs) {
-                // Impostos adicionais (do array taxes em calculated_costs)
-                if (isset($costs['taxes']) && is_array($costs['taxes'])) {
-                    foreach ($costs['taxes'] as $tax) {
-                        $totalAdditionalTax += (float) ($tax['calculated_value'] ?? 0);
-                    }
+        // Calcular impostos dos produtos via SQL agregado
+        $taxData = \DB::table('orders')
+            ->join('order_items', 'order_items.order_id', '=', 'orders.id')
+            ->join('internal_products', function($join) {
+                $join->on('internal_products.tenant_id', '=', 'order_items.tenant_id')
+                     ->whereRaw('EXISTS (
+                         SELECT 1 FROM product_mappings
+                         WHERE product_mappings.external_item_id = order_items.sku
+                         AND product_mappings.internal_product_id = internal_products.id
+                     )');
+            })
+            ->join('tax_categories', 'tax_categories.id', '=', 'internal_products.tax_category_id')
+            ->where('orders.tenant_id', $tenantId)
+            ->whereBetween('orders.placed_at', [$startDateUtc, $endDateUtc])
+            ->when($storeId, fn($q) => $q->where('orders.store_id', $storeId))
+            ->when($providerFilter, function ($q, $providerFilter) {
+                if (str_contains($providerFilter, ':')) {
+                    [$provider, $origin] = explode(':', $providerFilter, 2);
+                    $q->where('orders.provider', $provider)->where('orders.origin', $origin);
+                } else {
+                    $q->where('orders.provider', $providerFilter);
                 }
+            })
+            ->selectRaw('
+                SUM(
+                    order_items.qty * order_items.unit_price *
+                    CASE tax_categories.tax_calculation_type
+                        WHEN "detailed" THEN (COALESCE(tax_categories.iss_rate, 0) + COALESCE(tax_categories.icms_rate, 0) + COALESCE(tax_categories.pis_rate, 0) + COALESCE(tax_categories.cofins_rate, 0))
+                        WHEN "fixed" THEN COALESCE(tax_categories.fixed_tax_rate, 0)
+                        ELSE 0
+                    END / 100
+                ) as total_product_tax
+            ')
+            ->first();
 
-                // Taxas de meio de pagamento (do array payment_methods em calculated_costs)
-                if (isset($costs['payment_methods']) && is_array($costs['payment_methods'])) {
-                    foreach ($costs['payment_methods'] as $pm) {
-                        $totalPaymentMethodFees += (float) ($pm['calculated_value'] ?? 0);
-                    }
-                }
-            }
+        $totalProductTax = (float) ($taxData->total_product_tax ?? 0);
 
-            // Comissões (do campo total_commissions do pedido)
-            $totalCommissions += (float) ($order->total_commissions ?? 0);
-
-            // Custos operacionais (do campo total_costs do pedido)
-            $totalCosts += (float) ($order->total_costs ?? 0);
-
-            // Descontos e Subsídios (mesma lógica do DRE)
-            $discountTotal = (float) ($order->discount_total ?? 0);
-
-            // Extrair subsídios dos pagamentos da sessão
-            $raw = is_array($order->raw) ? $order->raw : [];
-            $sessionPayments = $raw['session']['payments'] ?? [];
-            $subsidy = 0;
-
-            try {
-                foreach ($sessionPayments as $payment) {
-                    if (!is_array($payment)) continue;
-
-                    $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                    $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-
-                    // Verificar se é subsídio (contém "subsid" ou "cupom")
-                    if (str_contains($paymentName, 'subsid') ||
-                        str_contains($paymentName, 'cupom') ||
-                        str_contains($paymentKeyword, 'subsid') ||
-                        str_contains($paymentKeyword, 'cupom')) {
-                        $subsidy += (float) ($payment['payment_value'] ?? 0);
-                    }
-                }
-            } catch (\Exception $e) {
-                logger()->error('❌ Dashboard - Erro ao calcular subsídios', [
-                    'order_id' => $order->id,
-                    'error' => $e->getMessage()
-                ]);
-            }
-
-            // Desconto da loja = discount_total - subsídio
-            $discount = $discountTotal - $subsidy;
-
-            $totalDiscounts += $discount;
-            $totalSubsidies += $subsidy;
-        }
-
-        // Total de impostos = impostos dos produtos + impostos adicionais
+        // Total de impostos
         $totalTaxes = $totalProductTax + $totalAdditionalTax;
+
+        // Ajustar descontos (remover subsídios que já foram somados)
+        $totalDiscounts = $totalDiscounts - $totalSubsidies;
+
+        // Contar pedidos
+        $totalOrders = (int) ($simpleTotals->total_orders ?? 0);
 
         // Buscar movimentações financeiras do período
         $startDateParsed = Carbon::parse($startDate);
@@ -290,159 +259,160 @@ class DashboardController extends Controller
         $previousStartDateUtc = Carbon::parse($previousStartDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
         $previousEndDateUtc = Carbon::parse($previousEndDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
 
-        $previousOrders = Order::where('tenant_id', $tenantId)
-            ->with([
-                'items' => function ($query) {
-                    $query->select('id', 'order_id', 'tenant_id', 'sku', 'name', 'qty', 'quantity', 'unit_price', 'price', 'total', 'add_ons');
-                },
-                'items.internalProduct' => function ($query) {
-                    $query->select('id', 'tenant_id', 'name', 'unit_cost', 'product_category', 'size');
-                },
-                'items.internalProduct.taxCategory' => function ($query) {
-                    $query->select('id', 'total_tax_rate');
-                },
-                'items.mappings' => function ($query) {
-                    $query->select('id', 'order_item_id', 'internal_product_id', 'quantity', 'unit_cost_override');
-                },
-                'items.mappings.internalProduct' => function ($query) {
-                    $query->select('id', 'name', 'unit_cost');
-                }
-            ])
-            ->select([
-                'id', 'tenant_id', 'store_id', 'code', 'provider', 'origin',
-                'placed_at', 'gross_total', 'discount_total', 'total_commissions',
-                'total_costs', 'raw', 'calculated_costs'
-            ])
+        // Mesma lógica do período atual, mas com datas anteriores
+        $previousBaseQuery = Order::where('tenant_id', $tenantId)
             ->whereBetween('placed_at', [$previousStartDateUtc, $previousEndDateUtc])
             ->when($storeId, fn($q) => $q->where('store_id', $storeId))
             ->when($providerFilter, function ($q, $providerFilter) {
-                // Formato: "provider" ou "provider:origin"
                 if (str_contains($providerFilter, ':')) {
                     [$provider, $origin] = explode(':', $providerFilter, 2);
                     $q->where('provider', $provider)->where('origin', $origin);
                 } else {
                     $q->where('provider', $providerFilter);
                 }
-            })
-            ->get();
+            });
 
-        $previousRevenue = 0;
-        $previousCmv = 0;
-        $previousDeliveryFee = 0;
-        $previousProductTax = 0;
-        $previousAdditionalTax = 0;
-        $previousCommissions = 0;
-        $previousCosts = 0;
-        $previousPaymentFees = 0;
-        $previousDiscounts = 0;
-        $previousSubsidies = 0;
+        $previousSimpleTotals = (clone $previousBaseQuery)
+            ->selectRaw('
+                SUM(total_commissions) as sum_total_commissions,
+                SUM(total_costs) as sum_total_costs,
+                SUM(discount_total) as sum_discount_total
+            ')
+            ->first();
 
-        foreach ($previousOrders as $order) {
-            // Total do pedido: mesma lógica do DRE
-            $orderRevenue = 0;
+        $previousCommissions = (float) ($previousSimpleTotals->sum_total_commissions ?? 0);
+        $previousCosts = (float) ($previousSimpleTotals->sum_total_costs ?? 0);
+        $previousDiscounts = (float) ($previousSimpleTotals->sum_discount_total ?? 0);
 
-            if ($order->provider === 'takeat') {
-                if (isset($order->raw['session']['total_delivery_price'])) {
-                    $orderRevenue = (float) $order->raw['session']['total_delivery_price'];
-                } elseif (isset($order->raw['session']['total_price'])) {
-                    $orderRevenue = (float) $order->raw['session']['total_price'];
+        // CMV período anterior (SQL agregado)
+        $previousCmvData = \DB::table('orders')
+            ->join('order_items', 'order_items.order_id', '=', 'orders.id')
+            ->join('order_item_mappings', 'order_item_mappings.order_item_id', '=', 'order_items.id')
+            ->join('internal_products', 'internal_products.id', '=', 'order_item_mappings.internal_product_id')
+            ->where('orders.tenant_id', $tenantId)
+            ->whereBetween('orders.placed_at', [$previousStartDateUtc, $previousEndDateUtc])
+            ->when($storeId, fn($q) => $q->where('orders.store_id', $storeId))
+            ->when($providerFilter, function ($q, $providerFilter) {
+                if (str_contains($providerFilter, ':')) {
+                    [$provider, $origin] = explode(':', $providerFilter, 2);
+                    $q->where('orders.provider', $provider)->where('orders.origin', $origin);
                 } else {
-                    $orderRevenue = (float) ($order->gross_total ?? 0);
+                    $q->where('orders.provider', $providerFilter);
                 }
-            } elseif (isset($order->raw['total']['orderAmount'])) {
-                $orderRevenue = (float) $order->raw['total']['orderAmount'];
-            } else {
-                $orderRevenue = (float) ($order->gross_total ?? 0);
-            }
+            })
+            ->selectRaw('SUM(order_items.qty * order_item_mappings.quantity * internal_products.unit_cost) as total_cmv')
+            ->first();
 
-            $previousRevenue += $orderRevenue;
-            // Taxa de entrega do período anterior (CUSTOS apenas)
-            $prevDeliveryFromCosts = 0;
-            $prevCosts = $order->calculated_costs ?? null;
-            if ($prevCosts && isset($prevCosts['costs']) && is_array($prevCosts['costs'])) {
-                foreach ($prevCosts['costs'] as $c) {
-                    $cname = strtolower($c['name'] ?? '');
-                    if (strpos($cname, 'entreg') !== false || strpos($cname, 'delivery') !== false) {
-                        $prevDeliveryFromCosts += (float) ($c['calculated_value'] ?? 0);
+        $previousCmv = (float) ($previousCmvData->total_cmv ?? 0);
+
+        // Apenas para revenue, subsídios e impostos, processar JSON em chunk
+        $previousRevenue = 0;
+        $previousSubsidies = 0;
+        $previousAdditionalTax = 0;
+        $previousPaymentFees = 0;
+        $previousDeliveryFee = 0;
+
+        (clone $previousBaseQuery)
+            ->select(['id', 'provider', 'gross_total', 'raw', 'calculated_costs'])
+            ->chunkById(200, function ($orders) use (&$previousRevenue, &$previousSubsidies, &$previousAdditionalTax, &$previousPaymentFees, &$previousDeliveryFee) {
+                foreach ($orders as $order) {
+                    $raw = is_array($order->raw) ? $order->raw : [];
+
+                    if ($order->provider === 'takeat') {
+                        if (isset($raw['session']['total_delivery_price'])) {
+                            $previousRevenue += (float) $raw['session']['total_delivery_price'];
+                        } elseif (isset($raw['session']['total_price'])) {
+                            $previousRevenue += (float) $raw['session']['total_price'];
+                        } else {
+                            $previousRevenue += (float) ($order->gross_total ?? 0);
+                        }
+                    } elseif (isset($raw['total']['orderAmount'])) {
+                        $previousRevenue += (float) $raw['total']['orderAmount'];
+                    } else {
+                        $previousRevenue += (float) ($order->gross_total ?? 0);
                     }
-                }
-            }
 
-            $previousDeliveryFee += $prevDeliveryFromCosts;
+                    // Subsídios
+                    $sessionPayments = $raw['session']['payments'] ?? [];
+                    foreach ($sessionPayments as $payment) {
+                        if (!is_array($payment)) continue;
 
-            // Calcular CMV e impostos dos produtos do período anterior
-            foreach ($order->items as $item) {
-                $itemQuantity = $item->qty ?? $item->quantity ?? 0;
-                $itemCost = 0;
+                        $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+                        $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
 
-                if ($item->mappings && $item->mappings->count() > 0) {
-                    foreach ($item->mappings as $mapping) {
-                        if ($mapping->internalProduct && $mapping->internalProduct->unit_cost) {
-                            $unitCost = (float) $mapping->internalProduct->unit_cost;
-                            $mappingQuantity = $mapping->quantity ?? 1;
-                            $itemCost += $unitCost * $mappingQuantity;
+                        if (str_contains($paymentName, 'subsid') ||
+                            str_contains($paymentName, 'cupom') ||
+                            str_contains($paymentKeyword, 'subsid') ||
+                            str_contains($paymentKeyword, 'cupom')) {
+                            $previousSubsidies += (float) ($payment['payment_value'] ?? 0);
                         }
                     }
-                    $previousCmv += $itemCost * $itemQuantity;
-                } elseif ($item->internalProduct && $item->internalProduct->unit_cost) {
-                    $unitCost = (float) $item->internalProduct->unit_cost;
-                    $previousCmv += $unitCost * $itemQuantity;
-                }
 
-                // Impostos dos produtos
-                if ($item->internalProduct && $item->internalProduct->taxCategory) {
-                    $taxRate = (float) ($item->internalProduct->taxCategory->total_tax_rate ?? 0);
-                    if ($taxRate > 0) {
-                        $unitPrice = (float) ($item->unit_price ?? $item->price ?? 0);
-                        $previousProductTax += ($itemQuantity * $unitPrice * $taxRate) / 100;
+                    // Impostos e taxas
+                    $costs = $order->calculated_costs;
+                    if ($costs) {
+                        if (isset($costs['taxes']) && is_array($costs['taxes'])) {
+                            foreach ($costs['taxes'] as $tax) {
+                                $previousAdditionalTax += (float) ($tax['calculated_value'] ?? 0);
+                            }
+                        }
+                        if (isset($costs['payment_methods']) && is_array($costs['payment_methods'])) {
+                            foreach ($costs['payment_methods'] as $pm) {
+                                $previousPaymentFees += (float) ($pm['calculated_value'] ?? 0);
+                            }
+                        }
+                        // Taxa de entrega
+                        if (isset($costs['costs']) && is_array($costs['costs'])) {
+                            foreach ($costs['costs'] as $c) {
+                                $cname = strtolower($c['name'] ?? '');
+                                if (strpos($cname, 'entreg') !== false || strpos($cname, 'delivery') !== false) {
+                                    $previousDeliveryFee += (float) ($c['calculated_value'] ?? 0);
+                                }
+                            }
+                        }
                     }
                 }
-            }
+            });
 
-            $costs = $order->calculated_costs;
-            if ($costs) {
-                // Impostos adicionais
-                if (isset($costs['taxes']) && is_array($costs['taxes'])) {
-                    foreach ($costs['taxes'] as $tax) {
-                        $previousAdditionalTax += (float) ($tax['calculated_value'] ?? 0);
-                    }
+        // Ajustar descontos
+        $previousDiscounts = $previousDiscounts - $previousSubsidies;
+
+        // Impostos dos produtos (SQL agregado)
+        $previousTaxData = \DB::table('orders')
+            ->join('order_items', 'order_items.order_id', '=', 'orders.id')
+            ->join('internal_products', function($join) {
+                $join->on('internal_products.tenant_id', '=', 'order_items.tenant_id')
+                     ->whereRaw('EXISTS (
+                         SELECT 1 FROM product_mappings
+                         WHERE product_mappings.external_item_id = order_items.sku
+                         AND product_mappings.internal_product_id = internal_products.id
+                     )');
+            })
+            ->join('tax_categories', 'tax_categories.id', '=', 'internal_products.tax_category_id')
+            ->where('orders.tenant_id', $tenantId)
+            ->whereBetween('orders.placed_at', [$previousStartDateUtc, $previousEndDateUtc])
+            ->when($storeId, fn($q) => $q->where('orders.store_id', $storeId))
+            ->when($providerFilter, function ($q, $providerFilter) {
+                if (str_contains($providerFilter, ':')) {
+                    [$provider, $origin] = explode(':', $providerFilter, 2);
+                    $q->where('orders.provider', $provider)->where('orders.origin', $origin);
+                } else {
+                    $q->where('orders.provider', $providerFilter);
                 }
+            })
+            ->selectRaw('
+                SUM(
+                    order_items.qty * order_items.unit_price *
+                    CASE tax_categories.tax_calculation_type
+                        WHEN "detailed" THEN (COALESCE(tax_categories.iss_rate, 0) + COALESCE(tax_categories.icms_rate, 0) + COALESCE(tax_categories.pis_rate, 0) + COALESCE(tax_categories.cofins_rate, 0))
+                        WHEN "fixed" THEN COALESCE(tax_categories.fixed_tax_rate, 0)
+                        ELSE 0
+                    END / 100
+                ) as total_product_tax
+            ')
+            ->first();
 
-                // Taxas de pagamento
-                if (isset($costs['payment_methods']) && is_array($costs['payment_methods'])) {
-                    foreach ($costs['payment_methods'] as $pm) {
-                        $previousPaymentFees += (float) ($pm['calculated_value'] ?? 0);
-                    }
-                }
-            }
-
-            // Comissões e custos dos campos do pedido
-            $previousCommissions += (float) ($order->total_commissions ?? 0);
-            $previousCosts += (float) ($order->total_costs ?? 0);
-
-            // Descontos e Subsídios (mesma lógica do DRE)
-            $discountTotal = (float) ($order->discount_total ?? 0);
-            $sessionPayments = $order->raw['session']['payments'] ?? [];
-            $subsidy = 0;
-
-            foreach ($sessionPayments as $payment) {
-                $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-
-                if (str_contains($paymentName, 'subsid') ||
-                    str_contains($paymentName, 'cupom') ||
-                    str_contains($paymentKeyword, 'subsid') ||
-                    str_contains($paymentKeyword, 'cupom')) {
-                    $subsidy += (float) ($payment['payment_value'] ?? 0);
-                }
-            }
-
-            $discount = $discountTotal - $subsidy;
-            $previousDiscounts += $discount;
-            $previousSubsidies += $subsidy;
-        }
-
-        // Total de impostos do período anterior
+        $previousProductTax = (float) ($previousTaxData->total_product_tax ?? 0);
         $previousTaxes = $previousProductTax + $previousAdditionalTax;
 
         // Movimentações financeiras do período anterior
@@ -482,11 +452,32 @@ class DashboardController extends Controller
         $netProfitChange = $previousNetProfit > 0 ? (($netProfit - $previousNetProfit) / $previousNetProfit) * 100 : 0;
 
         // Gerar dados do gráfico (agrupados por dia no horário de Brasília)
+        // Otimização: usar SQL agregado ao invés de loop PHP
         $chartData = [];
-        $ordersByDate = $orders->groupBy(function ($order) {
-            // Converter UTC para Brasília antes de agrupar
-            return Carbon::parse($order->placed_at)->setTimezone('America/Sao_Paulo')->format('Y-m-d');
-        });
+
+        // Buscar totais por dia usando SQL
+        $dailyTotals = Order::where('tenant_id', $tenantId)
+            ->whereBetween('placed_at', [$startDateUtc, $endDateUtc])
+            ->when($storeId, fn($q) => $q->where('store_id', $storeId))
+            ->when($providerFilter, function ($q, $providerFilter) {
+                if (str_contains($providerFilter, ':')) {
+                    [$provider, $origin] = explode(':', $providerFilter, 2);
+                    $q->where('provider', $provider)->where('origin', $origin);
+                } else {
+                    $q->where('provider', $providerFilter);
+                }
+            })
+            ->selectRaw("
+                DATE(CONVERT_TZ(placed_at, '+00:00', '-03:00')) as date,
+                SUM(gross_total) as total_revenue,
+                SUM(total_commissions) as total_commissions,
+                SUM(total_costs) as total_costs,
+                COUNT(*) as order_count
+            ")
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get()
+            ->keyBy('date');
 
         // Preencher todos os dias do período
         $currentDate = Carbon::parse($startDate);
@@ -494,106 +485,41 @@ class DashboardController extends Controller
 
         while ($currentDate <= $endDateCarbon) {
             $dateStr = $currentDate->format('Y-m-d');
-            $dayOrders = $ordersByDate->get($dateStr, collect());
+            $dayData = $dailyTotals->get($dateStr);
 
-            $dayRevenue = 0;
-            $dayNetProfit = 0;
-            $dayTotalCmv = 0;
-            $dayTotalTaxes = 0;
-            $dayTotalCommissions = 0;
-            $dayTotalCosts = 0;
-            $dayTotalPmFees = 0;
+            if ($dayData) {
+                $dayRevenue = (float) $dayData->total_revenue;
+                $dayCommissions = (float) $dayData->total_commissions;
+                $dayCosts = (float) $dayData->total_costs;
 
-            foreach ($dayOrders as $order) {
-                // Total do pedido: iFood usa raw.total.orderAmount, Takeat usa gross_total
-                $orderTotal = 0;
-                if (isset($order->raw['total']['orderAmount'])) {
-                    $orderTotal = (float) $order->raw['total']['orderAmount'];
-                } else {
-                    $orderTotal = (float) ($order->gross_total ?? 0);
-                }
-                $dayRevenue += $orderTotal;
+                // Calcular proporções do dia em relação ao total
+                $proportion = $totalRevenue > 0 ? ($dayRevenue / $totalRevenue) : 0;
 
-                // Calcular custos do dia
-                $dayCmv = 0;
-                $dayProductTax = 0;
+                // Distribuir proporcionalmente os valores que não estão agregados por dia
+                $dayCmv = $totalCmv * $proportion;
+                $dayTaxes = $totalTaxes * $proportion;
+                $dayPaymentFees = $totalPaymentMethodFees * $proportion;
 
-                foreach ($order->items as $item) {
-                    $itemQuantity = $item->qty ?? $item->quantity ?? 0;
-                    $itemCost = 0;
-
-                    // CMV
-                    if ($item->mappings && $item->mappings->count() > 0) {
-                        foreach ($item->mappings as $mapping) {
-                            if ($mapping->internalProduct && $mapping->internalProduct->unit_cost) {
-                                $unitCost = (float) $mapping->internalProduct->unit_cost;
-                                $mappingQuantity = $mapping->quantity ?? 1;
-                                $itemCost += $unitCost * $mappingQuantity;
-                            }
-                        }
-                        $dayCmv += $itemCost * $itemQuantity;
-                    } elseif ($item->internalProduct && $item->internalProduct->unit_cost) {
-                        $unitCost = (float) $item->internalProduct->unit_cost;
-                        $dayCmv += $unitCost * $itemQuantity;
-                    }
-
-                    // Impostos dos produtos
-                    if ($item->internalProduct && $item->internalProduct->taxCategory) {
-                        $taxRate = (float) ($item->internalProduct->taxCategory->total_tax_rate ?? 0);
-                        if ($taxRate > 0) {
-                            $unitPrice = (float) ($item->unit_price ?? $item->price ?? 0);
-                            $dayProductTax += ($itemQuantity * $unitPrice * $taxRate) / 100;
-                        }
-                    }
-                }
-
-                $dayAdditionalTax = 0;
+                $dayNetTotal = $dayRevenue - $dayCommissions - $dayCosts - $dayCmv - $dayTaxes - $dayPaymentFees;
+            } else {
+                $dayRevenue = 0;
                 $dayCommissions = 0;
-                $dayPmFees = 0;
                 $dayCosts = 0;
-
-                $costs = $order->calculated_costs;
-                if ($costs) {
-                    // Impostos adicionais
-                    if (isset($costs['taxes']) && is_array($costs['taxes'])) {
-                        foreach ($costs['taxes'] as $tax) {
-                            $dayAdditionalTax += (float) ($tax['calculated_value'] ?? 0);
-                        }
-                    }
-
-                    // Taxas de pagamento
-                    if (isset($costs['payment_methods']) && is_array($costs['payment_methods'])) {
-                        foreach ($costs['payment_methods'] as $pm) {
-                            $dayPmFees += (float) ($pm['calculated_value'] ?? 0);
-                        }
-                    }
-                }
-
-                // Comissões e custos dos campos do pedido
-                $dayCommissions += (float) ($order->total_commissions ?? 0);
-                $dayCosts += (float) ($order->total_costs ?? 0);
-
-                $dayTotalTax = $dayProductTax + $dayAdditionalTax;
-                $dayFixedCosts = $dayCommissions + $dayCosts + $dayPmFees;
-                $dayNetProfit += $orderTotal - $dayCmv - $dayTotalTax - $dayFixedCosts;
-
-                // Acumular valores separados para o tooltip
-                $dayTotalCmv += $dayCmv;
-                $dayTotalTaxes += $dayTotalTax;
-                $dayTotalCommissions += $dayCommissions;
-                $dayTotalCosts += $dayCosts;
-                $dayTotalPmFees += $dayPmFees;
+                $dayCmv = 0;
+                $dayTaxes = 0;
+                $dayPaymentFees = 0;
+                $dayNetTotal = 0;
             }
 
             $chartData[] = [
                 'date' => $dateStr,
                 'revenue' => round($dayRevenue, 2),
-                'cmv' => round($dayTotalCmv, 2),
-                'taxes' => round($dayTotalTaxes, 2),
-                'commissions' => round($dayTotalCommissions, 2),
-                'costs' => round($dayTotalCosts, 2),
-                'paymentFees' => round($dayTotalPmFees, 2),
-                'netTotal' => round($dayNetProfit, 2),
+                'cmv' => round($dayCmv, 2),
+                'taxes' => round($dayTaxes, 2),
+                'commissions' => round($dayCommissions, 2),
+                'costs' => round($dayCosts, 2),
+                'paymentFees' => round($dayPaymentFees, 2),
+                'netTotal' => round($dayNetTotal, 2),
             ];
 
             $currentDate->addDay();
@@ -677,7 +603,7 @@ class DashboardController extends Controller
                 'contributionMarginChange' => round($contributionMarginChange, 1),
                 'netProfit' => round($netProfit, 2), // Lucro Líquido
                 'netProfitChange' => round($netProfitChange, 1),
-                'orderCount' => $orders->count(),
+                'orderCount' => $totalOrders,
             ],
             'chartData' => $chartData,
             'stores' => $stores,
