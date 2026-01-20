@@ -44,7 +44,7 @@ autorestart=true
 stopasgroup=true
 killasgroup=true
 redirect_stderr=true
-stdout_logfile=/var/log/supervisor/lucro-facil-reverb.log
+stdout_logfile=/caminho/para/projeto/storage/logs/reverb.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=10
 ```
@@ -98,7 +98,7 @@ sudo supervisorctl status lucro-facil-reverb
 ### 4.2. Verificar logs do Reverb
 
 ```bash
-sudo tail -f /var/log/supervisor/lucro-facil-reverb.log
+tail -f storage/logs/reverb.log
 ```
 
 Deve mostrar:
@@ -162,7 +162,7 @@ netstat -tlnp | grep 8080
 sudo supervisorctl status lucro-facil-reverb
 
 # Ver logs
-sudo tail -f /var/log/supervisor/lucro-facil-reverb.log
+tail -f storage/logs/reverb.log
 
 # Reiniciar
 sudo supervisorctl restart lucro-facil-reverb
@@ -199,10 +199,10 @@ tail -f storage/logs/laravel.log | grep "broadcast\|ItemTriaged"
 
 ```bash
 # Reverb
-sudo tail -f /var/log/supervisor/lucro-facil-reverb.log
+tail -f storage/logs/reverb.log
 
 # Queue (broadcasts)
-sudo tail -f /var/log/supervisor/lucro-facil-queue.log
+tail -f storage/logs/laravel.log | grep "BroadcastEvent\|ItemTriaged"
 
 # Laravel (eventos)
 tail -f storage/logs/laravel.log | grep "ItemTriaged"
