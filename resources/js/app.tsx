@@ -41,10 +41,44 @@ console.log('[WebSocket] Echo configurado:', {
     secure: isSecure,
 });
 
-// Forçar conexão do Pusher
+// Forçar conexão do Pusher e adicionar listeners de eventos
 if (window.Echo.connector?.pusher) {
-    window.Echo.connector.pusher.connect();
-    console.log('[WebSocket] Conexão Pusher iniciada');
+    const pusher = window.Echo.connector.pusher;
+
+    // Logs de estados de conexão
+    pusher.connection.bind('connecting', () => {
+        console.log('[WebSocket] Estado: Conectando...');
+    });
+
+    pusher.connection.bind('connected', () => {
+        console.log(
+            '[WebSocket] Estado: Conectado!',
+            pusher.connection.socket_id,
+        );
+    });
+
+    pusher.connection.bind('unavailable', () => {
+        console.error('[WebSocket] Estado: Indisponível');
+    });
+
+    pusher.connection.bind('failed', () => {
+        console.error('[WebSocket] Estado: Falhou');
+    });
+
+    pusher.connection.bind('disconnected', () => {
+        console.warn('[WebSocket] Estado: Desconectado');
+    });
+
+    pusher.connection.bind('error', (err: any) => {
+        console.error('[WebSocket] Erro de conexão:', err);
+    });
+
+    // Tentar conectar
+    pusher.connect();
+    console.log(
+        '[WebSocket] Tentando conectar em:',
+        pusher.config.wsHost + ':' + pusher.config.wsPort,
+    );
 }
 
 const appName = import.meta.env.VITE_APP_NAME || 'Lucro Fácil';
