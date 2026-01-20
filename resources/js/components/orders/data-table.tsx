@@ -824,10 +824,10 @@ export function DataTable({
                         setDateRange(range);
                         updateFilters({
                             start_date: range?.from
-                                ? range.from.toISOString().split('T')[0]
+                                ? `${range.from.getFullYear()}-${String(range.from.getMonth() + 1).padStart(2, '0')}-${String(range.from.getDate()).padStart(2, '0')}`
                                 : undefined,
                             end_date: range?.to
-                                ? range.to.toISOString().split('T')[0]
+                                ? `${range.to.getFullYear()}-${String(range.to.getMonth() + 1).padStart(2, '0')}-${String(range.to.getDate()).padStart(2, '0')}`
                                 : undefined,
                         });
                     }}
