@@ -35,7 +35,17 @@ type ItemTriagedEvent = {
  */
 export function useOrderStatusListener(tenantId?: number) {
     useEffect(() => {
-        if (!tenantId || !window.Echo) return;
+        if (!tenantId || !window.Echo) {
+            console.warn('[WebSocket] Hook não inicializado:', {
+                tenantId,
+                echoDisponivel: !!window.Echo,
+            });
+            return;
+        }
+
+        console.log(
+            `[WebSocket] Conectando ao canal orders.tenant.${tenantId}`,
+        );
 
         const channel = window.Echo.channel(`orders.tenant.${tenantId}`);
 
