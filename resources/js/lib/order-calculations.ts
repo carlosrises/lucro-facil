@@ -117,7 +117,45 @@ export function calculateOrderCMV(items: OrderItem[]): number {
         // Custo do item principal
         let itemTotal = calculateItemCost(item);
 
-        // Somar custo dos add-ons vinculados
+        // MÉTODO 1: Somar custo dos add-ons dos mappings (OrderItemMapping)
+        if (item.mappings && Array.isArray(item.mappings)) {
+            const addonMappings = item.mappings.filter(
+                (m) => m.mapping_type === 'addon',
+            );
+
+            if (addonMappings.length > 0) {
+                const mappingsCost = addonMappings.reduce(
+                    (addOnSum: number, mapping: any) => {
+                        if (!mapping.internal_product?.unit_cost) {
+                            return addOnSum;
+                        }
+
+                        // Usar unit_cost_override se existir, senão usar unit_cost do produto
+                        const unitCost =
+                            mapping.unit_cost_override !== null &&
+                            mapping.unit_cost_override !== undefined
+                                ? parseFloat(String(mapping.unit_cost_override))
+                                : parseFloat(
+                                      mapping.internal_product.unit_cost,
+                                  );
+
+                        // APLICAR FRAÇÃO: mapping.quantity contém a fração (0.25 para 1/4)
+                        const fraction = mapping.quantity || 1;
+
+                        // unit_cost_override é o custo INTEIRO, precisa multiplicar pela fração
+                        return addOnSum + unitCost * fraction;
+                    },
+                    0,
+                );
+
+                itemTotal += mappingsCost;
+
+                // Se usou mappings, pular add_ons_enriched
+                return sum + itemTotal;
+            }
+        }
+
+        // MÉTODO 2 (FALLBACK): Somar custo dos add-ons_enriched (legado)
         if (item.add_ons_enriched && Array.isArray(item.add_ons_enriched)) {
             // Detectar tamanho da pizza do nome do item pai
             const pizzaSize = detectPizzaSize(item.name);
@@ -137,12 +175,11 @@ export function calculateOrderCMV(items: OrderItem[]): number {
                         addOn.unit_cost_override !== undefined &&
                         addOn.unit_cost_override !== null
                     ) {
-                        // Aplicar a fração (mapping_quantity) e a quantidade do add-on
-                        const fraction = addOn.mapping_quantity || 1.0;
+                        // unit_cost_override já é o custo final (com fração aplicada)
+                        // Apenas multiplicar pela quantidade do add-on no pedido
                         const addOnQuantity = addOn.quantity || 1;
                         const cost =
                             parseFloat(String(addOn.unit_cost_override)) *
-                            fraction *
                             addOnQuantity;
 
                         return addOnSum + cost;
