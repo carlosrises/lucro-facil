@@ -1,10 +1,37 @@
 import '../css/app.css';
 
 import { createInertiaApp, router } from '@inertiajs/react';
+import Echo from 'laravel-echo';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
+import Pusher from 'pusher-js';
 import { createRoot } from 'react-dom/client';
 import { toast } from 'sonner';
 import { initializeTheme } from './hooks/use-appearance';
+
+// Configurar Laravel Echo para WebSockets
+declare global {
+    interface Window {
+        Pusher: typeof Pusher;
+        Echo: Echo;
+    }
+}
+
+window.Pusher = Pusher;
+
+// Detectar ambiente e configurar WebSocket adequadamente
+const isSecure = window.location.protocol === 'https:';
+
+window.Echo = new Echo({
+    broadcaster: 'reverb',
+    key: import.meta.env.VITE_REVERB_APP_KEY,
+    wsHost: window.location.hostname,
+    wsPort: isSecure ? 443 : 8080,
+    wssPort: 443,
+    forceTLS: isSecure,
+    encrypted: isSecure,
+    enabledTransports: isSecure ? ['wss'] : ['ws'],
+    disableStats: true,
+});
 
 const appName = import.meta.env.VITE_APP_NAME || 'Lucro Fácil';
 
