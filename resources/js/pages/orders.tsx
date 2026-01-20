@@ -95,16 +95,25 @@ export default function Orders() {
     // Atualiza a lista silenciosamente sem skeleton/reload
     useRealtimeOrders((auth.user as any)?.tenant_id, (order, isNew) => {
         // Validar se o pedido atende os filtros ativos antes de adicionar
-        const orderDate = new Date(order.placed_at);
-        const startDate = new Date(filters.start_date + ' 00:00:00');
-        const endDate = new Date(filters.end_date + ' 23:59:59');
+        // IMPORTANTE: placed_at vem em UTC, precisamos converter para horário de Brasília
+        const orderDateUTC = new Date(order.placed_at);
+        const orderDateBR = new Date(
+            orderDateUTC.toLocaleString('en-US', {
+                timeZone: 'America/Sao_Paulo',
+            }),
+        );
+
+        // Converter filtros para Date (já estão em formato de Brasília)
+        const startDateBR = new Date(filters.start_date + ' 00:00:00');
+        const endDateBR = new Date(filters.end_date + ' 23:59:59');
 
         // Verificar se o pedido está dentro do período filtrado
-        if (orderDate < startDate || orderDate > endDate) {
+        if (orderDateBR < startDateBR || orderDateBR > endDateBR) {
             console.log(
                 '[Realtime] Pedido fora do período filtrado, ignorando',
                 {
-                    order_date: order.placed_at,
+                    order_date_utc: order.placed_at,
+                    order_date_br: orderDateBR.toISOString(),
                     filter_start: filters.start_date,
                     filter_end: filters.end_date,
                 },
