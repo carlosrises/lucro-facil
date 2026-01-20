@@ -71,6 +71,46 @@ class OrderItemMapping extends Model
     }
 
     /**
+     * Buscar ProductMapping do add-on/item
+     * Para add-ons, busca pelo external_item_id gerado a partir do nome (addon_HASH)
+     * Para items principais, busca pelo SKU do OrderItem
+     *
+     * IMPORTANTE: Este é um accessor que busca do banco. Para evitar N+1,
+     * use o eager loading adequado no controller.
+     */
+    public function getProductMappingAttribute()
+    {
+        // Para add-ons, precisamos gerar o SKU igual ao backend
+        if ($this->mapping_type === 'addon' && $this->orderItem) {
+            $addOns = $this->orderItem->add_ons ?? [];
+            $index = (int) $this->external_reference;
+
+            if (isset($addOns[$index])) {
+                $addOn = $addOns[$index];
+                $addOnName = is_string($addOn) ? $addOn : ($addOn['name'] ?? $addOn['nome'] ?? '');
+
+                // Gerar SKU consistente (igual ao que é usado na Triagem)
+                $sku = 'addon_'.md5($addOnName);
+
+                // Buscar ProductMapping por esse SKU
+                // MESMO MÉTODO QUE A TRIAGEM USA
+                return ProductMapping::where('external_item_id', $sku)
+                    ->where('tenant_id', $this->tenant_id)
+                    ->first();
+            }
+        }
+
+        // Para items principais, buscar pelo SKU do OrderItem
+        if ($this->orderItem && $this->orderItem->sku) {
+            return ProductMapping::where('external_item_id', $this->orderItem->sku)
+                ->where('tenant_id', $this->tenant_id)
+                ->first();
+        }
+
+        return null;
+    }
+
+    /**
      * Calcular custo total desta associação
      * Usa unit_cost_override se disponível (CMV calculado por tamanho)
      * Senão usa unit_cost do produto
@@ -90,6 +130,7 @@ class OrderItemMapping extends Model
 
         // Prioridade 2: usar unit_cost do produto
         $unitCost = (float) $this->internalProduct->unit_cost;
+
         return $unitCost * $quantity;
     }
 
