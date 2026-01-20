@@ -22,18 +22,12 @@ class OrdersController extends Controller
                 'delivery_fee', 'tip', 'net_total', 'raw', 'tenant_id',
                 'calculated_costs', 'total_costs', 'total_commissions', 'net_revenue', 'costs_calculated_at',
             ])
+            // Carregar items + mappings necessários para cálculo de CMV nas colunas
+            // Relacionamentos profundos (add_ons detalhados, sale) são carregados ao expandir
             ->with([
-                'items' => function ($query) {
-                    // Selecionar apenas campos que existem na tabela order_items
-                    $query->select('id', 'order_id', 'sku', 'name', 'qty', 'unit_price', 'total', 'add_ons', 'tenant_id', 'created_at', 'updated_at');
-                },
-                'items.internalProduct.taxCategory',
-                'items.productMapping' => function ($query) {
-                    $query->where('product_mappings.tenant_id', tenant_id());
-                },
-                'items.mappings.internalProduct',
-                'items.mappings.orderItem', // Necessário para o accessor product_mapping funcionar
-                'sale',
+                'items:id,order_id,sku,name,qty,unit_price,total,add_ons,tenant_id',
+                'items.mappings:id,order_item_id,internal_product_id,unit_cost_override,quantity,mapping_type,external_reference',
+                'items.mappings.internalProduct:id,name,unit_cost',
             ])
             ->where('tenant_id', tenant_id())
             ->when($request->input('status'), function ($q, $status) {
@@ -132,114 +126,6 @@ class OrdersController extends Controller
         $perPage = (int) $request->input('per_page', 10);
 
         $orders = $query->paginate($perPage)->withQueryString();
-
-        // Carregar ProductMappings dos add-ons (classificações da Triagem)
-        // Coletar todos os SKUs de add-ons
-        $addOnSkus = [];
-        foreach ($orders->items() as $order) {
-            foreach ($order->items as $item) {
-                if (!empty($item->add_ons) && is_array($item->add_ons)) {
-                    foreach ($item->add_ons as $addOn) {
-                        $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
-                        if ($addOnName) {
-                            $addOnSkus[] = 'addon_' . md5($addOnName);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Buscar todos ProductMappings de uma vez (evitar N+1)
-        $productMappingsMap = [];
-        if (!empty($addOnSkus)) {
-            $productMappingsMap = \App\Models\ProductMapping::whereIn('external_item_id', array_unique($addOnSkus))
-                ->where('tenant_id', tenant_id())
-                ->with('internalProduct')
-                ->get()
-                ->keyBy('external_item_id');
-        }
-
-        // Enriquecer order_items com product_mappings dos add-ons
-        foreach ($orders->items() as $order) {
-            foreach ($order->items as $item) {
-                if (!empty($item->add_ons) && is_array($item->add_ons)) {
-                    // Criar array temporário com ProductMappings
-                    $addOnMappings = [];
-                    foreach ($item->add_ons as $index => $addOn) {
-                        $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
-                        $sku = 'addon_' . md5($addOnName);
-
-                        if (isset($productMappingsMap[$sku])) {
-                            $addOnMappings[$index] = $productMappingsMap[$sku];
-                        }
-                    }
-
-                    // Adicionar ao item para acesso no frontend
-                    $item->add_ons_product_mappings = $addOnMappings;
-                }
-            }
-        }
-
-        // TEMPORARIAMENTE DESABILITADO - Enriquecer add-ons causa timeout
-        /*
-        // Enriquecer add-ons com seus ProductMappings e unit_cost_override dos OrderItemMappings
-        foreach ($orders->items() as $order) {
-            foreach ($order->items as $item) {
-                if (! empty($item->add_ons) && is_array($item->add_ons)) {
-                    $addOnsWithMappings = [];
-                    foreach ($item->add_ons as $index => $addOn) {
-                        $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
-                        $addOnQuantity = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
-                        $addOnSku = 'addon_'.md5($addOnName);
-
-                        // Buscar ProductMapping do add-on
-                        $mapping = \App\Models\ProductMapping::where('external_item_id', $addOnSku)
-                            ->where('tenant_id', tenant_id())
-                            ->with('internalProduct:id,name,unit_cost,product_category')
-                            ->first();
-
-                        // CRÍTICO: Buscar OrderItemMapping do add-on para obter unit_cost_override e quantity (fração)
-                        $orderItemMapping = \App\Models\OrderItemMapping::where('order_item_id', $item->id)
-                            ->where('mapping_type', 'addon')
-                            ->where('external_reference', (string) $index)
-                            ->first();
-
-                        // Usar unit_cost_override do OrderItemMapping se existir, senão fallback para unit_cost do produto
-                        $unitCost = null;
-                        $mappingQuantity = null;
-                        if ($orderItemMapping && $orderItemMapping->unit_cost_override !== null) {
-                            $unitCost = (float) $orderItemMapping->unit_cost_override;
-                            $mappingQuantity = (float) $orderItemMapping->quantity; // Fração do sabor (ex: 0.25 para 1/4)
-                        } elseif ($mapping && $mapping->internalProduct) {
-                            $unitCost = (float) $mapping->internalProduct->unit_cost;
-                            $mappingQuantity = 1.0; // Sem fração
-                        }
-
-                        $addOnsWithMappings[] = [
-                            'name' => $addOnName,
-                            'sku' => $addOnSku,
-                            'external_code' => $addOnSku,
-                            'quantity' => $addOnQuantity, // Quantidade do add-on (ex: 2 para "2x Don Rafaello")
-                            'unit_cost_override' => $unitCost, // CMV unitário do OrderItemMapping
-                            'mapping_quantity' => $mappingQuantity, // Fração do sabor (0.25 = 1/4)
-                            'product_mapping' => $mapping ? [
-                                'id' => $mapping->id,
-                                'item_type' => $mapping->item_type,
-                                'internal_product_id' => $mapping->internal_product_id,
-                                'internal_product' => $mapping->internalProduct ? [
-                                    'id' => $mapping->internalProduct->id,
-                                    'name' => $mapping->internalProduct->name,
-                                    'unit_cost' => $mapping->internalProduct->unit_cost,
-                                    'product_category' => $mapping->internalProduct->product_category,
-                                ] : null,
-                            ] : null,
-                        ];
-                    }
-                    $item->add_ons_enriched = $addOnsWithMappings;
-                }
-            }
-        }
-        */
 
         // Para popular o filtro de lojas dinamicamente
         $stores = Store::query()
