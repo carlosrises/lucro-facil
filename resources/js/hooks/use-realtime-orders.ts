@@ -46,11 +46,23 @@ export function useRealtimeOrders(
             return;
         }
 
-        console.log(
-            `[Realtime Orders] Escutando atualizações no tenant ${tenantId}`,
-        );
+        const channelName = `orders.tenant.${tenantId}`;
+        console.log(`[Realtime Orders] 🔌 Conectando ao canal: ${channelName}`);
 
-        const channel = window.Echo.channel(`orders.tenant.${tenantId}`);
+        const channel = window.Echo.channel(channelName);
+
+        channel.subscribed(() => {
+            console.log(
+                `[Realtime Orders] ✅ Inscrito no canal: ${channelName}`,
+            );
+        });
+
+        channel.error((error: any) => {
+            console.error(
+                `[Realtime Orders] ❌ Erro no canal ${channelName}:`,
+                error,
+            );
+        });
 
         // Função helper para buscar pedido atualizado
         const fetchOrder = async (orderId: number, isNew: boolean) => {
@@ -83,7 +95,10 @@ export function useRealtimeOrders(
 
         // Listener para novos pedidos
         channel.listen('.order.created', async (event: NewOrderEvent) => {
-            console.log('[Realtime Orders] Novo pedido recebido:', event);
+            console.log(
+                '[Realtime Orders] ✅ Evento .order.created recebido:',
+                event,
+            );
 
             // Toast discreto apenas para novos
             toast.success('Novo pedido recebido', {

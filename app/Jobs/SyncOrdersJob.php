@@ -177,6 +177,14 @@ class SyncOrdersJob implements ShouldQueue
 
                         // Disparar evento de novo pedido se foi criado agora
                         if (!$existingOrder) {
+                            \Log::info('🚀 [WebSocket] Disparando evento OrderCreated', [
+                                'tenant_id' => $this->tenantId,
+                                'order_id' => $order->id,
+                                'order_code' => $order->code,
+                                'provider' => $order->provider,
+                                'channel' => "orders.tenant.{$this->tenantId}",
+                                'broadcast_driver' => config('broadcasting.default'),
+                            ]);
                             event(new \App\Events\OrderCreated($order));
                         }
 

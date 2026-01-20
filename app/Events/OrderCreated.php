@@ -5,17 +5,24 @@ namespace App\Events;
 use App\Models\Order;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class OrderCreated implements ShouldBroadcast
+class OrderCreated implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public function __construct(
         public Order $order
-    ) {}
+    ) {
+        \Log::info('[OrderCreated Event] Disparando evento', [
+            'tenant_id' => $order->tenant_id,
+            'order_id' => $order->id,
+            'order_code' => $order->code,
+            'channel' => "orders.tenant.{$order->tenant_id}",
+        ]);
+    }
 
     /**
      * Canal no qual o evento será transmitido
