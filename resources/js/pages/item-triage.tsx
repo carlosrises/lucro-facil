@@ -1,6 +1,8 @@
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Combobox } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import {
@@ -21,6 +23,7 @@ import {
     Clock,
     CupSoda,
     IceCream2,
+    Info,
     Layers,
     Link2Off,
     ListChecks,
@@ -155,6 +158,9 @@ export default function ItemTriage({
     const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
     const [selectedType, setSelectedType] = useState<string>('');
     const [selectedProduct, setSelectedProduct] = useState<string>('');
+    const [selectedSkus, setSelectedSkus] = useState<Set<string>>(
+        () => new Set(),
+    );
     const [search, setSearch] = useState(filters.search);
     const [status, setStatus] = useState(filters.status);
     const [itemType, setItemType] = useState(filters.item_type);
@@ -165,6 +171,44 @@ export default function ItemTriage({
     );
     const [lastClassifiedType, setLastClassifiedType] = useState<string>('');
     const classifyButtonRef = useRef<HTMLButtonElement>(null);
+
+    const bulkSelectedItems = items.filter((item) =>
+        selectedSkus.has(item.sku),
+    );
+    const bulkSelectionCount = bulkSelectedItems.length;
+    const classificationTargets =
+        bulkSelectionCount > 0
+            ? bulkSelectedItems
+            : selectedItem
+              ? [selectedItem]
+              : [];
+    const canClassify = Boolean(
+        selectedType && classificationTargets.length > 0,
+    );
+    const classificationButtonLabel =
+        classificationTargets.length > 1
+            ? `Confirmar classificação (${classificationTargets.length})`
+            : 'Confirmar Classificação';
+
+    const handleItemSelectionChange = (sku: string, checked: boolean) => {
+        setSelectedSkus((prev) => {
+            const next = new Set(prev);
+            if (checked) {
+                next.add(sku);
+            } else {
+                next.delete(sku);
+            }
+            return next;
+        });
+    };
+
+    const selectAllVisible = () => {
+        setSelectedSkus(new Set(items.map((item) => item.sku)));
+    };
+
+    const clearSelection = () => {
+        setSelectedSkus(new Set());
+    };
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Produtos', href: '/products' },
@@ -189,6 +233,32 @@ export default function ItemTriage({
             }
         }
     }, [selectedItem, lastClassifiedType]);
+
+    useEffect(() => {
+        setSelectedSkus((prev) => {
+            if (prev.size === 0) {
+                return prev;
+            }
+
+            const validSkus = new Set(items.map((item) => item.sku));
+            const next = new Set<string>();
+
+            prev.forEach((sku) => {
+                if (validSkus.has(sku)) {
+                    next.add(sku);
+                }
+            });
+
+            if (
+                next.size === prev.size &&
+                [...next].every((sku) => prev.has(sku))
+            ) {
+                return prev;
+            }
+
+            return next;
+        });
+    }, [items]);
 
     // Listener para tecla Enter
     useEffect(() => {
@@ -272,67 +342,87 @@ export default function ItemTriage({
         }
     };
 
-    // Classificar item
+    // Classificar item (individual ou em lote)
     const handleClassify = () => {
-        if (!selectedItem) return;
+        if (!selectedType) return;
 
-        const currentType = selectedType; // Salvar o tipo atual antes do POST
-        const currentSku = selectedItem.sku; // Salvar o SKU do item atual
+        const targets = classificationTargets;
+
+        if (targets.length === 0) {
+            toast.error('Selecione pelo menos um item para classificar.');
+            return;
+        }
+
+        const currentType = selectedType;
+        const processedSkus = targets.map((item) => item.sku);
+        const anchorSku =
+            selectedItem && processedSkus.includes(selectedItem.sku)
+                ? selectedItem.sku
+                : processedSkus[0];
 
         router.post(
             '/item-triage/classify',
             {
-                sku: selectedItem.sku,
-                name: selectedItem.name,
+                items: targets.map((item) => ({
+                    sku: item.sku,
+                    name: item.name,
+                })),
                 item_type: selectedType,
                 internal_product_id: selectedProduct || null,
             },
             {
                 preserveScroll: true,
                 onSuccess: (page) => {
-                    toast.success('Item classificado com sucesso!');
+                    const processedCount = processedSkus.length;
+                    toast.success(
+                        processedCount > 1
+                            ? `${processedCount} itens processados com sucesso!`
+                            : 'Item classificado com sucesso!',
+                    );
 
-                    // Salvar última classificação ANTES de selecionar próximo item
                     setLastClassifiedType(currentType);
+                    setSelectedSkus(new Set());
 
-                    // Atualizar items com os novos dados da página
                     const updatedItems = page.props.items as Item[];
-
-                    // Buscar o índice do item atual no array ATUALIZADO
                     const currentIndex = updatedItems.findIndex(
-                        (item) => item.sku === currentSku,
+                        (item) => item.sku === anchorSku,
                     );
 
-                    // Tentar selecionar próximo item não classificado após o atual
-                    const nextUnclassified = updatedItems.find(
-                        (item, idx) => idx > currentIndex && !item.mapping,
-                    );
+                    const findNextAfterCurrent = () =>
+                        updatedItems.find(
+                            (item, idx) => idx > currentIndex && !item.mapping,
+                        );
+
+                    const nextUnclassified = findNextAfterCurrent();
 
                     if (nextUnclassified) {
-                        // Forçar o tipo para o último classificado
                         setTimeout(() => {
                             handleSelectItem(nextUnclassified);
                             setSelectedType(currentType);
                         }, 0);
-                    } else {
-                        // Se não houver próximo não classificado, pegar primeiro não classificado
-                        const firstUnclassified = updatedItems.find(
-                            (item) => !item.mapping,
-                        );
-                        if (firstUnclassified) {
-                            setTimeout(() => {
-                                handleSelectItem(firstUnclassified);
-                                setSelectedType(currentType);
-                            }, 0);
-                        } else if (updatedItems.length > 0) {
-                            // Se todos classificados, pegar primeiro da lista
-                            handleSelectItem(updatedItems[0]);
-                        } else {
-                            setSelectedItem(null);
-                            setSelectedType('');
-                            setSelectedProduct('');
-                        }
+                        return;
                     }
+
+                    const firstUnclassified = updatedItems.find(
+                        (item) => !item.mapping,
+                    );
+
+                    if (firstUnclassified) {
+                        setTimeout(() => {
+                            handleSelectItem(firstUnclassified);
+                            setSelectedType(currentType);
+                        }, 0);
+                        return;
+                    }
+
+                    if (updatedItems.length > 0) {
+                        handleSelectItem(updatedItems[0]);
+                        return;
+                    }
+
+                    setSelectedItem(null);
+                    setSelectedType('');
+                    setSelectedProduct('');
                 },
                 onError: () => {
                     toast.error('Erro ao classificar item');
@@ -631,115 +721,182 @@ export default function ItemTriage({
                             <div className="grid gap-4 px-4 lg:grid-cols-2 lg:px-6">
                                 {/* Lista de itens - Esquerda */}
                                 <Card className="h-[calc(100vh-400px)] overflow-hidden">
-                                    <CardHeader className="border-b">
-                                        <CardTitle className="text-base">
-                                            Itens ({items.length})
-                                        </CardTitle>
+                                    <CardHeader className="flex flex-wrap items-center justify-between gap-3 border-b">
+                                        <div>
+                                            <CardTitle className="text-base">
+                                                Itens ({items.length})
+                                            </CardTitle>
+                                            {selectedSkus.size > 0 && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    {selectedSkus.size}{' '}
+                                                    {selectedSkus.size === 1
+                                                        ? 'item selecionado'
+                                                        : 'itens selecionados'}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={selectAllVisible}
+                                                disabled={items.length === 0}
+                                            >
+                                                Selecionar todos
+                                            </Button>
+
+                                            {selectedSkus.size > 0 && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={clearSelection}
+                                                >
+                                                    Limpar seleção
+                                                </Button>
+                                            )}
+                                        </div>
                                     </CardHeader>
                                     <CardContent className="h-full overflow-y-auto p-0">
                                         <ul className="divide-y">
-                                            {items.map((item, index) => (
-                                                <li
-                                                    key={`${item.sku}-${index}`}
-                                                    className={`cursor-pointer p-4 transition-colors hover:bg-muted/50 ${
-                                                        selectedItem?.sku ===
-                                                        item.sku
-                                                            ? 'bg-muted'
-                                                            : ''
-                                                    }`}
-                                                    onClick={() =>
-                                                        handleSelectItem(item)
-                                                    }
-                                                >
-                                                    <div className="flex flex-col gap-2">
-                                                        <div className="flex items-start justify-between">
-                                                            <div className="flex-1">
-                                                                <div className="flex items-center gap-2">
-                                                                    {item.is_addon && (
-                                                                        <Badge
-                                                                            variant="secondary"
-                                                                            className="text-xs"
-                                                                        >
-                                                                            Add-on
-                                                                        </Badge>
-                                                                    )}
-                                                                    <span className="font-medium">
+                                            {items.map((item, index) => {
+                                                const isPrimarySelected =
+                                                    selectedItem?.sku ===
+                                                    item.sku;
+                                                const isBulkSelected =
+                                                    selectedSkus.has(item.sku);
+
+                                                return (
+                                                    <li
+                                                        key={`${item.sku}-${index}`}
+                                                        className={`cursor-pointer border-l-2 p-4 transition-colors hover:bg-muted/50 ${
+                                                            isPrimarySelected
+                                                                ? 'bg-muted'
+                                                                : ''
+                                                        } ${
+                                                            isBulkSelected
+                                                                ? 'border-l-primary'
+                                                                : 'border-l-transparent'
+                                                        }`}
+                                                        onClick={() =>
+                                                            handleSelectItem(
+                                                                item,
+                                                            )
+                                                        }
+                                                    >
+                                                        <div className="flex items-start gap-3">
+                                                            <Checkbox
+                                                                checked={
+                                                                    isBulkSelected
+                                                                }
+                                                                onCheckedChange={(
+                                                                    checked,
+                                                                ) =>
+                                                                    handleItemSelectionChange(
+                                                                        item.sku,
+                                                                        checked ===
+                                                                            true,
+                                                                    )
+                                                                }
+                                                                onClick={(
+                                                                    event,
+                                                                ) =>
+                                                                    event.stopPropagation()
+                                                                }
+                                                                aria-label={`Selecionar ${item.name}`}
+                                                            />
+                                                            <div className="flex flex-col gap-2">
+                                                                <div className="flex items-start justify-between">
+                                                                    <div className="flex-1">
+                                                                        <div className="flex items-center gap-2">
+                                                                            {item.is_addon && (
+                                                                                <Badge
+                                                                                    variant="secondary"
+                                                                                    className="text-xs"
+                                                                                >
+                                                                                    Add-on
+                                                                                </Badge>
+                                                                            )}
+                                                                            <span className="font-medium">
+                                                                                {
+                                                                                    item.name
+                                                                                }
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="text-xs text-muted-foreground">
+                                                                            SKU:{' '}
+                                                                            {
+                                                                                item.sku
+                                                                            }
+                                                                        </div>
+                                                                    </div>
+                                                                    <Badge variant="secondary">
                                                                         {
-                                                                            item.name
-                                                                        }
-                                                                    </span>
-                                                                </div>
-                                                                <div className="text-xs text-muted-foreground">
-                                                                    SKU:{' '}
-                                                                    {item.sku}
-                                                                </div>
-                                                            </div>
-                                                            <Badge variant="secondary">
-                                                                {
-                                                                    item.orders_count
-                                                                }{' '}
-                                                                ped
-                                                            </Badge>
-                                                        </div>
-                                                        <div className="flex flex-wrap gap-1">
-                                                            {item.mapping ? (
-                                                                <>
-                                                                    <Badge
-                                                                        className={
-                                                                            itemTypes.find(
-                                                                                (
-                                                                                    t,
-                                                                                ) =>
-                                                                                    t.value ===
-                                                                                    item
-                                                                                        .mapping
-                                                                                        ?.item_type,
-                                                                            )
-                                                                                ?.color ||
-                                                                            'bg-gray-100 text-gray-900'
-                                                                        }
-                                                                    >
-                                                                        {itemTypes.find(
-                                                                            (
-                                                                                t,
-                                                                            ) =>
-                                                                                t.value ===
-                                                                                item
-                                                                                    .mapping
-                                                                                    ?.item_type,
-                                                                        )
-                                                                            ?.label ||
-                                                                            'Classificado'}
+                                                                            item.orders_count
+                                                                        }{' '}
+                                                                        ped
                                                                     </Badge>
-                                                                    {item
-                                                                        .mapping
-                                                                        ?.internal_product_name && (
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {item.mapping ? (
+                                                                        <>
+                                                                            <Badge
+                                                                                className={
+                                                                                    itemTypes.find(
+                                                                                        (
+                                                                                            t,
+                                                                                        ) =>
+                                                                                            t.value ===
+                                                                                            item
+                                                                                                .mapping
+                                                                                                ?.item_type,
+                                                                                    )
+                                                                                        ?.color ||
+                                                                                    'bg-gray-100 text-gray-900'
+                                                                                }
+                                                                            >
+                                                                                {itemTypes.find(
+                                                                                    (
+                                                                                        t,
+                                                                                    ) =>
+                                                                                        t.value ===
+                                                                                        item
+                                                                                            .mapping
+                                                                                            ?.item_type,
+                                                                                )
+                                                                                    ?.label ||
+                                                                                    'Classificado'}
+                                                                            </Badge>
+                                                                            {item
+                                                                                .mapping
+                                                                                ?.internal_product_name && (
+                                                                                <Badge
+                                                                                    variant="outline"
+                                                                                    className="border-green-200 bg-green-50 text-green-700"
+                                                                                >
+                                                                                    CMV:{' '}
+                                                                                    {
+                                                                                        item
+                                                                                            .mapping
+                                                                                            ?.internal_product_name
+                                                                                    }
+                                                                                </Badge>
+                                                                            )}
+                                                                        </>
+                                                                    ) : (
                                                                         <Badge
                                                                             variant="outline"
-                                                                            className="border-green-200 bg-green-50 text-green-700"
+                                                                            className="border-orange-200 bg-orange-50 text-orange-700"
                                                                         >
-                                                                            CMV:{' '}
-                                                                            {
-                                                                                item
-                                                                                    .mapping
-                                                                                    ?.internal_product_name
-                                                                            }
+                                                                            Não
+                                                                            classificado
                                                                         </Badge>
                                                                     )}
-                                                                </>
-                                                            ) : (
-                                                                <Badge
-                                                                    variant="outline"
-                                                                    className="border-orange-200 bg-orange-50 text-orange-700"
-                                                                >
-                                                                    Não
-                                                                    classificado
-                                                                </Badge>
-                                                            )}
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                </li>
-                                            ))}
+                                                    </li>
+                                                );
+                                            })}
                                         </ul>
                                     </CardContent>
                                 </Card>
@@ -756,6 +913,32 @@ export default function ItemTriage({
                                     <CardContent className="h-full overflow-y-auto p-4">
                                         {selectedItem ? (
                                             <div className="flex flex-col gap-6">
+                                                {bulkSelectionCount > 0 && (
+                                                    <Alert>
+                                                        <Info className="h-4 w-4" />
+                                                        <AlertTitle>
+                                                            {bulkSelectionCount ===
+                                                            1
+                                                                ? '1 item selecionado'
+                                                                : `${bulkSelectionCount} itens selecionados`}
+                                                        </AlertTitle>
+                                                        <AlertDescription className="flex flex-wrap items-center gap-2">
+                                                            A classificação será
+                                                            aplicada a todos os
+                                                            itens marcados.
+                                                            <Button
+                                                                variant="link"
+                                                                size="sm"
+                                                                className="h-auto px-0"
+                                                                onClick={
+                                                                    clearSelection
+                                                                }
+                                                            >
+                                                                Limpar seleção
+                                                            </Button>
+                                                        </AlertDescription>
+                                                    </Alert>
+                                                )}
                                                 {/* Pedidos recentes */}
                                                 <div>
                                                     <button
@@ -1027,10 +1210,12 @@ export default function ItemTriage({
                                                     <Button
                                                         ref={classifyButtonRef}
                                                         onClick={handleClassify}
-                                                        disabled={!selectedType}
+                                                        disabled={!canClassify}
                                                         className="w-full"
                                                     >
-                                                        Confirmar Classificação
+                                                        {
+                                                            classificationButtonLabel
+                                                        }
                                                     </Button>
                                                     <p className="text-center text-xs text-muted-foreground">
                                                         Pressione{' '}

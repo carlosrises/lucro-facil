@@ -444,126 +444,212 @@ class ItemTriageController extends Controller
         ]);
 
         $validated = $request->validate([
-            'sku' => 'required|string',
-            'name' => 'required|string',
+            'items' => 'nullable|array|min:1',
+            'items.*.sku' => 'required_with:items|string',
+            'items.*.name' => 'required_with:items|string',
+            'sku' => 'required_without:items|nullable|string',
+            'name' => 'required_without:items|nullable|string',
             'item_type' => 'required|in:flavor,beverage,complement,parent_product,optional,combo,side,dessert',
             'internal_product_id' => 'nullable|exists:internal_products,id',
         ]);
 
         $tenantId = $request->user()->tenant_id;
 
-        // Verificar se já existe mapping
-        $mapping = ProductMapping::where('tenant_id', $tenantId)
-            ->where('external_item_id', $validated['sku'])
-            ->first();
+        $itemsPayload = collect($validated['items'] ?? [])
+            ->map(fn ($item) => [
+                'sku' => $item['sku'],
+                'name' => $item['name'],
+            ])
+            ->all();
 
-        $isUpdate = false;
+        if (empty($itemsPayload) && $validated['sku'] !== null && $validated['name'] !== null) {
+            $itemsPayload[] = [
+                'sku' => $validated['sku'],
+                'name' => $validated['name'],
+            ];
+        }
 
-        \Log::info('🎯 Triagem - Status do mapping', [
-            'mapping_exists' => $mapping !== null,
-            'mapping_id' => $mapping?->id,
-            'is_update' => $mapping !== null,
+        if (empty($itemsPayload)) {
+            return back()->withErrors([
+                'items' => 'Nenhum item selecionado para classificação.',
+            ]);
+        }
+
+        $results = [];
+
+        foreach ($itemsPayload as $payload) {
+            $results[] = $this->processItemClassification(
+                tenantId: $tenantId,
+                sku: $payload['sku'],
+                name: $payload['name'],
+                itemType: $validated['item_type'],
+                internalProductId: $validated['internal_product_id']
+            );
+        }
+
+        $processedCount = count($results);
+        $isDetaching = $validated['internal_product_id'] === null;
+
+        if ($processedCount === 1 && isset($results[0]['message'])) {
+            return back()->with('success', $results[0]['message']);
+        }
+
+        $summaryMessage = $processedCount > 1
+            ? ($isDetaching
+                ? "{$processedCount} itens desassociados com sucesso!"
+                : "{$processedCount} itens classificados com sucesso!")
+            : ($results[0]['message'] ?? 'Item classificado com sucesso!');
+
+        $flavorOccurrences = collect($results)
+            ->sum(fn ($result) => $result['mapped_count'] ?? 0);
+
+        if ($processedCount > 1 && $flavorOccurrences > 0) {
+            $summaryMessage .= " {$flavorOccurrences} ocorrências ajustadas.";
+        }
+
+        return back()->with('success', $summaryMessage);
+    }
+
+    /**
+     * Processar classificação de um único item
+     */
+    private function processItemClassification(int $tenantId, string $sku, string $name, string $itemType, ?int $internalProductId): array
+    {
+        \Log::info('🎯 Triagem - Processando item', [
+            'sku' => $sku,
+            'item_type' => $itemType,
+            'internal_product_id' => $internalProductId,
         ]);
 
-        if ($mapping) {
-            // Atualizar mapping existente
-            $isUpdate = true;
+        $mapping = ProductMapping::where('tenant_id', $tenantId)
+            ->where('external_item_id', $sku)
+            ->first();
 
-            // Se internal_product_id for null, desassociar (deletar OrderItemMappings)
-            if ($validated['internal_product_id'] === null) {
+        if ($mapping) {
+            if ($internalProductId === null) {
                 \Log::info('🗑️ Desassociando produto - removendo OrderItemMappings', [
                     'mapping_id' => $mapping->id,
-                    'sku' => $validated['sku'],
+                    'sku' => $sku,
                 ]);
 
-                // Deletar OrderItemMappings associados
-                if (str_starts_with($validated['sku'], 'addon_')) {
-                    // Para add-ons, deletar mappings do tipo 'addon'
+                if (str_starts_with($sku, 'addon_')) {
                     $deletedCount = \App\Models\OrderItemMapping::whereHas('orderItem', function ($q) use ($tenantId) {
                         $q->where('tenant_id', $tenantId);
                     })
                         ->where('mapping_type', 'addon')
-                        ->whereHas('orderItem', function ($q) use ($validated) {
-                            $q->whereRaw("JSON_CONTAINS(add_ons, JSON_OBJECT('name', ?)) = 1", [$validated['name']]);
+                        ->whereHas('orderItem', function ($q) use ($name) {
+                            $q->whereRaw("JSON_CONTAINS(add_ons, JSON_OBJECT('name', ?)) = 1", [$name]);
                         })
                         ->delete();
                 } else {
-                    // Para itens principais, deletar mappings do tipo 'main'
-                    $deletedCount = \App\Models\OrderItemMapping::whereHas('orderItem', function ($q) use ($tenantId, $validated) {
+                    $deletedCount = \App\Models\OrderItemMapping::whereHas('orderItem', function ($q) use ($tenantId, $sku) {
                         $q->where('tenant_id', $tenantId)
-                            ->where('sku', $validated['sku']);
+                            ->where('sku', $sku);
                     })
                         ->where('mapping_type', 'main')
                         ->delete();
                 }
 
-                // Atualizar o ProductMapping para remover o produto
                 $mapping->update([
-                    'item_type' => $validated['item_type'],
+                    'item_type' => $itemType,
                     'internal_product_id' => null,
                 ]);
 
                 \Log::info('✅ Produto desassociado', [
-                    'deleted_mappings' => $deletedCount,
+                    'deleted_mappings' => $deletedCount ?? 0,
                 ]);
 
-                return back()->with('success', 'Produto desassociado com sucesso!');
+                return [
+                    'sku' => $sku,
+                    'action' => 'detached',
+                    'message' => 'Produto desassociado com sucesso!',
+                ];
             }
 
-            // Atualizar normalmente
             $mapping->update([
-                'item_type' => $validated['item_type'],
-                'internal_product_id' => $validated['internal_product_id'],
+                'item_type' => $itemType,
+                'internal_product_id' => $internalProductId,
             ]);
 
-            // Se for add-on (sabor), usar FlavorMappingService
-            if (str_starts_with($validated['sku'], 'addon_') && $validated['item_type'] === 'flavor' && $validated['internal_product_id']) {
+            if (str_starts_with($sku, 'addon_') && $itemType === 'flavor' && $internalProductId) {
                 $flavorService = new \App\Services\FlavorMappingService;
                 $mappedCount = $flavorService->mapFlavorToAllOccurrences($mapping, $tenantId);
 
-                // Broadcast da atualização
-                $this->broadcastItemTriaged($mapping, $validated, $tenantId, 'mapped');
+                $this->broadcastItemTriaged($mapping, [
+                    'sku' => $sku,
+                    'name' => $name,
+                    'item_type' => $itemType,
+                    'internal_product_id' => $internalProductId,
+                ], $tenantId, 'mapped');
 
-                return back()->with('success', "Sabor atualizado e aplicado a {$mappedCount} ocorrências!");
+                return [
+                    'sku' => $sku,
+                    'action' => 'flavor-updated',
+                    'mapped_count' => $mappedCount,
+                    'message' => "Sabor atualizado e aplicado a {$mappedCount} ocorrências!",
+                ];
             }
 
-            // Broadcast da classificação/atualização
-            $this->broadcastItemTriaged($mapping, $validated, $tenantId, $validated['internal_product_id'] ? 'mapped' : 'classified');
+            $this->broadcastItemTriaged($mapping, [
+                'sku' => $sku,
+                'name' => $name,
+                'item_type' => $itemType,
+                'internal_product_id' => $internalProductId,
+            ], $tenantId, $internalProductId ? 'mapped' : 'classified');
 
-            // Recalcular CMV dos pedidos que têm este item (apenas para itens principais)
             $this->recalculateOrdersWithItem($mapping, $tenantId);
-        } else {
-            // Criar novo mapping
-            $mapping = ProductMapping::create([
-                'tenant_id' => $tenantId,
-                'external_item_id' => $validated['sku'],
-                'external_item_name' => $validated['name'],
-                'item_type' => $validated['item_type'],
-                'internal_product_id' => $validated['internal_product_id'],
-                'provider' => 'takeat', // Default
-            ]);
 
-            // Aplicar aos pedidos históricos se houver produto vinculado
-            if ($validated['internal_product_id']) {
-                // Se for sabor de pizza, usar serviço inteligente de fracionamento
-                if ($validated['item_type'] === 'flavor') {
-                    $flavorService = new \App\Services\FlavorMappingService;
-                    $mappedCount = $flavorService->mapFlavorToAllOccurrences($mapping, $tenantId);
-
-                    // Broadcast da classificação
-                    $this->broadcastItemTriaged($mapping, $validated, $tenantId, 'mapped');
-
-                    return back()->with('success', "Sabor classificado e aplicado a {$mappedCount} ocorrências!");
-                }
-
-                $this->applyMappingToHistoricalOrders($mapping, $tenantId);
-            }
-
-            // Broadcast da classificação
-            $this->broadcastItemTriaged($mapping, $validated, $tenantId, $validated['internal_product_id'] ? 'mapped' : 'classified');
+            return [
+                'sku' => $sku,
+                'action' => 'updated',
+                'message' => 'Item classificado com sucesso!',
+            ];
         }
 
-        return back()->with('success', 'Item classificado com sucesso!');
+        $mapping = ProductMapping::create([
+            'tenant_id' => $tenantId,
+            'external_item_id' => $sku,
+            'external_item_name' => $name,
+            'item_type' => $itemType,
+            'internal_product_id' => $internalProductId,
+            'provider' => 'takeat',
+        ]);
+
+        if ($internalProductId) {
+            if ($itemType === 'flavor') {
+                $flavorService = new \App\Services\FlavorMappingService;
+                $mappedCount = $flavorService->mapFlavorToAllOccurrences($mapping, $tenantId);
+
+                $this->broadcastItemTriaged($mapping, [
+                    'sku' => $sku,
+                    'name' => $name,
+                    'item_type' => $itemType,
+                    'internal_product_id' => $internalProductId,
+                ], $tenantId, 'mapped');
+
+                return [
+                    'sku' => $sku,
+                    'action' => 'flavor-created',
+                    'mapped_count' => $mappedCount,
+                    'message' => "Sabor classificado e aplicado a {$mappedCount} ocorrências!",
+                ];
+            }
+
+            $this->applyMappingToHistoricalOrders($mapping, $tenantId);
+        }
+
+        $this->broadcastItemTriaged($mapping, [
+            'sku' => $sku,
+            'name' => $name,
+            'item_type' => $itemType,
+            'internal_product_id' => $internalProductId,
+        ], $tenantId, $internalProductId ? 'mapped' : 'classified');
+
+        return [
+            'sku' => $sku,
+            'action' => 'created',
+            'message' => 'Item classificado com sucesso!',
+        ];
     }
 
     private function applyMappingToHistoricalOrders(ProductMapping $mapping, int $tenantId): void
