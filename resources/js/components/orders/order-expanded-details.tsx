@@ -105,6 +105,12 @@ export function OrderExpandedDetails({ order }: OrderExpandedDetailsProps) {
     const deliveryAddress = order.raw?.delivery?.deliveryAddress;
     const takeoutCode = order.raw?.takeout?.takeoutCode;
 
+    // Para Takeat, tentar obter endereço de outro local se não estiver em delivery
+    const takeatAddress = order.raw?.session?.delivery_address;
+
+    // Endereço final: priorizar deliveryAddress, depois takeatAddress
+    const finalAddress = deliveryAddress || takeatAddress;
+
     // Função para formatar CPF/CNPJ
     const formatCpfCnpj = (value?: string) => {
         if (!value) return '';
@@ -162,18 +168,56 @@ export function OrderExpandedDetails({ order }: OrderExpandedDetailsProps) {
     };
 
     // Detecta tipo de pedido (delivery, takeout ou indoor)
-    const orderType = order.raw?.orderType; // DELIVERY, TAKEOUT, INDOOR
-    const isDelivery = orderType === 'DELIVERY' || deliveryMode === 'DEFAULT';
+    const orderType = order.raw?.orderType; // DELIVERY, TAKEOUT, INDOOR (iFood)
+    const tableType = order.raw?.session?.table?.table_type; // delivery, pdv, etc (Takeat)
+
+    const isDelivery =
+        orderType === 'DELIVERY' ||
+        deliveryMode === 'DEFAULT' ||
+        tableType === 'delivery';
+
     const isTakeout =
         orderType === 'TAKEOUT' ||
         deliveryMode === 'PICKUP' ||
-        deliveryMode === 'TAKEOUT';
+        deliveryMode === 'TAKEOUT' ||
+        tableType === 'pdv';
 
     // Detecta quem realiza a entrega (apenas para delivery)
-    // deliveredByMarketplace: true significa que o marketplace entrega
-    // deliveredByMarketplace: false significa que a loja entrega
-    const deliveredByMarketplace =
-        order.raw?.delivery?.deliveredByMarketplace ?? false;
+    let deliveredByMarketplace = false;
+    let deliveryResponsible = 'Loja';
+
+    if (isDelivery) {
+        if (order.provider === 'takeat') {
+            // Para Takeat: verificar session.delivery_by
+            const deliveryBy = order.raw?.session?.delivery_by;
+            deliveredByMarketplace = deliveryBy === 'MARKETPLACE';
+
+            if (deliveryBy === 'MARKETPLACE') {
+                // Se vier de marketplace (ifood, 99food, etc), mostrar o nome do marketplace
+                const origin = order.origin || 'Marketplace';
+                deliveryResponsible =
+                    origin === 'ifood'
+                        ? 'iFood Entrega'
+                        : origin === '99food'
+                          ? '99Food Entrega'
+                          : origin === 'neemo'
+                            ? 'Neemo Entrega'
+                            : origin === 'keeta'
+                              ? 'Keeta Entrega'
+                              : 'Marketplace';
+            } else {
+                deliveryResponsible = 'Loja';
+            }
+        } else if (order.provider === 'ifood') {
+            // Para iFood: verificar delivery.deliveredBy
+            const deliveredBy = order.raw?.delivery?.deliveredBy;
+            deliveredByMarketplace =
+                deliveredBy === 'MARKETPLACE' || deliveredBy === 'IFOOD';
+            deliveryResponsible = deliveredByMarketplace
+                ? 'iFood Entrega'
+                : 'Loja';
+        }
+    }
 
     // Se não há dados adicionais, não renderiza
     if (
@@ -181,56 +225,14 @@ export function OrderExpandedDetails({ order }: OrderExpandedDetailsProps) {
         !cpfCnpj &&
         orderTiming !== 'SCHEDULED' &&
         !takeoutCode &&
-        !orderType
+        !orderType &&
+        !tableType
     ) {
         return null;
     }
 
     return (
         <>
-            {/* Tipo de Pedido (Delivery/Retirada) */}
-            {orderType && (
-                <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
-                    <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
-                        <CardTitle className="flex h-[18px] items-center font-semibold">
-                            Tipo de Pedido
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="rounded-md bg-card p-0">
-                        <ul className="m-0 flex w-full flex-col ps-0">
-                            <li className="flex flex-row items-center justify-between gap-2 px-3 py-4">
-                                <span className="text-sm leading-4 font-normal text-muted-foreground">
-                                    Modalidade
-                                </span>
-                                <span className="text-sm leading-4 font-semibold whitespace-nowrap">
-                                    {isDelivery
-                                        ? '🚗 Delivery'
-                                        : isTakeout
-                                          ? '🏪 Retirada no Local'
-                                          : orderType === 'INDOOR'
-                                            ? '🪑 Consumo no Local'
-                                            : orderType}
-                                </span>
-                            </li>
-                            {isDelivery && (
-                                <li className="flex flex-row items-center justify-between gap-2 border-t-1 px-3 py-4">
-                                    <span className="text-sm leading-4 font-normal text-muted-foreground">
-                                        Entrega realizada por
-                                    </span>
-                                    <span className="text-sm leading-4 font-medium whitespace-nowrap">
-                                        {deliveredByMarketplace
-                                            ? order.provider === 'ifood'
-                                                ? 'iFood Entrega'
-                                                : 'Marketplace'
-                                            : 'Loja'}
-                                    </span>
-                                </li>
-                            )}
-                        </ul>
-                    </CardContent>
-                </Card>
-            )}
-
             {/* Cupons/Descontos */}
             {benefitsList.length > 0 && (
                 <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
@@ -337,6 +339,127 @@ export function OrderExpandedDetails({ order }: OrderExpandedDetailsProps) {
                                     {formatCpfCnpj(cpfCnpj)}
                                 </span>
                             </li>
+                        </ul>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Tipo de Pedido */}
+            {(orderType || tableType) && (
+                <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+                    <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                        <CardTitle className="flex h-[18px] items-center font-semibold">
+                            Tipo de Pedido
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="rounded-md bg-card p-0">
+                        <ul className="m-0 flex w-full flex-col ps-0">
+                            <li className="flex flex-row items-center justify-between gap-2 px-3 py-4">
+                                <span className="text-sm leading-4 font-normal text-muted-foreground">
+                                    Modalidade
+                                </span>
+                                <span className="text-sm leading-4 font-semibold whitespace-nowrap">
+                                    {isDelivery
+                                        ? '🚗 Delivery'
+                                        : isTakeout
+                                          ? '🏪 Retirada no Local'
+                                          : orderType === 'INDOOR'
+                                            ? '🪑 Consumo no Local'
+                                            : orderType || tableType}
+                                </span>
+                            </li>
+                            {isDelivery && (
+                                <>
+                                    <li className="flex flex-row items-center justify-between gap-2 border-t-1 px-3 py-4">
+                                        <span className="text-sm leading-4 font-normal text-muted-foreground">
+                                            Entrega realizada por
+                                        </span>
+                                        <span className="text-sm leading-4 font-medium whitespace-nowrap">
+                                            {deliveryResponsible}
+                                        </span>
+                                    </li>
+                                    {finalAddress && (
+                                        <li className="flex flex-col gap-1 border-t-1 px-3 py-4">
+                                            <span className="mb-1 text-sm leading-4 font-semibold">
+                                                Endereço de Entrega
+                                            </span>
+                                            {finalAddress.formattedAddress ? (
+                                                <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                    {
+                                                        finalAddress.formattedAddress
+                                                    }
+                                                </span>
+                                            ) : (
+                                                <>
+                                                    {(finalAddress.streetName ||
+                                                        finalAddress.street_name ||
+                                                        finalAddress.streetNumber ||
+                                                        finalAddress.street_number) && (
+                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                            {finalAddress.streetName ||
+                                                                finalAddress.street_name}
+                                                            {(finalAddress.streetNumber ||
+                                                                finalAddress.street_number) &&
+                                                                `, ${finalAddress.streetNumber || finalAddress.street_number}`}
+                                                        </span>
+                                                    )}
+                                                    {(finalAddress.complement ||
+                                                        finalAddress.complement) && (
+                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                            Complemento:{' '}
+                                                            {
+                                                                finalAddress.complement
+                                                            }
+                                                        </span>
+                                                    )}
+                                                    {(finalAddress.neighborhood ||
+                                                        finalAddress.district) && (
+                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                            Bairro:{' '}
+                                                            {finalAddress.neighborhood ||
+                                                                finalAddress.district}
+                                                        </span>
+                                                    )}
+                                                    {(finalAddress.city ||
+                                                        finalAddress.city) && (
+                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                            {finalAddress.city}
+                                                            {(finalAddress.state ||
+                                                                finalAddress.state) &&
+                                                                ` - ${finalAddress.state}`}
+                                                            {(finalAddress.postalCode ||
+                                                                finalAddress.postal_code ||
+                                                                finalAddress.zipcode) &&
+                                                                ` • CEP: ${finalAddress.postalCode || finalAddress.postal_code || finalAddress.zipcode}`}
+                                                        </span>
+                                                    )}
+                                                    {(finalAddress.reference ||
+                                                        finalAddress.reference_point) && (
+                                                        <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                            Referência:{' '}
+                                                            {finalAddress.reference ||
+                                                                finalAddress.reference_point}
+                                                        </span>
+                                                    )}
+                                                </>
+                                            )}
+                                        </li>
+                                    )}
+                                    {order.raw?.delivery?.observations && (
+                                        <li className="flex flex-col gap-1 border-t-1 px-3 py-4">
+                                            <span className="text-sm leading-4 font-semibold">
+                                                Observações
+                                            </span>
+                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                {
+                                                    order.raw.delivery
+                                                        .observations
+                                                }
+                                            </span>
+                                        </li>
+                                    )}
+                                </>
+                            )}
                         </ul>
                     </CardContent>
                 </Card>

@@ -425,19 +425,6 @@ export function OrderFinancialCard({
                     </CardHeader>
                     <CardContent className="rounded-md bg-card p-0">
                         <ul className="m-0 flex w-full flex-col ps-0">
-                            {/* Tipo de pedido */}
-                            <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
-                                <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
-                                    <span className="text-sm leading-4 font-semibold">
-                                        Tipo de pedido
-                                    </span>
-                                    <span className="text-sm leading-4">
-                                        {isDelivery ? 'Delivery' : 'Retirada'}{' '}
-                                        via {channel}
-                                    </span>
-                                </div>
-                            </li>
-
                             {/* Total do Pedido */}
                             <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
                                 <div className="flex w-full flex-row items-center gap-2 px-3 py-0">

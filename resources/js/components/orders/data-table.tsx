@@ -94,6 +94,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { calculateNetRevenue } from '@/lib/order-calculations';
 import { Link, router } from '@inertiajs/react';
 import {
@@ -193,6 +194,21 @@ export function DataTable({
     // Estados para sincronização Takeat
     const [syncDialogOpen, setSyncDialogOpen] = React.useState(false);
     const [isSyncingToday, setIsSyncingToday] = React.useState(false);
+
+    // Detectar loading do Inertia
+    const [isLoading, setIsLoading] = React.useState(false);
+    React.useEffect(() => {
+        const handleStart = () => setIsLoading(true);
+        const handleFinish = () => setIsLoading(false);
+
+        const unsubscribeStart = router.on('start', handleStart);
+        const unsubscribeFinish = router.on('finish', handleFinish);
+
+        return () => {
+            unsubscribeStart();
+            unsubscribeFinish();
+        };
+    }, []);
 
     // Atualizar selectedOrder quando os dados mudarem
     React.useEffect(() => {
@@ -548,302 +564,311 @@ export function DataTable({
                 </div>
             </div>
 
-            {/* Indicadores do período */}
-            <OrderIndicators data={indicators} />
-
-            {/* 🔎 Filtros */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                    {/* Badge de filtro ativo - produtos não associados */}
-                    {filters?.unmapped_only && (
-                        <Badge variant="destructive" className="h-9 gap-2 px-3">
-                            Apenas não associados
-                            <button
-                                onClick={() =>
-                                    updateFilters({ unmapped_only: undefined })
-                                }
-                                className="ml-1 rounded-full hover:bg-red-700"
-                            >
-                                <svg
-                                    className="h-4 w-4"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
-                            </button>
-                        </Badge>
-                    )}
-
-                    {/* Badge de filtro ativo - sem método de pagamento */}
-                    {filters?.no_payment_method && (
-                        <Badge variant="destructive" className="h-9 gap-2 px-3">
-                            Sem taxa vinculada
-                            <button
-                                onClick={() =>
-                                    updateFilters({
-                                        no_payment_method: undefined,
-                                    })
-                                }
-                                className="ml-1 rounded-full hover:bg-red-700"
-                            >
-                                <svg
-                                    className="h-4 w-4"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
-                            </button>
-                        </Badge>
-                    )}
-
-                    {/* Badge de filtro ativo - sem pagamento */}
-                    {filters?.no_payment_info && (
-                        <Badge variant="secondary" className="h-9 gap-2 px-3">
-                            Sem pagamento
-                            <button
-                                onClick={() =>
-                                    updateFilters({
-                                        no_payment_info: undefined,
-                                    })
-                                }
-                                className="ml-1 rounded-full hover:bg-gray-700"
-                            >
-                                <svg
-                                    className="h-4 w-4"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
-                            </button>
-                        </Badge>
-                    )}
-
-                    {/* Badge de filtro ativo - tipo de pedido */}
-                    {filters?.order_type && (
-                        <Badge variant="secondary" className="h-9 gap-2 px-3">
-                            {filters.order_type === 'delivery' && '🚗 Delivery'}
-                            {filters.order_type === 'takeout' && '🛍️ Retirada'}
-                            {filters.order_type === 'balcony' && '🏪 Balcão'}
-                            {filters.order_type === 'self-service' &&
-                                '🍽️ Autoatendimento'}
-                            <button
-                                onClick={() =>
-                                    updateFilters({
-                                        order_type: undefined,
-                                    })
-                                }
-                                className="ml-1 rounded-full hover:bg-gray-400"
-                            >
-                                <svg
-                                    className="h-4 w-4"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
-                            </button>
-                        </Badge>
-                    )}
-
-                    {/* Buscar por código */}
-                    <Input
-                        placeholder="Buscar pedido..."
-                        value={searchValue}
-                        onChange={(e) => setSearchValue(e.target.value)}
-                        className="h-9 w-[200px]"
-                    />
-
-                    {/* Filtro por status */}
-                    <Combobox
-                        options={[
-                            { value: 'all', label: 'Todos os status' },
-                            { value: 'PLACED', label: 'Novo' },
-                            { value: 'CONFIRMED', label: 'Confirmado' },
-                            {
-                                value: 'SEPARATION_START',
-                                label: 'Separação iniciada',
-                            },
-                            {
-                                value: 'SEPARATION_END',
-                                label: 'Separação finalizada',
-                            },
-                            {
-                                value: 'READY_TO_PICKUP',
-                                label: 'Pronto para retirada',
-                            },
-                            { value: 'DISPATCHED', label: 'Despachado' },
-                            { value: 'CONCLUDED', label: 'Concluído' },
-                            { value: 'CANCELLED', label: 'Cancelado' },
-                        ]}
-                        placeholder="Filtrar status"
-                        value={filters?.status ?? 'all'}
-                        onChange={(value) =>
-                            updateFilters({
-                                status: value === 'all' ? undefined : value,
-                            })
-                        }
-                    />
-
-                    {/* Filtro por loja */}
-                    <Combobox
-                        options={[
-                            { value: 'all', label: 'Todas as lojas' },
-                            ...stores.map((s) => ({
-                                value: String(s.id),
-                                label: s.name,
-                            })),
-                        ]}
-                        placeholder="Filtrar loja"
-                        value={
-                            filters?.store_id ? String(filters.store_id) : 'all'
-                        }
-                        onChange={(value) =>
-                            updateFilters({
-                                store_id:
-                                    value === 'all' ? undefined : Number(value),
-                            })
-                        }
-                    />
-
-                    {/* Filtro por canal */}
-                    <Combobox
-                        options={[
-                            { value: 'all', label: 'Todos os canais' },
-                            ...providerOptions,
-                        ]}
-                        placeholder="Filtrar canal"
-                        value={filters?.provider ?? 'all'}
-                        onChange={(value) =>
-                            updateFilters({
-                                provider: value === 'all' ? undefined : value,
-                            })
-                        }
-                    />
-
-                    {/* Filtro por meio de pagamento */}
-                    <MultiSelect
-                        options={[
-                            { value: 'CASH', label: 'Dinheiro' },
-                            { value: 'CREDIT', label: 'Crédito' },
-                            { value: 'DEBIT', label: 'Débito' },
-                            { value: 'PIX', label: 'PIX' },
-                            { value: 'VOUCHER', label: 'Voucher' },
-                            { value: 'ONLINE', label: 'Online' },
-                        ]}
-                        placeholder="Meio de pagamento"
-                        values={localPaymentMethods}
-                        onChange={(values) => {
-                            setLocalPaymentMethods(values);
-                            updateFilters({
-                                payment_method:
-                                    values.length > 0
-                                        ? values.join(',')
-                                        : undefined,
-                            });
-                        }}
-                        searchPlaceholder="Buscar método..."
-                        className="w-[200px]"
-                    />
-
-                    {/* Filtro por tipo de pedido */}
-                    <Combobox
-                        options={[
-                            { value: 'all', label: 'Todos os tipos' },
-                            { value: 'delivery', label: '🚗 Delivery' },
-                            { value: 'takeout', label: '🛍️ Retirada' },
-                            { value: 'balcony', label: '🏪 Balcão' },
-                            {
-                                value: 'self-service',
-                                label: '🍽️ Autoatendimento',
-                            },
-                        ]}
-                        placeholder="Filtrar tipo"
-                        value={filters?.order_type ?? 'all'}
-                        onChange={(value) =>
-                            updateFilters({
-                                order_type: value === 'all' ? undefined : value,
-                            })
-                        }
-                    />
-
-                    {/* 📅 Date Range */}
-                    <DateRangePicker
-                        value={dateRange}
-                        onChange={(range) => {
-                            setDateRange(range);
-                            updateFilters({
-                                start_date: range?.from
-                                    ? range.from.toISOString().split('T')[0]
-                                    : undefined,
-                                end_date: range?.to
-                                    ? range.to.toISOString().split('T')[0]
-                                    : undefined,
-                            });
-                        }}
-                    />
+            {isLoading ? (
+                <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card">
+                    {[...Array(4)].map((_, i) => (
+                        <Card key={i} className="@container/card">
+                            <CardHeader>
+                                <Skeleton className="mb-2 h-4 w-32" />
+                                <Skeleton className="mb-3 h-8 w-24" />
+                                <Skeleton className="h-3 w-20" />
+                            </CardHeader>
+                        </Card>
+                    ))}
                 </div>
+            ) : (
+                <OrderIndicators data={indicators} />
+            )}
 
-                {/* 👁️ Colunas visíveis */}
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm">
-                            <IconLayoutColumns />
-                            <span className="ml-2">Colunas</span>
-                            <IconChevronDown />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                        {table
-                            .getAllColumns()
-                            .filter(
-                                (column) =>
-                                    typeof column.accessorFn !== 'undefined' &&
-                                    column.getCanHide(),
-                            )
-                            .map((column) => (
-                                <DropdownMenuCheckboxItem
-                                    key={column.id}
-                                    checked={column.getIsVisible()}
-                                    onCheckedChange={(value) =>
-                                        column.toggleVisibility(!!value)
-                                    }
-                                >
-                                    {column.columnDef.meta?.label ||
-                                        (typeof column.columnDef.header ===
-                                        'string'
-                                            ? column.columnDef.header
-                                            : column.id)}
-                                </DropdownMenuCheckboxItem>
-                            ))}
-                    </DropdownMenuContent>
-                </DropdownMenu>
+            {/* Filtros e busca */}
+            <div className="flex flex-wrap items-center gap-2">
+                {/* Badge de filtro ativo - produtos não mapeados */}
+                {filters?.unmapped_only && (
+                    <Badge variant="destructive" className="h-9 gap-2 px-3">
+                        Produtos não associados
+                        <button
+                            onClick={() =>
+                                updateFilters({ unmapped_only: undefined })
+                            }
+                            className="ml-1 rounded-full hover:bg-red-700"
+                        >
+                            <svg
+                                className="h-4 w-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
+                            </svg>
+                        </button>
+                    </Badge>
+                )}
+
+                {/* Badge de filtro ativo - sem método de pagamento */}
+                {filters?.no_payment_method && (
+                    <Badge variant="destructive" className="h-9 gap-2 px-3">
+                        Sem taxa vinculada
+                        <button
+                            onClick={() =>
+                                updateFilters({
+                                    no_payment_method: undefined,
+                                })
+                            }
+                            className="ml-1 rounded-full hover:bg-red-700"
+                        >
+                            <svg
+                                className="h-4 w-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
+                            </svg>
+                        </button>
+                    </Badge>
+                )}
+
+                {/* Badge de filtro ativo - sem pagamento */}
+                {filters?.no_payment_info && (
+                    <Badge variant="secondary" className="h-9 gap-2 px-3">
+                        Sem pagamento
+                        <button
+                            onClick={() =>
+                                updateFilters({
+                                    no_payment_info: undefined,
+                                })
+                            }
+                            className="ml-1 rounded-full hover:bg-gray-700"
+                        >
+                            <svg
+                                className="h-4 w-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
+                            </svg>
+                        </button>
+                    </Badge>
+                )}
+
+                {/* Badge de filtro ativo - tipo de pedido */}
+                {filters?.order_type && (
+                    <Badge variant="secondary" className="h-9 gap-2 px-3">
+                        {filters.order_type === 'delivery' && '🚗 Delivery'}
+                        {filters.order_type === 'takeout' && '🛍️ Retirada'}
+                        {filters.order_type === 'balcony' && '🏪 Balcão'}
+                        {filters.order_type === 'self-service' &&
+                            '🍽️ Autoatendimento'}
+                        <button
+                            onClick={() =>
+                                updateFilters({
+                                    order_type: undefined,
+                                })
+                            }
+                            className="ml-1 rounded-full hover:bg-gray-400"
+                        >
+                            <svg
+                                className="h-4 w-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
+                            </svg>
+                        </button>
+                    </Badge>
+                )}
+
+                {/* Buscar por código */}
+                <Input
+                    placeholder="Buscar pedido..."
+                    value={searchValue}
+                    onChange={(e) => setSearchValue(e.target.value)}
+                    className="h-9 w-[200px]"
+                />
+
+                {/* Filtro por status */}
+                <Combobox
+                    options={[
+                        { value: 'all', label: 'Todos os status' },
+                        { value: 'PLACED', label: 'Novo' },
+                        { value: 'CONFIRMED', label: 'Confirmado' },
+                        {
+                            value: 'SEPARATION_START',
+                            label: 'Separação iniciada',
+                        },
+                        {
+                            value: 'SEPARATION_END',
+                            label: 'Separação finalizada',
+                        },
+                        {
+                            value: 'READY_TO_PICKUP',
+                            label: 'Pronto para retirada',
+                        },
+                        { value: 'DISPATCHED', label: 'Despachado' },
+                        { value: 'CONCLUDED', label: 'Concluído' },
+                        { value: 'CANCELLED', label: 'Cancelado' },
+                    ]}
+                    placeholder="Filtrar status"
+                    value={filters?.status ?? 'all'}
+                    onChange={(value) =>
+                        updateFilters({
+                            status: value === 'all' ? undefined : value,
+                        })
+                    }
+                />
+
+                {/* Filtro por loja */}
+                <Combobox
+                    options={[
+                        { value: 'all', label: 'Todas as lojas' },
+                        ...stores.map((s) => ({
+                            value: String(s.id),
+                            label: s.name,
+                        })),
+                    ]}
+                    placeholder="Filtrar loja"
+                    value={filters?.store_id ? String(filters.store_id) : 'all'}
+                    onChange={(value) =>
+                        updateFilters({
+                            store_id:
+                                value === 'all' ? undefined : Number(value),
+                        })
+                    }
+                />
+
+                {/* Filtro por canal */}
+                <Combobox
+                    options={[
+                        { value: 'all', label: 'Todos os canais' },
+                        ...providerOptions,
+                    ]}
+                    placeholder="Filtrar canal"
+                    value={filters?.provider ?? 'all'}
+                    onChange={(value) =>
+                        updateFilters({
+                            provider: value === 'all' ? undefined : value,
+                        })
+                    }
+                />
+                {/* Filtro por meio de pagamento */}
+                <MultiSelect
+                    options={[
+                        { value: 'CASH', label: 'Dinheiro' },
+                        { value: 'CREDIT', label: 'Crédito' },
+                        { value: 'DEBIT', label: 'Débito' },
+                        { value: 'PIX', label: 'PIX' },
+                        { value: 'VOUCHER', label: 'Voucher' },
+                        { value: 'ONLINE', label: 'Online' },
+                    ]}
+                    placeholder="Meio de pagamento"
+                    values={localPaymentMethods}
+                    onChange={(values) => {
+                        setLocalPaymentMethods(values);
+                        updateFilters({
+                            payment_method:
+                                values.length > 0
+                                    ? values.join(',')
+                                    : undefined,
+                        });
+                    }}
+                    searchPlaceholder="Buscar método..."
+                    className="w-[200px]"
+                />
+                {/* Filtro por tipo de pedido */}
+                <Combobox
+                    options={[
+                        { value: 'all', label: 'Todos os tipos' },
+                        { value: 'delivery', label: '🚗 Delivery' },
+                        { value: 'takeout', label: '🛍️ Retirada' },
+                        { value: 'balcony', label: '🏪 Balcão' },
+                        {
+                            value: 'self-service',
+                            label: '🍽️ Autoatendimento',
+                        },
+                    ]}
+                    placeholder="Filtrar tipo"
+                    value={filters?.order_type ?? 'all'}
+                    onChange={(value) =>
+                        updateFilters({
+                            order_type: value === 'all' ? undefined : value,
+                        })
+                    }
+                />
+
+                {/* 📅 Date Range */}
+                <DateRangePicker
+                    value={dateRange}
+                    onChange={(range) => {
+                        setDateRange(range);
+                        updateFilters({
+                            start_date: range?.from
+                                ? range.from.toISOString().split('T')[0]
+                                : undefined,
+                            end_date: range?.to
+                                ? range.to.toISOString().split('T')[0]
+                                : undefined,
+                        });
+                    }}
+                />
+
+                {/* 👁️ Colunas visíveis - À direita */}
+                <div className="ml-auto">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">
+                                <IconLayoutColumns />
+                                <span className="ml-2">Colunas</span>
+                                <IconChevronDown />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                            {table
+                                .getAllColumns()
+                                .filter(
+                                    (column) =>
+                                        typeof column.accessorFn !==
+                                            'undefined' && column.getCanHide(),
+                                )
+                                .map((column) => (
+                                    <DropdownMenuCheckboxItem
+                                        key={column.id}
+                                        checked={column.getIsVisible()}
+                                        onCheckedChange={(value) =>
+                                            column.toggleVisibility(!!value)
+                                        }
+                                    >
+                                        {column.columnDef.meta?.label ||
+                                            (typeof column.columnDef.header ===
+                                            'string'
+                                                ? column.columnDef.header
+                                                : column.id)}
+                                    </DropdownMenuCheckboxItem>
+                                ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             </div>
 
             {/* 📋 Tabela */}
@@ -935,7 +960,20 @@ export function DataTable({
                     </TableHeader>
 
                     <TableBody>
-                        {table.getRowModel().rows?.length ? (
+                        {isLoading ? (
+                            // Skeleton durante carregamento
+                            [...Array(10)].map((_, i) => (
+                                <TableRow key={i}>
+                                    {table
+                                        .getVisibleLeafColumns()
+                                        .map((column) => (
+                                            <TableCell key={column.id}>
+                                                <Skeleton className="h-4 w-full" />
+                                            </TableCell>
+                                        ))}
+                                </TableRow>
+                            ))
+                        ) : table.getRowModel().rows?.length ? (
                             table.getRowModel().rows.map((row) => (
                                 <React.Fragment key={row.id}>
                                     {/* Linha principal */}
@@ -1883,23 +1921,13 @@ export function DataTable({
                                                                 </CardContent>
                                                             </Card>
                                                         )}
-                                                    </div>
 
-                                                    {/* Coluna 2: Detalhamento Financeiro + Pagamento */}
-                                                    <div className="flex flex-col gap-4">
-                                                        {/* Card: Detalhamento Financeiro */}
-                                                        <OrderFinancialCard
-                                                            sale={
-                                                                row.original
-                                                                    .sale
-                                                            }
+                                                        {/* Outros detalhes: Cupons, CPF, Tipo de Pedido/Entrega, Agendamento, etc. */}
+                                                        <OrderExpandedDetails
                                                             order={row.original}
-                                                            internalProducts={
-                                                                internalProducts
-                                                            }
                                                         />
 
-                                                        {/* Card: Pagamento (abaixo do detalhamento) */}
+                                                        {/* Card: Pagamento */}
                                                         <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
                                                             <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
                                                                 <CardTitle className="flex h-[18px] items-center font-semibold">
@@ -2210,10 +2238,20 @@ export function DataTable({
                                                                     )}
                                                             </CardContent>
                                                         </Card>
+                                                    </div>
 
-                                                        {/* Outros detalhes: Cupons, CPF, Agendamento, etc. */}
-                                                        <OrderExpandedDetails
+                                                    {/* Coluna 2: Detalhamento Financeiro */}
+                                                    <div className="flex flex-col gap-4">
+                                                        {/* Card: Detalhamento Financeiro */}
+                                                        <OrderFinancialCard
+                                                            sale={
+                                                                row.original
+                                                                    .sale
+                                                            }
                                                             order={row.original}
+                                                            internalProducts={
+                                                                internalProducts
+                                                            }
                                                         />
                                                     </div>
                                                 </div>
