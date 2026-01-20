@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\ItemTriaged;
 use App\Models\InternalProduct;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -520,8 +521,14 @@ class ItemTriageController extends Controller
                 $flavorService = new \App\Services\FlavorMappingService;
                 $mappedCount = $flavorService->mapFlavorToAllOccurrences($mapping, $tenantId);
 
+                // Broadcast da atualização
+                $this->broadcastItemTriaged($mapping, $validated, $tenantId, 'mapped');
+
                 return back()->with('success', "Sabor atualizado e aplicado a {$mappedCount} ocorrências!");
             }
+
+            // Broadcast da classificação/atualização
+            $this->broadcastItemTriaged($mapping, $validated, $tenantId, $validated['internal_product_id'] ? 'mapped' : 'classified');
 
             // Recalcular CMV dos pedidos que têm este item (apenas para itens principais)
             $this->recalculateOrdersWithItem($mapping, $tenantId);
@@ -543,11 +550,17 @@ class ItemTriageController extends Controller
                     $flavorService = new \App\Services\FlavorMappingService;
                     $mappedCount = $flavorService->mapFlavorToAllOccurrences($mapping, $tenantId);
 
+                    // Broadcast da classificação
+                    $this->broadcastItemTriaged($mapping, $validated, $tenantId, 'mapped');
+
                     return back()->with('success', "Sabor classificado e aplicado a {$mappedCount} ocorrências!");
                 }
 
                 $this->applyMappingToHistoricalOrders($mapping, $tenantId);
             }
+
+            // Broadcast da classificação
+            $this->broadcastItemTriaged($mapping, $validated, $tenantId, $validated['internal_product_id'] ? 'mapped' : 'classified');
         }
 
         return back()->with('success', 'Item classificado com sucesso!');
@@ -651,6 +664,59 @@ class ItemTriageController extends Controller
                 $pizzaFractionService = new \App\Services\PizzaFractionService;
                 $pizzaFractionService->recalculateFractions($orderItem);
             }
+        }
+    }
+
+    /**
+     * Broadcast de evento quando item é classificado ou mapeado
+     */
+    private function broadcastItemTriaged(ProductMapping $mapping, array $validated, int $tenantId, string $action): void
+    {
+        logger()->info('🔊 Iniciando broadcast ItemTriaged', [
+            'tenant_id' => $tenantId,
+            'sku' => $validated['sku'],
+            'name' => $validated['name'],
+            'action' => $action,
+        ]);
+
+        // Buscar um order_item de exemplo para pegar informações do pedido
+        $orderItem = OrderItem::where('tenant_id', $tenantId)
+            ->where(function ($q) use ($validated) {
+                if (str_starts_with($validated['sku'], 'addon_')) {
+                    // Para add-ons, buscar por nome no JSON
+                    $q->whereRaw("JSON_CONTAINS(add_ons, JSON_OBJECT('name', ?)) = 1", [$validated['name']]);
+                } else {
+                    // Para itens principais, buscar por SKU
+                    $q->where('sku', $validated['sku']);
+                }
+            })
+            ->with('order:id,code')
+            ->first();
+
+        if ($orderItem) {
+            logger()->info('🔊 Disparando broadcast ItemTriaged', [
+                'order_id' => $orderItem->order_id,
+                'order_code' => $orderItem->order->code,
+                'channel' => "orders.tenant.{$tenantId}",
+            ]);
+
+            broadcast(new ItemTriaged(
+                tenantId: $tenantId,
+                orderId: $orderItem->order_id,
+                orderCode: $orderItem->order->code,
+                itemId: $orderItem->id,
+                itemName: $validated['name'],
+                internalProductId: $validated['internal_product_id'],
+                itemType: $validated['item_type'],
+                action: $action
+            ))->toOthers();
+
+            logger()->info('✅ Broadcast ItemTriaged disparado com sucesso');
+        } else {
+            logger()->warning('⚠️ OrderItem não encontrado para broadcast', [
+                'sku' => $validated['sku'],
+                'name' => $validated['name'],
+            ]);
         }
     }
 }
