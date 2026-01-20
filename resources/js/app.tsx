@@ -34,66 +34,11 @@ window.Echo = new Echo({
     disableStats: true,
 });
 
-// Log de debug para verificar configuração
-console.log('[WebSocket] Echo configurado:', {
-    key: import.meta.env.VITE_REVERB_APP_KEY,
-    host: window.location.hostname,
-    port: isSecure ? 443 : 8080,
-    secure: isSecure,
-});
-
-// Forçar conexão do Pusher e adicionar listeners de eventos
+// Garantir que o Pusher tente conectar quando necessário
 if (window.Echo.connector?.pusher) {
     const pusher = window.Echo.connector.pusher;
 
-    // Verificar estado atual
-    console.log('[WebSocket] Estado inicial:', pusher.connection.state);
-    console.log(
-        '[WebSocket] URL completa:',
-        `wss://${window.location.hostname}:443/app/${import.meta.env.VITE_REVERB_APP_KEY}`,
-    );
-
-    // Logs de estados de conexão (ANTES de conectar)
-    pusher.connection.bind('connecting', () => {
-        console.log('[WebSocket] Estado: Conectando...');
-    });
-
-    pusher.connection.bind('connected', () => {
-        console.log(
-            '[WebSocket] Estado: Conectado!',
-            pusher.connection.socket_id,
-        );
-    });
-
-    pusher.connection.bind('unavailable', () => {
-        console.error('[WebSocket] Estado: Indisponível');
-    });
-
-    pusher.connection.bind('failed', () => {
-        console.error('[WebSocket] Estado: Falhou');
-    });
-
-    pusher.connection.bind('disconnected', () => {
-        console.warn('[WebSocket] Estado: Desconectado');
-    });
-
-    pusher.connection.bind('error', (err: any) => {
-        console.error('[WebSocket] Erro de conexão:', err);
-    });
-
-    // Verificar se já está conectado
-    if (pusher.connection.state === 'connected') {
-        console.log('[WebSocket] Já conectado!');
-    } else if (pusher.connection.state === 'initialized') {
-        // Tentar conectar
-        console.log('[WebSocket] Iniciando conexão...');
-        pusher.connect();
-        console.log(
-            '[WebSocket] Tentando conectar em:',
-            pusher.config.wsHost + ':' + pusher.config.wsPort,
-        );
-    } else {
-        console.log('[WebSocket] Estado inesperado:', pusher.connection.state);
+    if (pusher.connection.state !== 'connected') {
         pusher.connect();
     }
 }

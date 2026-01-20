@@ -36,16 +36,8 @@ type ItemTriagedEvent = {
 export function useOrderStatusListener(tenantId?: number) {
     useEffect(() => {
         if (!tenantId || !window.Echo) {
-            console.warn('[WebSocket] Hook não inicializado:', {
-                tenantId,
-                echoDisponivel: !!window.Echo,
-            });
             return;
         }
-
-        console.log(
-            `[WebSocket] Conectando ao canal orders.tenant.${tenantId}`,
-        );
 
         const channel = window.Echo.channel(`orders.tenant.${tenantId}`);
 
@@ -78,22 +70,12 @@ export function useOrderStatusListener(tenantId?: number) {
             },
         );
 
-        // Listener para classificações/associações na Triagem
-        // NOTA: O reload será feito pelo useRealtimeOrders de forma silenciosa
-        // Este listener serve apenas para mostrar toast quando VOCÊ classifica algo
-        // (eventos de outros usuários não mostram toast, apenas atualizam silenciosamente)
-        channel.listen('.item.triaged', (event: ItemTriagedEvent) => {
-            // Toast removido - será tratado pelo useRealtimeOrders na página Orders
-            // Se quiser toast aqui, deixe apenas para informar, sem reload
-            console.log('[WebSocket] Item classificado:', event);
+        // Listener mantido para possíveis notificações específicas da triagem
+        channel.listen('.item.triaged', (_event: ItemTriagedEvent) => {
+            // Sem efeito adicional: atualizações são tratadas pelo useRealtimeOrders
         });
 
-        console.log('[WebSocket] Listeners registrados com sucesso');
-
         return () => {
-            console.log(
-                '[WebSocket] Desconectando do canal orders.tenant.' + tenantId,
-            );
             channel.stopListening('.order.status.changed');
             channel.stopListening('.item.triaged');
             window.Echo.leaveChannel(`orders.tenant.${tenantId}`);

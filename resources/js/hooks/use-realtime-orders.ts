@@ -47,19 +47,12 @@ export function useRealtimeOrders(
         }
 
         const channelName = `orders.tenant.${tenantId}`;
-        console.log(`[Realtime Orders] 🔌 Conectando ao canal: ${channelName}`);
 
         const channel = window.Echo.channel(channelName);
 
-        channel.subscribed(() => {
-            console.log(
-                `[Realtime Orders] ✅ Inscrito no canal: ${channelName}`,
-            );
-        });
-
         channel.error((error: any) => {
             console.error(
-                `[Realtime Orders] ❌ Erro no canal ${channelName}:`,
+                `Erro no canal em tempo real (${channelName})`,
                 error,
             );
         });
@@ -84,10 +77,7 @@ export function useRealtimeOrders(
                     }
                 }
             } catch (error) {
-                console.error(
-                    '[Realtime Orders] Erro ao buscar pedido:',
-                    error,
-                );
+                console.error('Erro ao buscar pedido em tempo real:', error);
             } finally {
                 setPendingOrders((prev) => prev.filter((id) => id !== orderId));
             }
@@ -95,11 +85,6 @@ export function useRealtimeOrders(
 
         // Listener para novos pedidos
         channel.listen('.order.created', async (event: NewOrderEvent) => {
-            console.log(
-                '[Realtime Orders] ✅ Evento .order.created recebido:',
-                event,
-            );
-
             // Toast discreto apenas para novos
             toast.success('Novo pedido recebido', {
                 description: `#${event.order_code} - ${event.provider}`,
@@ -111,14 +96,11 @@ export function useRealtimeOrders(
 
         // Listener para itens classificados/associados na Triagem
         channel.listen('.item.triaged', async (event: ItemTriagedEvent) => {
-            console.log('[Realtime Orders] Item classificado:', event);
-
             // Sem toast para atualizações (silencioso)
             await fetchOrder(event.order_id, false);
         });
 
         return () => {
-            console.log('[Realtime Orders] Desconectando canal');
             channel.stopListening('.order.created');
             channel.stopListening('.item.triaged');
         };

@@ -204,20 +204,8 @@ export function DataTable({
             const orderId = row.original.id;
             const isExpanding = !row.getIsExpanded();
 
-            console.log(
-                '[Lazy Load] Click expandir:',
-                orderId,
-                'isExpanding:',
-                isExpanding,
-            );
-
             // Se está expandindo E não tem detalhes ainda
             if (isExpanding && !getOrderDetails(orderId)) {
-                console.log(
-                    '[Lazy Load] Carregando detalhes do pedido:',
-                    orderId,
-                );
-
                 // Expandir imediatamente (vai mostrar loading)
                 row.toggleExpanded();
 
@@ -225,10 +213,6 @@ export function DataTable({
                 const details = await loadOrderDetails(orderId);
 
                 if (details) {
-                    console.log(
-                        '[Lazy Load] Detalhes carregados, mesclando:',
-                        orderId,
-                    );
                     // Mesclar apenas os detalhes (items completos, mappings, sale)
                     // Mantém os campos calculados que já vieram do backend
                     setEnrichedData((prev) =>
