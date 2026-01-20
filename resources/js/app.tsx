@@ -29,6 +29,7 @@ window.Echo = new Echo({
     wssPort: 443,
     forceTLS: isSecure,
     encrypted: isSecure,
+    enabledTransports: isSecure ? ['ws', 'wss'] : ['ws'],
     cluster: '', // Reverb não usa cluster, mas Pusher exige o parâmetro
     disableStats: true,
 });
