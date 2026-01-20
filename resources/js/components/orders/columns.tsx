@@ -28,6 +28,15 @@ export type OrderItemMapping = {
     internal_product_id: number;
     quantity: number;
     mapping_type: 'main' | 'option' | 'addon';
+    option_type?:
+        | 'pizza_flavor'
+        | 'regular'
+        | 'addon'
+        | 'observation'
+        | 'drink'
+        | string
+        | null;
+    unit_cost_override?: number | string | null;
     external_reference?: string | null;
     external_name?: string | null;
     internal_product?: {

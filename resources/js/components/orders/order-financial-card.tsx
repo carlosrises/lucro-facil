@@ -36,6 +36,30 @@ import { CreatePaymentFeeDialog } from './create-payment-fee-dialog';
 import { LinkPaymentFeeDialog } from './link-payment-fee-dialog';
 import { QuickLinkDialog } from './quick-link-dialog';
 
+const OPTION_TYPE_TO_ITEM_TYPE: Record<string, string> = {
+    pizza_flavor: 'flavor',
+    drink: 'beverage',
+    addon: 'complement',
+    regular: 'optional',
+    observation: 'optional',
+};
+
+const resolveItemType = (
+    productMappingType?: string | null,
+    optionType?: string | null,
+): string | null => {
+    if (productMappingType) {
+        return productMappingType;
+    }
+
+    if (!optionType) {
+        return null;
+    }
+
+    const normalized = optionType.toLowerCase();
+    return OPTION_TYPE_TO_ITEM_TYPE[normalized] ?? null;
+};
+
 /**
  * Calcula o custo de um item considerando múltiplas associações
  */
@@ -1040,15 +1064,19 @@ export function OrderFinancialCard({
                                                                             addOn
                                                                                 .mapping
                                                                                 ?.internal_product;
+                                                                        const resolvedItemType =
+                                                                            resolveItemType(
+                                                                                productMapping?.item_type,
+                                                                                addOn
+                                                                                    .mapping
+                                                                                    ?.option_type,
+                                                                            );
 
                                                                         // Determinar ícone baseado na classificação
                                                                         const getAddonIcon =
                                                                             () => {
-                                                                                const itemType =
-                                                                                    productMapping?.item_type;
-
                                                                                 if (
-                                                                                    !itemType
+                                                                                    !resolvedItemType
                                                                                 ) {
                                                                                     return {
                                                                                         Icon: AlertCircle,
@@ -1058,7 +1086,7 @@ export function OrderFinancialCard({
                                                                                 }
 
                                                                                 switch (
-                                                                                    itemType
+                                                                                    resolvedItemType
                                                                                 ) {
                                                                                     case 'flavor':
                                                                                         return {
