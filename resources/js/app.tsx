@@ -27,6 +27,7 @@ window.Echo = new Echo({
     wsHost: window.location.hostname,
     wsPort: isSecure ? 443 : 8080,
     wssPort: 443,
+    wsPath: '/app',
     forceTLS: isSecure,
     encrypted: isSecure,
     enabledTransports: isSecure ? ['wss'] : ['ws'],
@@ -45,7 +46,14 @@ console.log('[WebSocket] Echo configurado:', {
 if (window.Echo.connector?.pusher) {
     const pusher = window.Echo.connector.pusher;
 
-    // Logs de estados de conexão
+    // Verificar estado atual
+    console.log('[WebSocket] Estado inicial:', pusher.connection.state);
+    console.log(
+        '[WebSocket] URL completa:',
+        `wss://${window.location.hostname}:443/app/${import.meta.env.VITE_REVERB_APP_KEY}`,
+    );
+
+    // Logs de estados de conexão (ANTES de conectar)
     pusher.connection.bind('connecting', () => {
         console.log('[WebSocket] Estado: Conectando...');
     });
@@ -73,12 +81,21 @@ if (window.Echo.connector?.pusher) {
         console.error('[WebSocket] Erro de conexão:', err);
     });
 
-    // Tentar conectar
-    pusher.connect();
-    console.log(
-        '[WebSocket] Tentando conectar em:',
-        pusher.config.wsHost + ':' + pusher.config.wsPort,
-    );
+    // Verificar se já está conectado
+    if (pusher.connection.state === 'connected') {
+        console.log('[WebSocket] Já conectado!');
+    } else if (pusher.connection.state === 'initialized') {
+        // Tentar conectar
+        console.log('[WebSocket] Iniciando conexão...');
+        pusher.connect();
+        console.log(
+            '[WebSocket] Tentando conectar em:',
+            pusher.config.wsHost + ':' + pusher.config.wsPort,
+        );
+    } else {
+        console.log('[WebSocket] Estado inesperado:', pusher.connection.state);
+        pusher.connect();
+    }
 }
 
 const appName = import.meta.env.VITE_APP_NAME || 'Lucro Fácil';
