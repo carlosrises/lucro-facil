@@ -52,11 +52,8 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
-      - name: Install NPM dependencies
-        run: npm ci
-
-      - name: Build assets
-        run: npm run build
+      # ⚠️ Removido: npm ci e npm run build
+      # Os assets serão compilados no servidor de produção com as variáveis corretas do .env
 
       - name: Deploy to Server via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -77,6 +74,12 @@ jobs:
             # Install/update composer dependencies
             composer install --no-dev --optimize-autoloader --no-interaction
 
+            # Install/update NPM dependencies
+            npm ci
+
+            # Build assets with production .env variables
+            npm run build
+
             # Clear caches
             php artisan config:clear
             php artisan cache:clear
@@ -95,19 +98,10 @@ jobs:
             chmod -R 775 storage bootstrap/cache
             chown -R www:www storage bootstrap/cache
 
-      - name: Copy built assets to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          source: 'public/build/*'
-          target: ${{ secrets.DEPLOY_PATH }}
-          overwrite: true
-          strip_components: 0
+      # ⚠️ Removido: Copy built assets to server
+      # Os assets são compilados diretamente no servidor agora
 
-      - name: Restart Queue Workers (if any)
+      - name: Restart Services
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -115,11 +109,15 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
           script: |
-            # Restart queue workers if using supervisor
-            # supervisorctl restart laravel-worker:* || echo "No supervisor configured"
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            # Restart queue workers
+            supervisorctl restart lucro-facil-queue || echo "Queue worker não configurado"
+
+            # Restart Reverb (WebSocket)
+            supervisorctl restart lucro-facil-reverb || echo "Reverb não configurado"
 
             # Or restart via artisan
-            cd ${{ secrets.DEPLOY_PATH }}
             php artisan queue:restart || echo "No queue workers running"
 
       - name: Deployment completed
