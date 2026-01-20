@@ -6,6 +6,7 @@ use App\Models\FinanceEntry;
 use App\Models\Order;
 use App\Models\Store;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -50,7 +51,21 @@ class DashboardController extends Controller
                 SUM(gross_total) as sum_gross_total,
                 SUM(discount_total) as sum_discount_total,
                 SUM(total_commissions) as sum_total_commissions,
-                SUM(total_costs) as sum_total_costs
+                SUM(total_costs) as sum_total_costs,
+                SUM(delivery_fee) as sum_delivery_fee,
+                SUM(net_revenue) as sum_net_revenue,
+                SUM(
+                    COALESCE(
+                        CAST(JSON_UNQUOTE(JSON_EXTRACT(calculated_costs, "$.total_payment_methods")) AS DECIMAL(18, 4)),
+                        0
+                    )
+                ) as sum_payment_fees,
+                SUM(
+                    COALESCE(
+                        CAST(JSON_UNQUOTE(JSON_EXTRACT(calculated_costs, "$.total_taxes")) AS DECIMAL(18, 4)),
+                        0
+                    )
+                ) as sum_additional_taxes
             ')
             ->first();
 
@@ -58,6 +73,10 @@ class DashboardController extends Controller
         $totalCommissions = (float) ($simpleTotals->sum_total_commissions ?? 0);
         $totalCosts = (float) ($simpleTotals->sum_total_costs ?? 0);
         $totalDiscounts = (float) ($simpleTotals->sum_discount_total ?? 0);
+        $totalRevenue = (float) ($simpleTotals->sum_gross_total ?? 0);
+        $totalDeliveryFee = (float) ($simpleTotals->sum_delivery_fee ?? 0);
+        $totalPaymentMethodFees = (float) ($simpleTotals->sum_payment_fees ?? 0);
+        $totalAdditionalTax = (float) ($simpleTotals->sum_additional_taxes ?? 0);
 
         // Agregação SQL: CMV via mappings
         $cmvData = \DB::table('orders')
@@ -76,94 +95,16 @@ class DashboardController extends Controller
                 }
             })
             ->selectRaw('
-                SUM(order_items.qty * order_item_mappings.quantity * internal_products.unit_cost) as total_cmv
+                SUM(
+                    order_items.qty * order_item_mappings.quantity *
+                    COALESCE(order_item_mappings.unit_cost_override, internal_products.unit_cost)
+                ) as total_cmv
             ')
             ->first();
 
         $totalCmv = (float) ($cmvData->total_cmv ?? 0);
 
-        // Para revenue, impostos e outros campos complexos, usar chunk MAS sem eager loading
-        // Carregar apenas os campos JSON necessários
-        $totalRevenue = 0;
-        $totalProductTax = 0;
-        $totalAdditionalTax = 0;
-        $totalPaymentMethodFees = 0;
-        $totalSubsidies = 0;
-        $totalDeliveryFee = 0;
-
-        (clone $baseQuery)
-            ->select(['id', 'provider', 'gross_total', 'raw', 'calculated_costs'])
-            ->chunkById(200, function ($orders) use (
-                &$totalRevenue,
-                &$totalProductTax,
-                &$totalAdditionalTax,
-                &$totalPaymentMethodFees,
-                &$totalSubsidies,
-                &$totalDeliveryFee
-            ) {
-                foreach ($orders as $order) {
-                    // Calcular revenue (precisa acessar raw JSON)
-                    $raw = is_array($order->raw) ? $order->raw : [];
-
-                    if ($order->provider === 'takeat') {
-                        if (isset($raw['session']['total_delivery_price'])) {
-                            $totalRevenue += (float) $raw['session']['total_delivery_price'];
-                        } elseif (isset($raw['session']['total_price'])) {
-                            $totalRevenue += (float) $raw['session']['total_price'];
-                        } else {
-                            $totalRevenue += (float) ($order->gross_total ?? 0);
-                        }
-                    } elseif (isset($raw['total']['orderAmount'])) {
-                        $totalRevenue += (float) $raw['total']['orderAmount'];
-                    } else {
-                        $totalRevenue += (float) ($order->gross_total ?? 0);
-                    }
-
-                    // Extrair subsídios (precisa acessar raw JSON)
-                    $sessionPayments = $raw['session']['payments'] ?? [];
-                    foreach ($sessionPayments as $payment) {
-                        if (!is_array($payment)) continue;
-
-                        $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                        $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-
-                        if (str_contains($paymentName, 'subsid') ||
-                            str_contains($paymentName, 'cupom') ||
-                            str_contains($paymentKeyword, 'subsid') ||
-                            str_contains($paymentKeyword, 'cupom')) {
-                            $totalSubsidies += (float) ($payment['payment_value'] ?? 0);
-                        }
-                    }
-
-                    // Processar calculated_costs JSON
-                    $costs = $order->calculated_costs;
-                    if ($costs) {
-                        // Impostos adicionais
-                        if (isset($costs['taxes']) && is_array($costs['taxes'])) {
-                            foreach ($costs['taxes'] as $tax) {
-                                $totalAdditionalTax += (float) ($tax['calculated_value'] ?? 0);
-                            }
-                        }
-
-                        // Taxas de pagamento
-                        if (isset($costs['payment_methods']) && is_array($costs['payment_methods'])) {
-                            foreach ($costs['payment_methods'] as $pm) {
-                                $totalPaymentMethodFees += (float) ($pm['calculated_value'] ?? 0);
-                            }
-                        }
-
-                        // Taxa de entrega
-                        if (isset($costs['costs']) && is_array($costs['costs'])) {
-                            foreach ($costs['costs'] as $c) {
-                                $cname = strtolower($c['name'] ?? '');
-                                if (strpos($cname, 'entreg') !== false || strpos($cname, 'delivery') !== false) {
-                                    $totalDeliveryFee += (float) ($c['calculated_value'] ?? 0);
-                                }
-                            }
-                        }
-                    }
-                }
-            });
+        $totalSubsidies = $this->sumSubsidies(clone $baseQuery);
 
         // Calcular impostos dos produtos via SQL agregado
         $taxData = \DB::table('orders')
@@ -274,15 +215,34 @@ class DashboardController extends Controller
 
         $previousSimpleTotals = (clone $previousBaseQuery)
             ->selectRaw('
+                SUM(gross_total) as sum_gross_total,
+                SUM(discount_total) as sum_discount_total,
                 SUM(total_commissions) as sum_total_commissions,
                 SUM(total_costs) as sum_total_costs,
-                SUM(discount_total) as sum_discount_total
+                SUM(delivery_fee) as sum_delivery_fee,
+                SUM(net_revenue) as sum_net_revenue,
+                SUM(
+                    COALESCE(
+                        CAST(JSON_UNQUOTE(JSON_EXTRACT(calculated_costs, "$.total_payment_methods")) AS DECIMAL(18, 4)),
+                        0
+                    )
+                ) as sum_payment_fees,
+                SUM(
+                    COALESCE(
+                        CAST(JSON_UNQUOTE(JSON_EXTRACT(calculated_costs, "$.total_taxes")) AS DECIMAL(18, 4)),
+                        0
+                    )
+                ) as sum_additional_taxes
             ')
             ->first();
 
         $previousCommissions = (float) ($previousSimpleTotals->sum_total_commissions ?? 0);
         $previousCosts = (float) ($previousSimpleTotals->sum_total_costs ?? 0);
         $previousDiscounts = (float) ($previousSimpleTotals->sum_discount_total ?? 0);
+        $previousRevenue = (float) ($previousSimpleTotals->sum_gross_total ?? 0);
+        $previousDeliveryFee = (float) ($previousSimpleTotals->sum_delivery_fee ?? 0);
+        $previousPaymentFees = (float) ($previousSimpleTotals->sum_payment_fees ?? 0);
+        $previousAdditionalTax = (float) ($previousSimpleTotals->sum_additional_taxes ?? 0);
 
         // CMV período anterior (SQL agregado)
         $previousCmvData = \DB::table('orders')
@@ -300,79 +260,13 @@ class DashboardController extends Controller
                     $q->where('orders.provider', $providerFilter);
                 }
             })
-            ->selectRaw('SUM(order_items.qty * order_item_mappings.quantity * internal_products.unit_cost) as total_cmv')
+            ->selectRaw('SUM(order_items.qty * order_item_mappings.quantity * COALESCE(order_item_mappings.unit_cost_override, internal_products.unit_cost)) as total_cmv')
             ->first();
 
         $previousCmv = (float) ($previousCmvData->total_cmv ?? 0);
 
-        // Apenas para revenue, subsídios e impostos, processar JSON em chunk
-        $previousRevenue = 0;
-        $previousSubsidies = 0;
-        $previousAdditionalTax = 0;
-        $previousPaymentFees = 0;
-        $previousDeliveryFee = 0;
-
-        (clone $previousBaseQuery)
-            ->select(['id', 'provider', 'gross_total', 'raw', 'calculated_costs'])
-            ->chunkById(200, function ($orders) use (&$previousRevenue, &$previousSubsidies, &$previousAdditionalTax, &$previousPaymentFees, &$previousDeliveryFee) {
-                foreach ($orders as $order) {
-                    $raw = is_array($order->raw) ? $order->raw : [];
-
-                    if ($order->provider === 'takeat') {
-                        if (isset($raw['session']['total_delivery_price'])) {
-                            $previousRevenue += (float) $raw['session']['total_delivery_price'];
-                        } elseif (isset($raw['session']['total_price'])) {
-                            $previousRevenue += (float) $raw['session']['total_price'];
-                        } else {
-                            $previousRevenue += (float) ($order->gross_total ?? 0);
-                        }
-                    } elseif (isset($raw['total']['orderAmount'])) {
-                        $previousRevenue += (float) $raw['total']['orderAmount'];
-                    } else {
-                        $previousRevenue += (float) ($order->gross_total ?? 0);
-                    }
-
-                    // Subsídios
-                    $sessionPayments = $raw['session']['payments'] ?? [];
-                    foreach ($sessionPayments as $payment) {
-                        if (!is_array($payment)) continue;
-
-                        $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                        $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-
-                        if (str_contains($paymentName, 'subsid') ||
-                            str_contains($paymentName, 'cupom') ||
-                            str_contains($paymentKeyword, 'subsid') ||
-                            str_contains($paymentKeyword, 'cupom')) {
-                            $previousSubsidies += (float) ($payment['payment_value'] ?? 0);
-                        }
-                    }
-
-                    // Impostos e taxas
-                    $costs = $order->calculated_costs;
-                    if ($costs) {
-                        if (isset($costs['taxes']) && is_array($costs['taxes'])) {
-                            foreach ($costs['taxes'] as $tax) {
-                                $previousAdditionalTax += (float) ($tax['calculated_value'] ?? 0);
-                            }
-                        }
-                        if (isset($costs['payment_methods']) && is_array($costs['payment_methods'])) {
-                            foreach ($costs['payment_methods'] as $pm) {
-                                $previousPaymentFees += (float) ($pm['calculated_value'] ?? 0);
-                            }
-                        }
-                        // Taxa de entrega
-                        if (isset($costs['costs']) && is_array($costs['costs'])) {
-                            foreach ($costs['costs'] as $c) {
-                                $cname = strtolower($c['name'] ?? '');
-                                if (strpos($cname, 'entreg') !== false || strpos($cname, 'delivery') !== false) {
-                                    $previousDeliveryFee += (float) ($c['calculated_value'] ?? 0);
-                                }
-                            }
-                        }
-                    }
-                }
-            });
+        // Subsídios do período anterior
+        $previousSubsidies = $this->sumSubsidies(clone $previousBaseQuery);
 
         // Ajustar descontos
         $previousDiscounts = $previousDiscounts - $previousSubsidies;
@@ -631,5 +525,39 @@ class DashboardController extends Controller
             // Re-lançar para Laravel processar adequadamente
             throw $e;
         }
+    }
+
+    private function sumSubsidies(Builder $query): float
+    {
+        $total = 0.0;
+
+        $query
+            ->select(['id', 'raw'])
+            ->chunkById(200, function ($orders) use (&$total) {
+                foreach ($orders as $order) {
+                    $raw = is_array($order->raw) ? $order->raw : [];
+                    $sessionPayments = $raw['session']['payments'] ?? [];
+
+                    foreach ($sessionPayments as $payment) {
+                        if (!is_array($payment)) {
+                            continue;
+                        }
+
+                        $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+                        $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
+
+                        if (
+                            str_contains($paymentName, 'subsid') ||
+                            str_contains($paymentName, 'cupom') ||
+                            str_contains($paymentKeyword, 'subsid') ||
+                            str_contains($paymentKeyword, 'cupom')
+                        ) {
+                            $total += (float) ($payment['payment_value'] ?? 0);
+                        }
+                    }
+                }
+            });
+
+        return $total;
     }
 }
