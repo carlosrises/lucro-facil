@@ -7,11 +7,17 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { MonthYearPicker } from '@/components/ui/month-year-picker';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, usePage } from '@inertiajs/react';
 import {
+    ChevronDown,
     DollarSign,
     Download,
     MinusCircle,
@@ -21,6 +27,7 @@ import {
     TrendingUp,
     Wallet,
 } from 'lucide-react';
+import { useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -33,24 +40,97 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+});
+
+interface BreakdownItem {
+    name: string;
+    value: number;
+    percentage: number;
+    stores?: BreakdownItem[];
+    marketplaces?: BreakdownItem[];
+}
+
+interface BreakdownToggleProps {
+    label: string;
+    items: BreakdownItem[];
+    className?: string;
+}
+
+const BreakdownToggle = ({ label, items, className }: BreakdownToggleProps) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    if (!items || items.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className={className ?? ''}>
+            <Collapsible
+                open={isOpen}
+                onOpenChange={setIsOpen}
+                className="w-full"
+            >
+                <CollapsibleTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex w-full items-center justify-between px-0 text-muted-foreground hover:text-foreground"
+                    >
+                        <span>{label}</span>
+                        <ChevronDown
+                            className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                        />
+                    </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                    <div className="space-y-2 pt-3">
+                        {items.map((item, index) => (
+                            <div
+                                key={`${label}-${item.name}-${index}`}
+                                className="flex items-center justify-between text-sm"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Badge variant="outline">
+                                        {item.percentage.toFixed(1)}%
+                                    </Badge>
+                                    <span className="font-medium">
+                                        {item.name}
+                                    </span>
+                                </div>
+                                <span className="font-semibold">
+                                    {currencyFormatter.format(item.value)}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </CollapsibleContent>
+            </Collapsible>
+        </div>
+    );
+};
+
 interface SummaryData {
     // Receitas
     grossRevenue: number;
-    revenueByMarketplace: Array<{
-        name: string;
-        value: number;
-        percentage: number;
-    }>;
+    revenueByMarketplace: BreakdownItem[];
+    revenueByStore: BreakdownItem[];
 
     // Deduções
     paymentFees: number;
     paymentFeesPercent: number;
+    paymentFeesBreakdown: BreakdownItem[];
     commissions: number;
     commissionsPercent: number;
+    commissionsBreakdown: BreakdownItem[];
     discounts: number;
     discountsPercent: number;
+    discountsBreakdown: BreakdownItem[];
     subsidies: number;
     subsidiesPercent: number;
+    subsidiesBreakdown: BreakdownItem[];
 
     // Resultado Intermediário
     revenueAfterDeductions: number;
@@ -63,6 +143,7 @@ interface SummaryData {
     orderCostsPercent: number;
     taxes: number;
     taxesPercent: number;
+    taxesBreakdown: BreakdownItem[];
 
     // Margem
     contributionMargin: number;
@@ -177,43 +258,88 @@ export default function FinancialSummary() {
                                             </CardDescription>
                                         </CardHeader>
                                         <CardContent className="px-6">
-                                            <div className="space-y-4">
-                                                {data.revenueByMarketplace.map(
-                                                    (marketplace) => (
-                                                        <div
-                                                            key={
-                                                                marketplace.name
-                                                            }
-                                                            className="flex items-center justify-between"
-                                                        >
-                                                            <div className="flex items-center gap-3">
-                                                                <Store className="h-4 w-4 text-muted-foreground" />
-                                                                <span className="font-medium">
-                                                                    {
-                                                                        marketplace.name
-                                                                    }
-                                                                </span>
-                                                                <Badge variant="outline">
-                                                                    {
-                                                                        marketplace.percentage
-                                                                    }
-                                                                    %
-                                                                </Badge>
-                                                            </div>
-                                                            <span className="font-semibold">
-                                                                {new Intl.NumberFormat(
-                                                                    'pt-BR',
-                                                                    {
-                                                                        style: 'currency',
-                                                                        currency:
-                                                                            'BRL',
-                                                                    },
-                                                                ).format(
-                                                                    marketplace.value,
+                                            <div className="space-y-3">
+                                                {data.revenueByStore.map(
+                                                    (store) => {
+                                                        const hasMarketplaces =
+                                                            (store
+                                                                .marketplaces
+                                                                ?.length ?? 0) >
+                                                            0;
+
+                                                        return (
+                                                            <Collapsible
+                                                                key={store.name}
+                                                                className="rounded-md border border-transparent px-3 py-2 transition data-[state=open]:bg-muted/40"
+                                                            >
+                                                                <div className="flex items-start justify-between gap-3">
+                                                                    <div className="flex flex-1 items-center gap-3">
+                                                                        <Store className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                                                                        <div className="flex flex-col">
+                                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                                <span className="font-medium">
+                                                                                    {store.name}
+                                                                                </span>
+                                                                                <Badge variant="outline">
+                                                                                    {store.percentage.toFixed(
+                                                                                        1,
+                                                                                    )}
+                                                                                    %
+                                                                                </Badge>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="font-semibold">
+                                                                            {currencyFormatter.format(
+                                                                                store.value,
+                                                                            )}
+                                                                        </span>
+                                                                        {hasMarketplaces && (
+                                                                            <CollapsibleTrigger className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition hover:text-foreground data-[state=open]:bg-muted data-[state=open]:[&>svg]:rotate-180">
+                                                                                <ChevronDown className="h-4 w-4 transition-transform" />
+                                                                            </CollapsibleTrigger>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                                {hasMarketplaces && (
+                                                                    <CollapsibleContent>
+                                                                        <div className="mt-3 space-y-2 pl-7">
+                                                                            {store.marketplaces?.map(
+                                                                                (
+                                                                                    marketplace,
+                                                                                ) => (
+                                                                                    <div
+                                                                                        key={`${store.name}-${marketplace.name}`}
+                                                                                        className="flex items-center justify-between text-sm text-muted-foreground"
+                                                                                    >
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <Badge variant="outline">
+                                                                                                {marketplace.percentage.toFixed(
+                                                                                                    1,
+                                                                                                )}
+                                                                                                %
+                                                                                            </Badge>
+                                                                                            <span>
+                                                                                                {
+                                                                                                    marketplace.name
+                                                                                                }
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <span className="font-semibold text-foreground">
+                                                                                            {currencyFormatter.format(
+                                                                                                marketplace.value,
+                                                                                            )}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                ),
+                                                                            )}
+                                                                        </div>
+                                                                    </CollapsibleContent>
                                                                 )}
-                                                            </span>
-                                                        </div>
-                                                    ),
+                                                            </Collapsible>
+                                                        );
+                                                    },
                                                 )}
 
                                                 {/* Informação de Subsídio */}
@@ -253,6 +379,14 @@ export default function FinancialSummary() {
                                                         </div>
                                                     </div>
                                                 )}
+
+                                                <BreakdownToggle
+                                                    className="pt-4"
+                                                    label="Subsídio por marketplace"
+                                                    items={
+                                                        data.subsidiesBreakdown
+                                                    }
+                                                />
                                             </div>
                                         </CardContent>
                                     </Card>
@@ -297,6 +431,17 @@ export default function FinancialSummary() {
                                                 Taxas de meios de pagamento
                                             </CardDescription>
                                         </CardHeader>
+                                        {data.paymentFeesBreakdown.length >
+                                            0 && (
+                                            <CardContent className="px-6 pt-0 pb-6">
+                                                <BreakdownToggle
+                                                    label="Detalhar taxas por meio de pagamento"
+                                                    items={
+                                                        data.paymentFeesBreakdown
+                                                    }
+                                                />
+                                            </CardContent>
+                                        )}
                                     </Card>
 
                                     {/* 3. (-) COMISSÃO MARKETPLACE */}
@@ -339,6 +484,17 @@ export default function FinancialSummary() {
                                                 Comissões dos marketplaces
                                             </CardDescription>
                                         </CardHeader>
+                                        {data.commissionsBreakdown.length >
+                                            0 && (
+                                            <CardContent className="px-6 pt-0 pb-6">
+                                                <BreakdownToggle
+                                                    label="Detalhar comissão por marketplace"
+                                                    items={
+                                                        data.commissionsBreakdown
+                                                    }
+                                                />
+                                            </CardContent>
+                                        )}
                                     </Card>
 
                                     {/* 4. (-) DESCONTOS */}
@@ -381,6 +537,16 @@ export default function FinancialSummary() {
                                                 Descontos concedidos
                                             </CardDescription>
                                         </CardHeader>
+                                        {data.discountsBreakdown.length > 0 && (
+                                            <CardContent className="px-6 pt-0 pb-6">
+                                                <BreakdownToggle
+                                                    label="Detalhar descontos por marketplace"
+                                                    items={
+                                                        data.discountsBreakdown
+                                                    }
+                                                />
+                                            </CardContent>
+                                        )}
                                     </Card>
 
                                     {/* 5. (=) RECEITA PÓS DEDUÇÃO */}
@@ -546,6 +712,14 @@ export default function FinancialSummary() {
                                                 adicionais
                                             </CardDescription>
                                         </CardHeader>
+                                        {data.taxesBreakdown.length > 0 && (
+                                            <CardContent className="px-6 pt-0 pb-6">
+                                                <BreakdownToggle
+                                                    label="Detalhar impostos"
+                                                    items={data.taxesBreakdown}
+                                                />
+                                            </CardContent>
+                                        )}
                                     </Card>
 
                                     {/* 10. (=) MARGEM DE CONTRIBUIÇÃO */}
