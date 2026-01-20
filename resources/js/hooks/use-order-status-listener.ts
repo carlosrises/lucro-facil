@@ -1,5 +1,6 @@
 import { router } from '@inertiajs/react';
 import { useEffect } from 'react';
+import { toast } from 'sonner';
 
 type OrderStatusChangedEvent = {
     order_id: number;
@@ -11,80 +12,90 @@ type OrderStatusChangedEvent = {
     message: string;
 };
 
+type ItemTriagedEvent = {
+    tenant_id: number;
+    order_id: number;
+    order_code: string;
+    item_id: number;
+    item_name: string;
+    internal_product_id: number | null;
+    item_type: string | null;
+    action: 'classified' | 'mapped';
+    timestamp: string;
+};
+
 /**
- * Hook para escutar mudanças de status de pedidos em tempo real
+ * Hook para escutar mudanças em tempo real via WebSockets
  *
- * Quando um pedido tem seu status alterado externalmente (pelo cliente,
- * iFood ou outro app), este hook:
- * 1. Exibe uma notificação toast
- * 2. Recarrega a lista de pedidos automaticamente
+ * Eventos escutados:
+ * 1. order.status.changed - Status de pedido alterado externamente
+ * 2. item.triaged - Item classificado ou associado na Triagem
  *
- * Critérios de homologação 12-13
- *
- * NOTA: Hook temporariamente desabilitado para evitar timeouts/loops
+ * Atualiza a página automaticamente quando detecta mudanças
  */
 export function useOrderStatusListener(tenantId?: number) {
     useEffect(() => {
-        // Hook desabilitado para evitar recarregamentos automáticos
-        // que podem causar timeout na página
-        return;
+        if (!tenantId || !window.Echo) return;
 
-        /* CÓDIGO ORIGINAL COMENTADO PARA REFERÊNCIA FUTURA
-        if (!tenantId) return;
-
-        // Configuração do Echo (Laravel Echo + Pusher/Soketi)
-        // Descomente quando configurar broadcasting
         const channel = window.Echo.channel(`orders.tenant.${tenantId}`);
 
-        channel.listen('.order.status.changed', (event: OrderStatusChangedEvent) => {
-            // Exibe toast baseado no tipo de mudança
-            if (event.cancelled_by_customer) {
-                toast.error('Pedido Cancelado', {
-                    description: event.message,
-                    action: {
-                        label: 'Ver pedido',
-                        onClick: () => {
-                            // Navega para o pedido específico ou apenas recarrega
-                            router.reload({ only: ['orders'] });
+        // Listener para mudanças de status de pedidos
+        channel.listen(
+            '.order.status.changed',
+            (event: OrderStatusChangedEvent) => {
+                if (event.cancelled_by_customer) {
+                    toast.error('Pedido Cancelado', {
+                        description: `Pedido ${event.order_code} foi cancelado pelo cliente`,
+                        action: {
+                            label: 'Ver pedido',
+                            onClick: () => {
+                                router.reload({ only: ['orders'] });
+                            },
                         },
-                    },
-                });
-            } else if (event.new_status === 'CONFIRMED') {
-                toast.success('Pedido Confirmado', {
-                    description: event.message,
-                });
-            } else {
-                toast.info('Status Atualizado', {
-                    description: event.message,
-                });
-            }
+                    });
+                } else if (event.new_status === 'CONFIRMED') {
+                    toast.success('Pedido Confirmado', {
+                        description: `Pedido ${event.order_code} foi confirmado`,
+                    });
+                } else {
+                    toast.info('Status Atualizado', {
+                        description: event.message,
+                    });
+                }
 
-            // Recarrega lista de pedidos
-            router.reload({ only: ['orders'] });
+                // Recarrega lista de pedidos
+                router.reload({ only: ['orders'] });
+            },
+        );
+
+        // Listener para classificações/associações na Triagem
+        channel.listen('.item.triaged', (event: ItemTriagedEvent) => {
+            const actionText =
+                event.action === 'mapped' ? 'associado' : 'classificado';
+            const productText = event.internal_product_id
+                ? ' a um produto'
+                : '';
+
+            toast.success('Item Atualizado na Triagem', {
+                description: `${event.item_name} foi ${actionText}${productText} no pedido ${event.order_code}`,
+            });
+
+            // Recarrega apenas os dados necessários
+            router.reload({
+                only: ['orders', 'indicators', 'unmappedProductsCount'],
+                preserveScroll: true,
+            });
         });
 
+        console.log('[WebSocket] Listeners registrados com sucesso');
+
         return () => {
+            console.log(
+                '[WebSocket] Desconectando do canal orders.tenant.' + tenantId,
+            );
             channel.stopListening('.order.status.changed');
+            channel.stopListening('.item.triaged');
             window.Echo.leaveChannel(`orders.tenant.${tenantId}`);
         };
-
-        // Alternativa usando Page Visibility API
-        // Recarrega apenas quando o usuário retorna para a aba
-        const handleVisibilityChange = () => {
-            // Quando a aba fica visível novamente, recarrega os dados
-            if (document.visibilityState === 'visible') {
-                router.reload({ only: ['orders'] });
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        return () => {
-            document.removeEventListener(
-                'visibilitychange',
-                handleVisibilityChange,
-            );
-        };
-        */
     }, [tenantId]);
 }
