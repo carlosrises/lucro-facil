@@ -33,6 +33,20 @@ window.Echo = new Echo({
     disableStats: true,
 });
 
+// Log de debug para verificar configuração
+console.log('[WebSocket] Echo configurado:', {
+    key: import.meta.env.VITE_REVERB_APP_KEY,
+    host: window.location.hostname,
+    port: isSecure ? 443 : 8080,
+    secure: isSecure,
+});
+
+// Forçar conexão do Pusher
+if (window.Echo.connector?.pusher) {
+    window.Echo.connector.pusher.connect();
+    console.log('[WebSocket] Conexão Pusher iniciada');
+}
+
 const appName = import.meta.env.VITE_APP_NAME || 'Lucro Fácil';
 
 // Tratamento global de erros 419 (CSRF Token Mismatch)
