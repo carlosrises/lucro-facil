@@ -255,6 +255,10 @@ class SyncTakeatOrders extends Command
         $placedAt = \Carbon\Carbon::parse($basket['start_time'] ?? $session['start_time'], 'UTC');
 
         // Criar ou atualizar Order
+        $existingOrder = \App\Models\Order::where('tenant_id', $store->tenant_id)
+            ->where('order_uuid', $orderUuid)
+            ->exists();
+
         $order = \App\Models\Order::updateOrCreate(
             [
                 'tenant_id' => $store->tenant_id,
@@ -279,6 +283,20 @@ class SyncTakeatOrders extends Command
                 ],
             ]
         );
+
+        // Disparar evento de novo pedido se foi criado agora
+        if (!$existingOrder) {
+            \Log::info('🚀 [WebSocket] Disparando evento OrderCreated (Takeat)', [
+                'tenant_id' => $store->tenant_id,
+                'order_id' => $order->id,
+                'order_code' => $order->code,
+                'provider' => $order->provider,
+                'origin' => $order->origin,
+                'channel' => "orders.tenant.{$store->tenant_id}",
+                'broadcast_driver' => config('broadcasting.default'),
+            ]);
+            event(new \App\Events\OrderCreated($order));
+        }
 
         // Processar items (orders dentro do basket)
         $this->processOrderItems($order, $basket['orders'] ?? []);
