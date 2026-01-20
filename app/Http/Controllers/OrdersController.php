@@ -23,10 +23,16 @@ class OrdersController extends Controller
                 'calculated_costs', 'total_costs', 'total_commissions', 'net_revenue', 'costs_calculated_at',
             ])
             ->with([
+                'items' => function ($query) {
+                    // Selecionar apenas campos que existem na tabela order_items
+                    $query->select('id', 'order_id', 'sku', 'name', 'qty', 'unit_price', 'total', 'add_ons', 'tenant_id', 'created_at', 'updated_at');
+                },
                 'items.internalProduct.taxCategory',
                 'items.productMapping' => function ($query) {
                     $query->where('product_mappings.tenant_id', tenant_id());
                 },
+                'items.mappings.internalProduct',
+                'items.mappings.orderItem', // Necessário para o accessor product_mapping funcionar
                 'sale',
             ])
             ->where('tenant_id', tenant_id())
@@ -126,6 +132,53 @@ class OrdersController extends Controller
         $perPage = (int) $request->input('per_page', 10);
 
         $orders = $query->paginate($perPage)->withQueryString();
+
+        // Carregar ProductMappings dos add-ons (classificações da Triagem)
+        // Coletar todos os SKUs de add-ons
+        $addOnSkus = [];
+        foreach ($orders->items() as $order) {
+            foreach ($order->items as $item) {
+                if (!empty($item->add_ons) && is_array($item->add_ons)) {
+                    foreach ($item->add_ons as $addOn) {
+                        $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
+                        if ($addOnName) {
+                            $addOnSkus[] = 'addon_' . md5($addOnName);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Buscar todos ProductMappings de uma vez (evitar N+1)
+        $productMappingsMap = [];
+        if (!empty($addOnSkus)) {
+            $productMappingsMap = \App\Models\ProductMapping::whereIn('external_item_id', array_unique($addOnSkus))
+                ->where('tenant_id', tenant_id())
+                ->with('internalProduct')
+                ->get()
+                ->keyBy('external_item_id');
+        }
+
+        // Enriquecer order_items com product_mappings dos add-ons
+        foreach ($orders->items() as $order) {
+            foreach ($order->items as $item) {
+                if (!empty($item->add_ons) && is_array($item->add_ons)) {
+                    // Criar array temporário com ProductMappings
+                    $addOnMappings = [];
+                    foreach ($item->add_ons as $index => $addOn) {
+                        $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
+                        $sku = 'addon_' . md5($addOnName);
+
+                        if (isset($productMappingsMap[$sku])) {
+                            $addOnMappings[$index] = $productMappingsMap[$sku];
+                        }
+                    }
+
+                    // Adicionar ao item para acesso no frontend
+                    $item->add_ons_product_mappings = $addOnMappings;
+                }
+            }
+        }
 
         // TEMPORARIAMENTE DESABILITADO - Enriquecer add-ons causa timeout
         /*
