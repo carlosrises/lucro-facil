@@ -8,7 +8,7 @@ import { useOrderStatusListener } from '@/hooks/use-order-status-listener';
 import { useRealtimeOrders } from '@/hooks/use-realtime-orders';
 import { type BreadcrumbItem } from '@/types';
 import { RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -93,73 +93,81 @@ export default function Orders() {
 
     // Hook para atualizações em tempo real (novos pedidos + itens classificados)
     // Atualiza a lista silenciosamente sem skeleton/reload
-    useRealtimeOrders((auth.user as any)?.tenant_id, (order, isNew) => {
-        // Validar se o pedido atende os filtros ativos antes de adicionar
-        // IMPORTANTE: placed_at vem em UTC, precisamos converter para horário de Brasília
-        const orderDateUTC = new Date(order.placed_at);
-        const orderDateBR = new Date(
-            orderDateUTC.toLocaleString('en-US', {
-                timeZone: 'America/Sao_Paulo',
-            }),
-        );
-
-        // Converter filtros para Date (já estão em formato de Brasília)
-        const startDateBR = new Date(filters.start_date + ' 00:00:00');
-        const endDateBR = new Date(filters.end_date + ' 23:59:59');
-
-        // Verificar se o pedido está dentro do período filtrado
-        if (orderDateBR < startDateBR || orderDateBR > endDateBR) {
-            console.log(
-                '[Realtime] Pedido fora do período filtrado, ignorando',
-                {
-                    order_date_utc: order.placed_at,
-                    order_date_br: orderDateBR.toISOString(),
-                    filter_start: filters.start_date,
-                    filter_end: filters.end_date,
-                },
+    const handleOrderUpsert = useCallback(
+        (order: Order, isNew: boolean) => {
+            // Validar se o pedido atende os filtros ativos antes de adicionar
+            // IMPORTANTE: placed_at vem em UTC, precisamos converter para horário de Brasília
+            const orderDateUTC = new Date(order.placed_at);
+            const orderDateBR = new Date(
+                orderDateUTC.toLocaleString('en-US', {
+                    timeZone: 'America/Sao_Paulo',
+                }),
             );
-            return; // Não adicionar pedido fora do filtro
-        }
 
-        // Verificar filtro de status
-        if (filters.status && filters.status !== 'all') {
-            if (order.status !== filters.status) {
+            // Converter filtros para Date (já estão em formato de Brasília)
+            const startDateBR = new Date(filters.start_date + ' 00:00:00');
+            const endDateBR = new Date(filters.end_date + ' 23:59:59');
+
+            // Verificar se o pedido está dentro do período filtrado
+            if (orderDateBR < startDateBR || orderDateBR > endDateBR) {
                 console.log(
-                    '[Realtime] Pedido com status diferente do filtro, ignorando',
-                    { order_status: order.status, filter: filters.status },
+                    '[Realtime] Pedido fora do período filtrado, ignorando',
+                    {
+                        order_date_utc: order.placed_at,
+                        order_date_br: orderDateBR.toISOString(),
+                        filter_start: filters.start_date,
+                        filter_end: filters.end_date,
+                    },
                 );
-                return;
+                return; // Não adicionar pedido fora do filtro
             }
-        }
 
-        // Verificar filtro de loja
-        if (filters.store_id && order.store_id !== filters.store_id) {
-            return;
-        }
-
-        // Verificar filtro de provider
-        if (filters.provider) {
-            if (filters.provider.includes(':')) {
-                const [provider, origin] = filters.provider.split(':');
-                if (order.provider !== provider || order.origin !== origin) {
+            // Verificar filtro de status
+            if (filters.status && filters.status !== 'all') {
+                if (order.status !== filters.status) {
+                    console.log(
+                        '[Realtime] Pedido com status diferente do filtro, ignorando',
+                        { order_status: order.status, filter: filters.status },
+                    );
                     return;
                 }
-            } else if (order.provider !== filters.provider) {
+            }
+
+            // Verificar filtro de loja
+            if (filters.store_id && order.store_id !== filters.store_id) {
                 return;
             }
-        }
 
-        // Pedido atende todos os filtros, adicionar/atualizar
-        setLocalOrders((prev) => {
-            if (isNew) {
-                // Novo pedido: adicionar no topo
-                return [order, ...prev];
-            } else {
-                // Atualização: substituir existente
-                return prev.map((o) => (o.id === order.id ? order : o));
+            // Verificar filtro de provider
+            if (filters.provider) {
+                if (filters.provider.includes(':')) {
+                    const [provider, origin] = filters.provider.split(':');
+                    if (
+                        order.provider !== provider ||
+                        order.origin !== origin
+                    ) {
+                        return;
+                    }
+                } else if (order.provider !== filters.provider) {
+                    return;
+                }
             }
-        });
-    });
+
+            // Pedido atende todos os filtros, adicionar/atualizar
+            setLocalOrders((prev) => {
+                if (isNew) {
+                    // Novo pedido: adicionar no topo
+                    return [order, ...prev];
+                } else {
+                    // Atualização: substituir existente
+                    return prev.map((o) => (o.id === order.id ? order : o));
+                }
+            });
+        },
+        [filters],
+    );
+
+    useRealtimeOrders((auth.user as any)?.tenant_id, handleOrderUpsert);
 
     // Hook para verificar novos pedidos sincronizados (DESABILITADO - usando WebSocket)
     // const { hasNewOrders, newOrdersCount, refreshOrders } = useOrderPolling({

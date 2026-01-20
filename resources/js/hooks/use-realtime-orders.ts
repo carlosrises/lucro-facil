@@ -122,7 +122,7 @@ export function useRealtimeOrders(
             channel.stopListening('.order.created');
             channel.stopListening('.item.triaged');
         };
-    }, [tenantId, onOrderUpsert]);
+    }, [tenantId]); // Removido onOrderUpsert para evitar reconexões
 
     return {
         pendingOrders,
