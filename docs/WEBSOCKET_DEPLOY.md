@@ -2,10 +2,11 @@
 
 ## 📋 Pré-requisitos
 
-- Servidor com Nginx configurado
+- Servidor com Apache ou Nginx configurado
 - Supervisor instalado
 - Queue worker já rodando
 - SSL/HTTPS configurado (Let's Encrypt)
+- (Apache) Módulos: `mod_proxy`, `mod_proxy_http`, `mod_proxy_wstunnel`
 
 ## 🔧 1. Configurar Variáveis de Ambiente
 
@@ -58,7 +59,45 @@ sudo supervisorctl start lucro-facil-reverb
 sudo supervisorctl status
 ```
 
-## 🌐 3. Configurar Proxy WebSocket no Nginx
+## 🌐 3. Configurar Proxy WebSocket no Apache
+
+### 3.1. Habilitar módulos necessários
+
+```bash
+sudo a2enmod proxy
+sudo a2enmod proxy_http
+sudo a2enmod proxy_wstunnel
+sudo systemctl restart apache2
+```
+
+### 3.2. Adicionar proxy no VirtualHost
+
+Editar o arquivo de configuração do site (ex: `/www/server/panel/vhost/apache/lucrofacil.risescorporation.com.br.conf`):
+
+Adicionar **dentro do bloco `<VirtualHost *:443>`**, **antes** do bloco `#PHP`:
+
+```apache
+    #WebSocket Proxy para Laravel Reverb
+    <IfModule mod_proxy.c>
+        <IfModule mod_proxy_wstunnel.c>
+            ProxyPass /app/ ws://127.0.0.1:8080/app/
+            ProxyPassReverse /app/ ws://127.0.0.1:8080/app/
+        </IfModule>
+    </IfModule>
+```
+
+**Testar e recarregar Apache:**
+
+```bash
+sudo apachectl configtest
+sudo systemctl reload apache2
+```
+
+---
+
+## 🌐 3. (Alternativa) Configurar Proxy WebSocket no Nginx
+
+_Use esta seção se estiver usando Nginx ao invés de Apache._
 
 Editar o arquivo de configuração do site (geralmente em `/etc/nginx/sites-available/seusite`):
 
@@ -102,6 +141,7 @@ tail -f storage/logs/reverb.log
 ```
 
 Deve mostrar:
+
 ```
 INFO  Starting server on 0.0.0.0:8080
 ```
@@ -109,6 +149,7 @@ INFO  Starting server on 0.0.0.0:8080
 ### 4.3. Testar proxy do Nginx
 
 Acessar no navegador:
+
 ```
 https://seudominio.com/app/iztwwm21nfzut6peulkh
 ```
@@ -120,15 +161,17 @@ Deve retornar erro 400 ou 426 (esperado, significa que o proxy está funcionando
 1. Abrir DevTools (F12) → Console
 2. Acessar página de Pedidos
 3. Deve aparecer no console:
-   ```
-   [WebSocket] Conectando ao canal orders.tenant.1
-   [WebSocket] Listeners registrados com sucesso
-   ```
+
+    ```
+    [WebSocket] Conectando ao canal orders.tenant.1
+    [WebSocket] Listeners registrados com sucesso
+    ```
 
 4. Verificar log do Reverb - deve aparecer:
-   ```
-   Connection id xyz subscribed to channel orders.tenant.1
-   ```
+
+    ```
+    Connection id xyz subscribed to channel orders.tenant.1
+    ```
 
 5. Classificar um item na Triagem
 6. Deve aparecer toast na página de Pedidos
@@ -138,14 +181,24 @@ Deve retornar erro 400 ou 426 (esperado, significa que o proxy está funcionando
 
 ### Erro: "WebSocket connection failed"
 
-**Causa:** Proxy do Nginx não configurado ou SSL inválido
+**Causa:** Proxy do Apache/Nginx não configurado ou SSL inválido
 
 **Solução:**
+
 ```bash
-# Verificar configuração Nginx
+# Apache: Verificar módulos habilitados
+apachectl -M | grep proxy
+
+# Apache: Verificar configuração
+sudo apachectl configtest
+
+# Apache: Ver logs
+sudo tail -f /www/wwwlogs/lucrofacil.risescorporation.com.br-error_log
+
+# Nginx: Verificar configuração
 sudo nginx -t
 
-# Ver logs do Nginx
+# Nginx: Ver logs
 sudo tail -f /var/log/nginx/error.log
 
 # Verificar se Reverb está escutando
@@ -157,6 +210,7 @@ netstat -tlnp | grep 8080
 **Causa:** Reverb não está rodando
 
 **Solução:**
+
 ```bash
 # Verificar status
 sudo supervisorctl status lucro-facil-reverb
@@ -173,6 +227,7 @@ sudo supervisorctl restart lucro-facil-reverb
 **Causa:** Queue worker não está processando
 
 **Solução:**
+
 ```bash
 # Verificar queue worker
 sudo supervisorctl status lucro-facil-queue
@@ -189,6 +244,7 @@ tail -f storage/logs/laravel.log | grep "broadcast\|ItemTriaged"
 **Causa:** Múltiplos workers ou reconexões
 
 **Solução:**
+
 - Verificar se há apenas 1 worker do Reverb rodando
 - Limpar cache do navegador
 - Verificar se `toOthers()` está no broadcast
@@ -198,7 +254,10 @@ tail -f storage/logs/laravel.log | grep "broadcast\|ItemTriaged"
 ### Logs importantes
 
 ```bash
-# Reverb
+# Apache (proxy)
+sudo tail -f /www/wwwlogs/lucrofacil.risescorporation.com.br-access_log | grep "/app/"
+
+# Nginx (proxy) - se estiver usando Nginx
 tail -f storage/logs/reverb.log
 
 # Queue (broadcasts)
@@ -235,7 +294,8 @@ sudo supervisorctl restart lucro-facil-queue
 ## 📝 Checklist de Deploy
 
 - [ ] `.env` configurado com domínio correto
-- [ ] Supervisor configurado e rodando
+- [ ] Apache/Nginx com proxy WebSocket configurado
+- [ ] Módulos Apache habilitados (se usando Apache)
 - [ ] Nginx com proxy WebSocket configurado
 - [ ] SSL/HTTPS funcionando
 - [ ] Queue worker rodando
@@ -248,6 +308,7 @@ sudo supervisorctl restart lucro-facil-queue
 ## 🎯 Resultado Esperado
 
 Quando tudo estiver funcionando:
+
 1. Usuário classifica item na **Triagem**
 2. Backend dispara broadcast `ItemTriaged`
 3. Queue worker processa o evento
