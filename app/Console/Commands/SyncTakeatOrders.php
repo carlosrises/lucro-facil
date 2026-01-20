@@ -251,9 +251,8 @@ class SyncTakeatOrders extends Command
         // Status baseado no order_status e completed_at
         $status = $this->mapTakeatStatus($basket['order_status'] ?? null, $session['status'] ?? null);
 
-        // Data do pedido (Takeat retorna em UTC, converter para timezone da aplicação)
-        $placedAt = \Carbon\Carbon::parse($basket['start_time'] ?? $session['start_time'], 'UTC')
-            ->setTimezone(config('app.timezone'));
+        // Data do pedido (Takeat retorna em UTC, manter em UTC para o banco)
+        $placedAt = \Carbon\Carbon::parse($basket['start_time'] ?? $session['start_time'], 'UTC');
 
         // Criar ou atualizar Order
         $order = \App\Models\Order::updateOrCreate(
@@ -376,7 +375,6 @@ class SyncTakeatOrders extends Command
 
         // Auto-mapear complementos (add_ons) se houverem
         $addOns = $orderItem->add_ons ?? [];
-        $flavorMappingService = app(FlavorMappingService::class);
 
         foreach ($addOns as $index => $addOn) {
             $addonName = $addOn['name'] ?? '';
@@ -393,12 +391,10 @@ class SyncTakeatOrders extends Command
                 ->first();
 
             if ($addonMapping && $addonMapping->internal_product_id) {
-                // Se for sabor (flavor), usar FlavorMappingService para aplicar corretamente
-                if ($addonMapping->item_type === 'flavor') {
-                    // FlavorMappingService cuida de criar o mapping com CMV correto e fração
-                    $flavorMappingService->mapFlavorToAllOccurrences($addonMapping, $orderItem->tenant_id);
-                } else {
-                    // Para outros tipos de add-on, criar mapping normal
+                // Se for sabor (flavor), o FlavorMappingService será chamado depois
+                // para processar todos os sabores do pedido de uma vez
+                if ($addonMapping->item_type !== 'flavor') {
+                    // Para outros tipos de add-on (bebidas, complementos, etc), criar mapping normal
                     $addonQty = $addOn['quantity'] ?? 1;
 
                     // Buscar produto do addon para calcular CMV
@@ -419,6 +415,88 @@ class SyncTakeatOrders extends Command
                     ]);
                 }
             }
+        }
+
+        // Agora processar TODOS os sabores (flavors) do order_item de uma vez
+        // usando o FlavorMappingService para garantir frações corretas
+        $this->applyFlavorMappings($orderItem);
+    }
+
+    /**
+     * Aplicar mapeamentos de sabores (com frações) a todos os add-ons classificados como flavor
+     */
+    protected function applyFlavorMappings(\App\Models\OrderItem $orderItem): void
+    {
+        $addOns = $orderItem->add_ons ?? [];
+        if (empty($addOns)) {
+            return;
+        }
+
+        // Coletar todos os sabores classificados (mesmo sem associação)
+        $classifiedFlavors = [];
+
+        foreach ($addOns as $index => $addOn) {
+            $addonName = $addOn['name'] ?? '';
+            if (!$addonName) {
+                continue;
+            }
+
+            $addonSku = 'addon_'.md5($addonName);
+
+            // Buscar ProductMapping
+            $addonMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
+                ->where('external_item_id', $addonSku)
+                ->first();
+
+            // Se for sabor classificado (independente se tem produto associado)
+            if ($addonMapping && $addonMapping->item_type === 'flavor') {
+                $existingMapping = OrderItemMapping::where('order_item_id', $orderItem->id)
+                    ->where('mapping_type', 'addon')
+                    ->where('external_reference', (string) $index)
+                    ->exists();
+
+                if (!$existingMapping) {
+                    $classifiedFlavors[] = [
+                        'index' => $index,
+                        'name' => $addonName,
+                        'mapping' => $addonMapping,
+                        'quantity' => $addOn['quantity'] ?? 1,
+                    ];
+                }
+            }
+        }
+
+        if (empty($classifiedFlavors)) {
+            return;
+        }
+
+        // Calcular fração baseado no total de sabores classificados
+        $totalFlavors = count($classifiedFlavors);
+        $fraction = 1.0 / $totalFlavors;
+
+        // Criar mappings com frações para cada sabor
+        foreach ($classifiedFlavors as $flavor) {
+            $product = null;
+            $correctCMV = null;
+
+            // Se tem produto associado, calcular CMV
+            if ($flavor['mapping']->internal_product_id) {
+                $product = InternalProduct::find($flavor['mapping']->internal_product_id);
+                $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
+            }
+
+            OrderItemMapping::create([
+                'tenant_id' => $orderItem->tenant_id,
+                'order_item_id' => $orderItem->id,
+                'internal_product_id' => $flavor['mapping']->internal_product_id, // Pode ser null
+                'quantity' => $fraction * $flavor['quantity'],
+                'mapping_type' => 'addon',
+                'option_type' => 'pizza_flavor',
+                'auto_fraction' => true,
+                'external_reference' => (string) $flavor['index'],
+                'external_name' => $flavor['name'],
+                'unit_cost_override' => $correctCMV,
+            ]);
         }
     }
 
