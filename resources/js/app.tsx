@@ -27,11 +27,9 @@ window.Echo = new Echo({
     wsHost: window.location.hostname,
     wsPort: isSecure ? 443 : 8080,
     wssPort: 443,
-    wsPath: '', // Pusher já adiciona /app/ automaticamente para Reverb
     forceTLS: isSecure,
     encrypted: isSecure,
     cluster: '', // Reverb não usa cluster, mas Pusher exige o parâmetro
-    enabledTransports: isSecure ? ['wss'] : ['ws'],
     disableStats: true,
 });
 
