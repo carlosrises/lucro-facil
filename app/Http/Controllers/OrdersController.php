@@ -400,9 +400,21 @@ class OrdersController extends Controller
     /**
      * Display the specified resource.
      */
+    /**
+     * Retorna um pedido específico para API (usado no WebSocket)
+     */
     public function show(string $id)
     {
-        //
+        $order = Order::with([
+            'items.internalProduct.taxCategory',
+            'items.productMapping',
+            'items.mappings.internalProduct',
+            'sale',
+        ])
+            ->where('tenant_id', tenant_id())
+            ->findOrFail($id);
+
+        return response()->json($order);
     }
 
     /**
@@ -955,22 +967,5 @@ class OrdersController extends Controller
             'netRevenue' => $netRevenue,
             'orderCount' => $orderCount,
         ];
-    }
-
-    /**
-     * Retorna um pedido específico para API (usado no WebSocket)
-     */
-    public function show(int $id)
-    {
-        $order = Order::with([
-            'items.internalProduct.taxCategory',
-            'items.productMapping',
-            'items.mappings.internalProduct',
-            'sale',
-        ])
-            ->where('tenant_id', tenant_id())
-            ->findOrFail($id);
-
-        return response()->json($order);
     }
 }

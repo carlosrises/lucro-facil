@@ -1,20 +1,20 @@
 import AppLayout from '@/layouts/app-layout';
 import { Head, usePage } from '@inertiajs/react';
 
-import { index as ordersRoute } from '@/routes/orders';
-
 import { Order } from '@/components/orders/columns';
 import { DataTable } from '@/components/orders/data-table';
 import { Button } from '@/components/ui/button';
 import { useOrderPolling } from '@/hooks/use-order-polling';
 import { useOrderStatusListener } from '@/hooks/use-order-status-listener';
+import { useRealtimeOrders } from '@/hooks/use-realtime-orders';
 import { type BreadcrumbItem } from '@/types';
 import { RefreshCw } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Pedidos',
-        href: ordersRoute().url,
+        href: '/orders',
     },
 ];
 
@@ -79,9 +79,32 @@ export default function Orders() {
         auth,
     } = usePage<OrdersPageProps>().props;
 
+    // Estado local para pedidos (permite atualizações em tempo real sem reload)
+    const [localOrders, setLocalOrders] = useState<Order[]>(orders.data);
+
+    // Sincronizar estado local quando os dados da página mudarem (filtros, navegação)
+    // Isso garante que o skeleton apareça apenas em navegações/filtros
+    useEffect(() => {
+        setLocalOrders(orders.data);
+    }, [orders.data]);
+
     // Hook para sincronização bidirecional de status (Critérios 12-13)
     // Recarrega automaticamente a lista quando há mudanças externas
     useOrderStatusListener((auth.user as any)?.tenant_id);
+
+    // Hook para atualizações em tempo real (novos pedidos + itens classificados)
+    // Atualiza a lista silenciosamente sem skeleton/reload
+    useRealtimeOrders((auth.user as any)?.tenant_id, (order, isNew) => {
+        setLocalOrders((prev) => {
+            if (isNew) {
+                // Novo pedido: adicionar no topo
+                return [order, ...prev];
+            } else {
+                // Atualização: substituir existente
+                return prev.map((o) => (o.id === order.id ? order : o));
+            }
+        });
+    });
 
     // Hook para verificar novos pedidos sincronizados
     const { hasNewOrders, newOrdersCount, refreshOrders } = useOrderPolling({
@@ -122,7 +145,7 @@ export default function Orders() {
 
                     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
                         <DataTable
-                            data={orders.data}
+                            data={localOrders}
                             pagination={{
                                 current_page: orders.current_page,
                                 last_page: orders.last_page,
