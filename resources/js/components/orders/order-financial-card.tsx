@@ -791,9 +791,70 @@ export function OrderFinancialCard({
                                                 const { Icon, className } =
                                                     getItemIcon();
 
-                                                // Processar add-ons enriquecidos
-                                                const addOnsEnriched =
-                                                    item.add_ons_enriched || [];
+                                                // PROCESSAR ADD-ONS ORIGINAIS DO PEDIDO (do RAW)
+                                                // Enriquecer com dados de mapping no frontend para evitar N+1 queries
+                                                const rawAddOns = Array.isArray(
+                                                    item.add_ons,
+                                                )
+                                                    ? item.add_ons
+                                                    : [];
+                                                const enrichedAddOns = rawAddOns
+                                                    .map(
+                                                        (
+                                                            addOn: any,
+                                                            index: number,
+                                                        ) => {
+                                                            const addOnName =
+                                                                typeof addOn ===
+                                                                'string'
+                                                                    ? addOn
+                                                                    : addOn.name ||
+                                                                      addOn.nome ||
+                                                                      '';
+                                                            const addOnQuantity =
+                                                                typeof addOn ===
+                                                                'object'
+                                                                    ? addOn.quantity ||
+                                                                      addOn.qty ||
+                                                                      1
+                                                                    : 1;
+
+                                                            // Buscar ProductMapping do backend (vem de add_ons_product_mappings)
+                                                            const productMapping =
+                                                                item
+                                                                    .add_ons_product_mappings?.[
+                                                                    index
+                                                                ];
+
+                                                            // Buscar OrderItemMapping se existir
+                                                            const addOnMapping =
+                                                                item.mappings?.find(
+                                                                    (
+                                                                        m: OrderItemMapping,
+                                                                    ) =>
+                                                                        m.mapping_type ===
+                                                                            'addon' &&
+                                                                        m.external_reference ===
+                                                                            String(
+                                                                                index,
+                                                                            ),
+                                                                );
+
+                                                            return {
+                                                                name: addOnName,
+                                                                quantity:
+                                                                    addOnQuantity,
+                                                                mapping:
+                                                                    addOnMapping,
+                                                                product_mapping:
+                                                                    productMapping, // ProductMapping da Triagem
+                                                                index: index,
+                                                            };
+                                                        },
+                                                    )
+                                                    .filter(
+                                                        (addon) => addon.name,
+                                                    ); // Filtrar add-ons vazios
 
                                                 // Tooltip com produto interno vinculado
                                                 const getMappingTooltip =
@@ -946,31 +1007,46 @@ export function OrderFinancialCard({
                                                             </span>
                                                         </div>
 
-                                                        {/* Mostrar todos os add-ons/complementos com ícones */}
-                                                        {addOnsEnriched.length >
+                                                        {/* Mostrar todos os add-ons originais do pedido */}
+                                                        {enrichedAddOns.length >
                                                             0 && (
                                                             <ul className="flex w-full flex-col gap-0.5 pl-3">
-                                                                {addOnsEnriched.map(
+                                                                {enrichedAddOns.map(
                                                                     (
                                                                         addOn,
                                                                         addonIdx: number,
                                                                     ) => {
                                                                         const isLast =
                                                                             addonIdx ===
-                                                                            addOnsEnriched.length -
+                                                                            enrichedAddOns.length -
                                                                                 1;
                                                                         const treeChar =
                                                                             isLast
                                                                                 ? '└'
                                                                                 : '├';
 
-                                                                        // Determinar ícone do add-on
+                                                                        // Buscar classificação diretamente do ProductMapping (Triagem)
+                                                                        const productMapping =
+                                                                            addOn.product_mapping;
+
+                                                                        // Verificar se tem associação (do ProductMapping ou do OrderItemMapping)
+                                                                        const hasMapping =
+                                                                            !!productMapping?.internal_product ||
+                                                                            !!addOn
+                                                                                .mapping
+                                                                                ?.internal_product;
+                                                                        const internalProduct =
+                                                                            productMapping?.internal_product ||
+                                                                            addOn
+                                                                                .mapping
+                                                                                ?.internal_product;
+
+                                                                        // Determinar ícone baseado na classificação
                                                                         const getAddonIcon =
                                                                             () => {
                                                                                 const itemType =
-                                                                                    addOn
-                                                                                        .product_mapping
-                                                                                        ?.item_type;
+                                                                                    productMapping?.item_type;
+
                                                                                 if (
                                                                                     !itemType
                                                                                 ) {
@@ -980,6 +1056,7 @@ export function OrderFinancialCard({
                                                                                             'text-orange-500',
                                                                                     };
                                                                                 }
+
                                                                                 switch (
                                                                                     itemType
                                                                                 ) {
@@ -1046,161 +1123,70 @@ export function OrderFinancialCard({
                                                                                 addonClassName,
                                                                         } =
                                                                             getAddonIcon();
-                                                                        // Verificar se tem produto vinculado:
-                                                                        // 1. Via ProductMapping (classificação na Triagem)
-                                                                        // 2. OU via OrderItemMapping (unit_cost_override existe)
-                                                                        const hasMapping =
-                                                                            (!!addOn.product_mapping &&
-                                                                                !!addOn
-                                                                                    .product_mapping
-                                                                                    .internal_product) ||
-                                                                            (addOn.unit_cost_override !==
-                                                                                undefined &&
-                                                                                addOn.unit_cost_override !==
-                                                                                    null);
 
-                                                                        // Verificar se é sabor de pizza
-                                                                        const isFlavor =
-                                                                            addOn
-                                                                                .product_mapping
-                                                                                ?.item_type ===
-                                                                            'flavor';
-
-                                                                        // Detectar tamanho da pizza do nome do item pai
-                                                                        let pizzaSize:
-                                                                            | string
-                                                                            | null =
-                                                                            null;
-                                                                        if (
-                                                                            isFlavor
-                                                                        ) {
-                                                                            const itemNameLower =
-                                                                                item.name.toLowerCase();
-                                                                            if (
-                                                                                itemNameLower.includes(
-                                                                                    'broto',
-                                                                                )
-                                                                            ) {
-                                                                                pizzaSize =
-                                                                                    'broto';
-                                                                            } else if (
-                                                                                itemNameLower.includes(
-                                                                                    'média',
-                                                                                ) ||
-                                                                                itemNameLower.includes(
-                                                                                    'media',
-                                                                                )
-                                                                            ) {
-                                                                                pizzaSize =
-                                                                                    'media';
-                                                                            } else if (
-                                                                                itemNameLower.includes(
-                                                                                    'grande',
-                                                                                )
-                                                                            ) {
-                                                                                pizzaSize =
-                                                                                    'grande';
-                                                                            } else if (
-                                                                                itemNameLower.includes(
-                                                                                    'família',
-                                                                                ) ||
-                                                                                itemNameLower.includes(
-                                                                                    'familia',
-                                                                                )
-                                                                            ) {
-                                                                                pizzaSize =
-                                                                                    'familia';
-                                                                            }
-                                                                        }
-
-                                                                        // Calcular custo do add-on
+                                                                        // Calcular custo
                                                                         let addonCost = 0;
-                                                                        const addonQuantity =
-                                                                            addOn.quantity ||
-                                                                            1;
-
-                                                                        // PRIORIDADE 1: Usar unit_cost_override se existir (valor do OrderItemMapping)
                                                                         if (
-                                                                            addOn.unit_cost_override !==
-                                                                                undefined &&
-                                                                            addOn.unit_cost_override !==
-                                                                                null
+                                                                            hasMapping &&
+                                                                            internalProduct
                                                                         ) {
-                                                                            // Aplicar a fração (mapping_quantity) se existir
-                                                                            const mappingQuantity =
-                                                                                addOn.mapping_quantity ||
-                                                                                1.0;
-                                                                            addonCost =
-                                                                                parseFloat(
-                                                                                    String(
-                                                                                        addOn.unit_cost_override,
-                                                                                    ),
-                                                                                ) *
-                                                                                mappingQuantity *
-                                                                                addonQuantity;
-                                                                        } else {
-                                                                            // FALLBACK: Sistema legado
-                                                                            const internalProduct =
+                                                                            // Prioridade 1: unit_cost_override do OrderItemMapping (se existir)
+                                                                            // Prioridade 2: unit_cost do InternalProduct
+                                                                            const unitCost =
                                                                                 addOn
-                                                                                    .product_mapping
-                                                                                    ?.internal_product;
-
-                                                                            let baseAddonCost = 0;
-                                                                            if (
-                                                                                internalProduct?.unit_cost
-                                                                            ) {
-                                                                                baseAddonCost =
-                                                                                    parseFloat(
-                                                                                        internalProduct.unit_cost,
-                                                                                    );
-                                                                            }
-
-                                                                            // Contar total de sabores no item para calcular denominador
-                                                                            const totalFlavors =
-                                                                                isFlavor
-                                                                                    ? addOnsEnriched.filter(
-                                                                                          (
-                                                                                              a,
-                                                                                          ) =>
-                                                                                              a
-                                                                                                  .product_mapping
-                                                                                                  ?.item_type ===
-                                                                                              'flavor',
+                                                                                    .mapping
+                                                                                    ?.unit_cost_override !==
+                                                                                    null &&
+                                                                                addOn
+                                                                                    .mapping
+                                                                                    ?.unit_cost_override !==
+                                                                                    undefined
+                                                                                    ? parseFloat(
+                                                                                          String(
+                                                                                              addOn
+                                                                                                  .mapping
+                                                                                                  .unit_cost_override,
+                                                                                          ),
                                                                                       )
-                                                                                          .length
-                                                                                    : 0;
+                                                                                    : parseFloat(
+                                                                                          internalProduct?.unit_cost ||
+                                                                                              '0',
+                                                                                      );
 
-                                                                            // Aplicar fração ao custo se for sabor
+                                                                            const mappingQuantity =
+                                                                                addOn
+                                                                                    .mapping
+                                                                                    ?.quantity ||
+                                                                                1;
+                                                                            const itemQty =
+                                                                                item.qty ||
+                                                                                item.quantity ||
+                                                                                1;
                                                                             addonCost =
-                                                                                isFlavor &&
-                                                                                totalFlavors >
-                                                                                    1
-                                                                                    ? (baseAddonCost /
-                                                                                          totalFlavors) *
-                                                                                      addonQuantity
-                                                                                    : baseAddonCost *
-                                                                                      addonQuantity;
+                                                                                unitCost *
+                                                                                mappingQuantity *
+                                                                                itemQty *
+                                                                                addOn.quantity;
                                                                         }
 
                                                                         // Calcular fração para exibição
-                                                                        // PRIORIDADE: usar mapping_quantity (valor real salvo no OrderItemMapping)
                                                                         let fractionText:
                                                                             | string
                                                                             | null =
                                                                             null;
+                                                                        const mappingQuantity =
+                                                                            addOn
+                                                                                .mapping
+                                                                                ?.quantity ||
+                                                                            1;
+
                                                                         if (
-                                                                            isFlavor &&
-                                                                            addOn.mapping_quantity !==
-                                                                                undefined &&
-                                                                            addOn.mapping_quantity !==
-                                                                                null
+                                                                            mappingQuantity <
+                                                                            1
                                                                         ) {
-                                                                            const fraction =
-                                                                                addOn.mapping_quantity;
-                                                                            // Converter decimal para fração visual
                                                                             if (
                                                                                 Math.abs(
-                                                                                    fraction -
+                                                                                    mappingQuantity -
                                                                                         0.5,
                                                                                 ) <
                                                                                 0.01
@@ -1209,12 +1195,12 @@ export function OrderFinancialCard({
                                                                                     '1/2';
                                                                             } else if (
                                                                                 Math.abs(
-                                                                                    fraction -
+                                                                                    mappingQuantity -
                                                                                         0.333,
                                                                                 ) <
                                                                                     0.01 ||
                                                                                 Math.abs(
-                                                                                    fraction -
+                                                                                    mappingQuantity -
                                                                                         1 /
                                                                                             3,
                                                                                 ) <
@@ -1224,7 +1210,7 @@ export function OrderFinancialCard({
                                                                                     '1/3';
                                                                             } else if (
                                                                                 Math.abs(
-                                                                                    fraction -
+                                                                                    mappingQuantity -
                                                                                         0.25,
                                                                                 ) <
                                                                                 0.01
@@ -1233,7 +1219,7 @@ export function OrderFinancialCard({
                                                                                     '1/4';
                                                                             } else if (
                                                                                 Math.abs(
-                                                                                    fraction -
+                                                                                    mappingQuantity -
                                                                                         0.2,
                                                                                 ) <
                                                                                 0.01
@@ -1242,12 +1228,12 @@ export function OrderFinancialCard({
                                                                                     '1/5';
                                                                             } else if (
                                                                                 Math.abs(
-                                                                                    fraction -
+                                                                                    mappingQuantity -
                                                                                         0.166,
                                                                                 ) <
                                                                                     0.01 ||
                                                                                 Math.abs(
-                                                                                    fraction -
+                                                                                    mappingQuantity -
                                                                                         1 /
                                                                                             6,
                                                                                 ) <
@@ -1255,54 +1241,16 @@ export function OrderFinancialCard({
                                                                             ) {
                                                                                 fractionText =
                                                                                     '1/6';
-                                                                            } else if (
-                                                                                fraction <
-                                                                                1
-                                                                            ) {
-                                                                                fractionText = `${(fraction * 100).toFixed(0)}%`;
-                                                                            }
-                                                                        } else if (
-                                                                            isFlavor
-                                                                        ) {
-                                                                            // FALLBACK: contar sabores (sistema legado)
-                                                                            // SOMA as quantidades: 2x Calabresa = 2 sabores
-                                                                            const totalFlavors =
-                                                                                addOnsEnriched
-                                                                                    .filter(
-                                                                                        (
-                                                                                            a,
-                                                                                        ) =>
-                                                                                            a
-                                                                                                .product_mapping
-                                                                                                ?.item_type ===
-                                                                                            'flavor',
-                                                                                    )
-                                                                                    .reduce(
-                                                                                        (
-                                                                                            sum,
-                                                                                            a,
-                                                                                        ) =>
-                                                                                            sum +
-                                                                                            (a.quantity ||
-                                                                                                1),
-                                                                                        0,
-                                                                                    );
-                                                                            if (
-                                                                                totalFlavors >
-                                                                                1
-                                                                            ) {
-                                                                                fractionText = `1/${totalFlavors}`;
+                                                                            } else {
+                                                                                fractionText = `${(mappingQuantity * 100).toFixed(0)}%`;
                                                                             }
                                                                         }
 
-                                                                        // Tooltip para add-on
-                                                                        const internalProduct =
-                                                                            addOn
-                                                                                .product_mapping
-                                                                                ?.internal_product;
-                                                                        const addonTooltipText =
-                                                                            internalProduct?.name
-                                                                                ? `${internalProduct.name} (100% - Complemento)`
+                                                                        // Tooltip com produto vinculado
+                                                                        const addonTooltip =
+                                                                            hasMapping &&
+                                                                            internalProduct
+                                                                                ? `Vinculado a: ${internalProduct.name}`
                                                                                 : null;
 
                                                                         return (
@@ -1310,10 +1258,10 @@ export function OrderFinancialCard({
                                                                                 key={
                                                                                     addonIdx
                                                                                 }
-                                                                                className="flex w-full flex-row items-start justify-between px-3 py-0"
+                                                                                className="flex w-full flex-row items-center justify-between gap-2 px-3 py-1.5"
                                                                             >
-                                                                                <div className="flex items-center gap-1.5">
-                                                                                    <span className="font-mono text-xs leading-4 font-normal text-muted-foreground/70">
+                                                                                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                                                                                    <span className="text-xs leading-4 text-muted-foreground">
                                                                                         {
                                                                                             treeChar
                                                                                         }
@@ -1328,17 +1276,17 @@ export function OrderFinancialCard({
                                                                                             }
                                                                                         </span>
                                                                                     )}
-                                                                                    {addonQuantity >
+                                                                                    {addOn.quantity >
                                                                                         1 && (
                                                                                         <span className="rounded bg-blue-50 px-1 py-0.5 text-[10px] leading-3 font-medium text-blue-600">
                                                                                             {
-                                                                                                addonQuantity
+                                                                                                addOn.quantity
                                                                                             }
 
                                                                                             x
                                                                                         </span>
                                                                                     )}
-                                                                                    {addonTooltipText ? (
+                                                                                    {addonTooltip ? (
                                                                                         <TooltipProvider
                                                                                             delayDuration={
                                                                                                 300
@@ -1348,7 +1296,7 @@ export function OrderFinancialCard({
                                                                                                 <TooltipTrigger
                                                                                                     asChild
                                                                                                 >
-                                                                                                    <span className="cursor-help text-xs leading-4 font-normal text-muted-foreground/70">
+                                                                                                    <span className="cursor-help truncate text-xs leading-4 font-medium text-muted-foreground">
                                                                                                         {
                                                                                                             addOn.name
                                                                                                         }
@@ -1359,17 +1307,15 @@ export function OrderFinancialCard({
                                                                                                     className="max-w-xs"
                                                                                                 >
                                                                                                     <p className="text-xs">
-                                                                                                        Vinculado
-                                                                                                        a:{' '}
                                                                                                         {
-                                                                                                            addonTooltipText
+                                                                                                            addonTooltip
                                                                                                         }
                                                                                                     </p>
                                                                                                 </TooltipContent>
                                                                                             </Tooltip>
                                                                                         </TooltipProvider>
                                                                                     ) : (
-                                                                                        <span className="text-xs leading-4 font-normal text-muted-foreground/70">
+                                                                                        <span className="truncate text-xs leading-4 font-medium text-muted-foreground">
                                                                                             {
                                                                                                 addOn.name
                                                                                             }
@@ -1388,9 +1334,7 @@ export function OrderFinancialCard({
                                                                                                 e.stopPropagation();
                                                                                                 setSelectedItemToLink(
                                                                                                     {
-                                                                                                        sku:
-                                                                                                            addOn.sku ||
-                                                                                                            addOn.external_code,
+                                                                                                        sku: addOn.sku,
                                                                                                         name: addOn.name,
                                                                                                         occurrences: 1,
                                                                                                     },
@@ -1404,7 +1348,7 @@ export function OrderFinancialCard({
                                                                                         </Button>
                                                                                     )}
                                                                                 </div>
-                                                                                <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground/70">
+                                                                                <span className="text-xs leading-4 font-medium whitespace-nowrap text-muted-foreground">
                                                                                     {formatCurrency(
                                                                                         addonCost,
                                                                                     )}
