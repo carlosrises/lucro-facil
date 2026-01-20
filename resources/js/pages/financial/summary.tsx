@@ -262,8 +262,7 @@ export default function FinancialSummary() {
                                                 {data.revenueByStore.map(
                                                     (store) => {
                                                         const hasMarketplaces =
-                                                            (store
-                                                                .marketplaces
+                                                            (store.marketplaces
                                                                 ?.length ?? 0) >
                                                             0;
 
@@ -278,12 +277,15 @@ export default function FinancialSummary() {
                                                                         <div className="flex flex-col">
                                                                             <div className="flex flex-wrap items-center gap-2">
                                                                                 <span className="font-medium">
-                                                                                    {store.name}
+                                                                                    {
+                                                                                        store.name
+                                                                                    }
                                                                                 </span>
                                                                                 <Badge variant="outline">
                                                                                     {store.percentage.toFixed(
                                                                                         1,
                                                                                     )}
+
                                                                                     %
                                                                                 </Badge>
                                                                             </div>
@@ -318,6 +320,7 @@ export default function FinancialSummary() {
                                                                                                 {marketplace.percentage.toFixed(
                                                                                                     1,
                                                                                                 )}
+
                                                                                                 %
                                                                                             </Badge>
                                                                                             <span>
