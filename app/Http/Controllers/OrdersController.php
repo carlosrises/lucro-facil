@@ -24,10 +24,9 @@ class OrdersController extends Controller
             ])
             ->with([
                 'items.internalProduct.taxCategory',
-                'items.mappings.internalProduct.taxCategory', // Novo: carregar múltiplas associações
                 'items.productMapping' => function ($query) {
                     $query->where('product_mappings.tenant_id', tenant_id());
-                }, // Carregar classificação do item
+                },
                 'sale',
             ])
             ->where('tenant_id', tenant_id())
@@ -128,6 +127,8 @@ class OrdersController extends Controller
 
         $orders = $query->paginate($perPage)->withQueryString();
 
+        // TEMPORARIAMENTE DESABILITADO - Enriquecer add-ons causa timeout
+        /*
         // Enriquecer add-ons com seus ProductMappings e unit_cost_override dos OrderItemMappings
         foreach ($orders->items() as $order) {
             foreach ($order->items as $item) {
@@ -185,6 +186,7 @@ class OrdersController extends Controller
                 }
             }
         }
+        */
 
         // Para popular o filtro de lojas dinamicamente
         $stores = Store::query()
@@ -846,10 +848,6 @@ class OrdersController extends Controller
     {
         // Construir query base com os mesmos filtros da listagem
         $query = Order::query()
-            ->with([
-                'items.internalProduct',
-                'items.mappings.internalProduct',
-            ])
             ->where('tenant_id', tenant_id())
             ->where('status', '!=', 'CANCELLED') // Excluir cancelados dos indicadores
             ->when($request->input('store_id'), fn ($q, $storeId) => $q->where('store_id', $storeId))
@@ -881,50 +879,18 @@ class OrdersController extends Controller
                 });
             });
 
-        // Calcular totais agregados
-        $aggregates = $query->get();
-        
-        $orderCount = $aggregates->count();
-        $subtotal = $aggregates->sum('gross_total');
-        
-        // Calcular CMV e Total Líquido (mesma lógica do frontend)
-        $cmv = 0;
-        $netRevenue = 0;
-        
-        foreach ($aggregates as $order) {
-            // ========== CMV ==========
-            foreach ($order->items as $item) {
-                // Usar total_cost se disponível (mais confiável)
-                if ($item->total_cost !== null) {
-                    $cmv += (float) $item->total_cost;
-                    continue;
-                }
-                
-                // Fallback: calcular manualmente
-                $itemQuantity = $item->qty ?? $item->quantity ?? 0;
-                
-                // Sistema novo: usar mappings
-                if (!empty($item->mappings)) {
-                    $mappingsCost = 0;
-                    foreach ($item->mappings as $mapping) {
-                        if (isset($mapping->internal_product->unit_cost)) {
-                            $unitCost = (float) $mapping->internal_product->unit_cost;
-                            $mappingQuantity = $mapping->quantity ?? 1;
-                            $mappingsCost += $unitCost * $mappingQuantity;
-                        }
-                    }
-                    $cmv += $mappingsCost * $itemQuantity;
-                } 
-                // Sistema legado: internal_product direto
-                elseif (isset($item->internal_product->unit_cost)) {
-                    $unitCost = (float) $item->internal_product->unit_cost;
-                    $cmv += $unitCost * $itemQuantity;
-                }
-            }
-            
-            // ========== Total Líquido (usar net_revenue calculado) ==========
-            $netRevenue += (float) ($order->net_revenue ?? 0);
-        }
+        // Usar agregações SQL para melhor performance
+        $aggregates = $query->selectRaw('
+            COUNT(*) as order_count,
+            COALESCE(SUM(gross_total), 0) as total_gross,
+            COALESCE(SUM(total_costs), 0) as total_cmv,
+            COALESCE(SUM(net_revenue), 0) as total_net_revenue
+        ')->first();
+
+        $orderCount = (int) $aggregates->order_count;
+        $subtotal = (float) $aggregates->total_gross;
+        $cmv = (float) $aggregates->total_cmv;
+        $netRevenue = (float) $aggregates->total_net_revenue;
 
         // Calcular ticket médio
         $averageTicket = $orderCount > 0 ? $subtotal / $orderCount : 0;
