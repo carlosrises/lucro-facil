@@ -96,25 +96,23 @@ export default function Orders() {
     const handleOrderUpsert = useCallback(
         (order: Order, isNew: boolean) => {
             // Validar se o pedido atende os filtros ativos antes de adicionar
-            // IMPORTANTE: placed_at vem em UTC, precisamos converter para horário de Brasília
+            // IMPORTANTE: placed_at vem em UTC, converter para Brasília (UTC-3)
             const orderDateUTC = new Date(order.placed_at);
-            const orderDateBR = new Date(
-                orderDateUTC.toLocaleString('en-US', {
-                    timeZone: 'America/Sao_Paulo',
-                }),
-            );
-
-            // Converter filtros para Date (já estão em formato de Brasília)
-            const startDateBR = new Date(filters.start_date + ' 00:00:00');
-            const endDateBR = new Date(filters.end_date + ' 23:59:59');
+            
+            // Converter para Brasília: subtrair 3 horas do UTC
+            const orderDateBR = new Date(orderDateUTC.getTime() - 3 * 60 * 60 * 1000);
+            
+            // Extrair apenas a data no formato YYYY-MM-DD para comparação
+            const orderDateOnly = orderDateBR.toISOString().split('T')[0];
 
             // Verificar se o pedido está dentro do período filtrado
-            if (orderDateBR < startDateBR || orderDateBR > endDateBR) {
+            if (orderDateOnly < filters.start_date || orderDateOnly > filters.end_date) {
                 console.log(
                     '[Realtime] Pedido fora do período filtrado, ignorando',
                     {
                         order_date_utc: order.placed_at,
                         order_date_br: orderDateBR.toISOString(),
+                        order_date_only: orderDateOnly,
                         filter_start: filters.start_date,
                         filter_end: filters.end_date,
                     },
