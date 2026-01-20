@@ -79,22 +79,13 @@ export function useOrderStatusListener(tenantId?: number) {
         );
 
         // Listener para classificações/associações na Triagem
+        // NOTA: O reload será feito pelo useRealtimeOrders de forma silenciosa
+        // Este listener serve apenas para mostrar toast quando VOCÊ classifica algo
+        // (eventos de outros usuários não mostram toast, apenas atualizam silenciosamente)
         channel.listen('.item.triaged', (event: ItemTriagedEvent) => {
-            const actionText =
-                event.action === 'mapped' ? 'associado' : 'classificado';
-            const productText = event.internal_product_id
-                ? ' a um produto'
-                : '';
-
-            toast.success('Item Atualizado na Triagem', {
-                description: `${event.item_name} foi ${actionText}${productText} no pedido ${event.order_code}`,
-            });
-
-            // Recarrega apenas os dados necessários
-            router.reload({
-                only: ['orders', 'indicators', 'unmappedProductsCount'],
-                preserveScroll: true,
-            });
+            // Toast removido - será tratado pelo useRealtimeOrders na página Orders
+            // Se quiser toast aqui, deixe apenas para informar, sem reload
+            console.log('[WebSocket] Item classificado:', event);
         });
 
         console.log('[WebSocket] Listeners registrados com sucesso');

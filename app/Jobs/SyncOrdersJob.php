@@ -175,6 +175,11 @@ class SyncOrdersJob implements ShouldQueue
                             ]
                         );
 
+                        // Disparar evento de novo pedido se foi criado agora
+                        if (!$existingOrder) {
+                            event(new \App\Events\OrderCreated($order));
+                        }
+
                         // Log de mudanças de status (Critérios 12-13)
                         if ($existingOrder && $oldStatus !== $newStatus) {
                             // logger()->info('🔄 Status do pedido atualizado', [

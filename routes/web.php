@@ -34,6 +34,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('orders', [OrdersController::class, 'index'])->name('orders.index');
     Route::get('orders/check-new', [\App\Http\Controllers\OrderPollingController::class, 'checkNewOrders'])->name('orders.checkNew');
+    Route::get('api/orders/{id}', [OrdersController::class, 'show'])->name('api.orders.show');
 
     Route::get('abc-curve', [AbcCurveController::class, 'index'])->name('abc-curve.index');
 
