@@ -53,6 +53,18 @@ export type OrderItem = {
     unit_price?: number;
     total_cost?: number; // Custo total calculado pelo backend
     add_ons?: any[]; // Add-ons originais
+    add_ons_product_mappings?: {
+        [index: number]: {
+            id: number;
+            item_type: string | null;
+            internal_product_id: number | null;
+            internal_product?: {
+                id: number;
+                name: string;
+                unit_cost: string;
+            } | null;
+        };
+    }; // ProductMappings dos add-ons (da Triagem)
     add_ons_enriched?: Array<{
         name: string;
         sku: string;
