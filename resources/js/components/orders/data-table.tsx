@@ -402,8 +402,11 @@ export function DataTable({
                 throw new Error(data.message || 'Erro ao sincronizar');
             }
 
-            toast.success('Pedidos de hoje sincronizados com sucesso!');
-            router.reload({ only: ['orders'] });
+            toast.info('Sincronização iniciada!', {
+                description:
+                    'Os pedidos aparecerão automaticamente quando a sincronização terminar.',
+            });
+            // Não recarregar - os pedidos virão via WebSocket
         } catch (error: any) {
             // Se não foi tratado acima, mostrar mensagem genérica
             if (error.message !== 'Sessão expirada. Recarregando a página...') {

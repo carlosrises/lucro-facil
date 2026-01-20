@@ -15,7 +15,6 @@ import {
     PopoverTrigger,
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { router } from '@inertiajs/react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Calendar, CalendarIcon } from 'lucide-react';
@@ -75,11 +74,13 @@ export function SyncTakeatDialog({
                 throw new Error(data.message || 'Erro ao sincronizar');
             }
 
-            toast.success('Pedidos sincronizados com sucesso!');
+            toast.info('Sincronização iniciada!', {
+                description:
+                    'Os pedidos aparecerão automaticamente quando a sincronização terminar.',
+            });
             onOpenChange(false);
 
-            // Recarregar a página de pedidos
-            router.reload({ only: ['orders'] });
+            // Não recarregar - os pedidos virão via WebSocket
         } catch (error: any) {
             // Se não foi tratado acima (ex: erro de rede), mostrar mensagem genérica
             if (error.message !== 'Sessão expirada. Recarregando a página...') {

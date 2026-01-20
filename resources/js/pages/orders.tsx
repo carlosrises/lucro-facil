@@ -4,7 +4,6 @@ import { Head, usePage } from '@inertiajs/react';
 import { Order } from '@/components/orders/columns';
 import { DataTable } from '@/components/orders/data-table';
 import { Button } from '@/components/ui/button';
-import { useOrderPolling } from '@/hooks/use-order-polling';
 import { useOrderStatusListener } from '@/hooks/use-order-status-listener';
 import { useRealtimeOrders } from '@/hooks/use-realtime-orders';
 import { type BreadcrumbItem } from '@/types';
@@ -95,6 +94,53 @@ export default function Orders() {
     // Hook para atualizações em tempo real (novos pedidos + itens classificados)
     // Atualiza a lista silenciosamente sem skeleton/reload
     useRealtimeOrders((auth.user as any)?.tenant_id, (order, isNew) => {
+        // Validar se o pedido atende os filtros ativos antes de adicionar
+        const orderDate = new Date(order.placed_at);
+        const startDate = new Date(filters.start_date + ' 00:00:00');
+        const endDate = new Date(filters.end_date + ' 23:59:59');
+
+        // Verificar se o pedido está dentro do período filtrado
+        if (orderDate < startDate || orderDate > endDate) {
+            console.log(
+                '[Realtime] Pedido fora do período filtrado, ignorando',
+                {
+                    order_date: order.placed_at,
+                    filter_start: filters.start_date,
+                    filter_end: filters.end_date,
+                },
+            );
+            return; // Não adicionar pedido fora do filtro
+        }
+
+        // Verificar filtro de status
+        if (filters.status && filters.status !== 'all') {
+            if (order.status !== filters.status) {
+                console.log(
+                    '[Realtime] Pedido com status diferente do filtro, ignorando',
+                    { order_status: order.status, filter: filters.status },
+                );
+                return;
+            }
+        }
+
+        // Verificar filtro de loja
+        if (filters.store_id && order.store_id !== filters.store_id) {
+            return;
+        }
+
+        // Verificar filtro de provider
+        if (filters.provider) {
+            if (filters.provider.includes(':')) {
+                const [provider, origin] = filters.provider.split(':');
+                if (order.provider !== provider || order.origin !== origin) {
+                    return;
+                }
+            } else if (order.provider !== filters.provider) {
+                return;
+            }
+        }
+
+        // Pedido atende todos os filtros, adicionar/atualizar
         setLocalOrders((prev) => {
             if (isNew) {
                 // Novo pedido: adicionar no topo
@@ -106,11 +152,14 @@ export default function Orders() {
         });
     });
 
-    // Hook para verificar novos pedidos sincronizados
-    const { hasNewOrders, newOrdersCount, refreshOrders } = useOrderPolling({
-        enabled: true,
-        interval: 30000, // Verifica a cada 30 segundos
-    });
+    // Hook para verificar novos pedidos sincronizados (DESABILITADO - usando WebSocket)
+    // const { hasNewOrders, newOrdersCount, refreshOrders } = useOrderPolling({
+    //     enabled: true,
+    //     interval: 30000, // Verifica a cada 30 segundos
+    // });
+    const hasNewOrders = false;
+    const newOrdersCount = 0;
+    const refreshOrders = () => {};
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
