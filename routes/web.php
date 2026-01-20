@@ -33,6 +33,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('recalculation-status', [RecalculationStatusController::class, 'check'])->name('recalculation.status');
 
     Route::get('orders', [OrdersController::class, 'index'])->name('orders.index');
+    Route::get('orders/check-new', [\App\Http\Controllers\OrderPollingController::class, 'checkNewOrders'])->name('orders.checkNew');
 
     Route::get('abc-curve', [AbcCurveController::class, 'index'])->name('abc-curve.index');
 
