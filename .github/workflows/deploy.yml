@@ -112,13 +112,13 @@ jobs:
             cd ${{ secrets.DEPLOY_PATH }}
 
             # Restart queue workers
-            supervisorctl restart lucro-facil-queue || echo "Queue worker não configurado"
+            sudo supervisorctl restart lucro-facil-queue || echo "⚠️  Erro ao reiniciar queue worker"
 
             # Restart Reverb (WebSocket)
-            supervisorctl restart lucro-facil-reverb || echo "Reverb não configurado"
+            sudo supervisorctl restart lucro-facil-reverb || echo "⚠️  Erro ao reiniciar Reverb"
 
-            # Or restart via artisan
-            php artisan queue:restart || echo "No queue workers running"
+            # Fallback: restart via artisan
+            php artisan queue:restart || true
 
       - name: Deployment completed
         run: echo "🚀 Deployment completed successfully!"
