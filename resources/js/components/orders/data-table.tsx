@@ -38,7 +38,7 @@ import {
 import { OrderActionsCell } from './order-actions-cell';
 
 /**
- * Calcula o custo de um item considerando m├║ltiplas associa├º├Áes
+ * Calcula o custo de um item considerando múltiplas associações
  */
 function calculateItemCost(item: any): number {
     // Prioridade 1: Usar total_cost calculado pelo backend (mais confiável)
@@ -293,7 +293,7 @@ export function DataTable({
     };
 }) {
     const [sorting, setSorting] = React.useState<SortingState>([
-        { id: 'placed_at', desc: true }, // ­ƒöº padrão: ordenado por data
+        { id: 'placed_at', desc: true }, // ­padrão: ordenado por data
     ]);
 
     // Hook para lazy loading de detalhes ao expandir
@@ -327,7 +327,7 @@ export function DataTable({
 
                 if (details) {
                     // Mesclar apenas os detalhes (items completos, mappings, sale)
-                    // Mant├®m os campos calculados que já vieram do backend
+                    // Mantém os campos calculados que já vieram do backend
                     setEnrichedData((prev) =>
                         prev.map((order) =>
                             order.id === orderId
@@ -358,7 +358,7 @@ export function DataTable({
     );
     const selectedOrderIdRef = React.useRef<number | null>(null);
 
-    // Estados para sincroniza├ºão Takeat
+    // Estados para sincronização Takeat
     const [syncDialogOpen, setSyncDialogOpen] = React.useState(false);
     const [isSyncingToday, setIsSyncingToday] = React.useState(false);
 
@@ -394,7 +394,7 @@ export function DataTable({
         selectedOrderIdRef.current = selectedOrder?.id || null;
     }, [selectedOrder]);
 
-    // Adicionar botão de associar na coluna de a├º├Áes
+    // Adicionar botão de associar na coluna de ações
     const columnsWithAssociate = React.useMemo(() => {
         return columns.map((col) => {
             // Modificar coluna expand para usar lazy loading
@@ -416,7 +416,7 @@ export function DataTable({
                 };
             }
 
-            // Modificar a coluna de a├º├Áes para incluir o botão de associar
+            // Modificar a coluna de ações para incluir o botão de associar
             if (col.id === 'actions') {
                 return {
                     ...col,
@@ -426,7 +426,7 @@ export function DataTable({
                         const handshakeDispute =
                             order.raw?.handshakeDispute ?? null;
 
-                        // Contar items sem associa├ºão
+                        // Contar items sem associação
                         const unmappedCount =
                             order.items?.filter((item) => {
                                 return (
@@ -449,7 +449,7 @@ export function DataTable({
                                             setSelectedOrder(order);
                                             setAssociateDialogOpen(true);
                                         }}
-                                        title={`${unmappedCount} produto(s) sem associa├ºão`}
+                                        title={`${unmappedCount} produto(s) sem associação`}
                                     >
                                         <Link2 className="h-3.5 w-3.5" />
                                         <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
@@ -458,7 +458,7 @@ export function DataTable({
                                     </Button>
                                 )} */}
 
-                                {/* A├º├Áes do pedido (confirmar, despachar, etc) */}
+                                {/* Ações do pedido (confirmar, despachar, etc) */}
                                 <OrderActionsCell
                                     orderId={order.id}
                                     orderStatus={order.status}
@@ -555,7 +555,7 @@ export function DataTable({
         return () => clearTimeout(timer);
     }, [searchValue]);
 
-    // Fun├ºão para sincronizar pedidos de hoje
+    // Função para sincronizar pedidos de hoje
     const handleSyncToday = async () => {
         setIsSyncingToday(true);
 
@@ -588,13 +588,13 @@ export function DataTable({
                 throw new Error(data.message || 'Erro ao sincronizar');
             }
 
-            toast.info('Sincroniza├ºão iniciada!', {
+            toast.info('Sincronização iniciada!', {
                 description:
-                    'Os pedidos aparecerão automaticamente quando a sincroniza├ºão terminar.',
+                    'Os pedidos aparecerão automaticamente quando a sincronização terminar.',
             });
             // Não recarregar - os pedidos virão via WebSocket
         } catch (error: any) {
-            // Se não foi tratado acima, mostrar mensagem gen├®rica
+            // Se não foi tratado acima, mostrar mensagem genérica
             if (error.message !== 'Sessão expirada. Recarregando a página...') {
                 toast.error(
                     error.message ||
@@ -629,7 +629,7 @@ export function DataTable({
         });
     };
 
-    // Helper para construir URL de pagina├ºão com todos os filtros
+    // Helper para construir URL de paginação com todos os filtros
     const buildPageUrl = (page: number) => {
         const params = new URLSearchParams();
 
@@ -695,7 +695,7 @@ export function DataTable({
                         </Button>
                     )}
 
-                    {/* Aviso: Pedidos sem m├®todo de pagamento */}
+                    {/* Aviso: Pedidos sem método de pagamento */}
                     {(noPaymentMethodCount ?? 0) > 0 && (
                         <Button
                             variant="ghost"
@@ -730,7 +730,7 @@ export function DataTable({
                     )}
                 </div>
 
-                {/* Bot├Áes de sincroniza├ºão Takeat */}
+                {/* Botões de sincronização Takeat */}
                 <div className="flex items-center gap-2">
                     <Button
                         variant="outline"
@@ -748,7 +748,7 @@ export function DataTable({
                         variant="outline"
                         size="sm"
                         onClick={() => setSyncDialogOpen(true)}
-                        title="Sincronizar per├¡odo espec├¡fico"
+                        title="Sincronizar período específico"
                     >
                         <Calendar className="h-4 w-4" />
                         <span className="ml-2">Sincronizar Data</span>
@@ -801,7 +801,7 @@ export function DataTable({
                     </Badge>
                 )}
 
-                {/* Badge de filtro ativo - sem m├®todo de pagamento */}
+                {/* Badge de filtro ativo - sem método de pagamento */}
                 {filters?.no_payment_method && (
                     <Badge variant="destructive" className="h-9 gap-2 px-3">
                         Sem taxa vinculada
@@ -862,12 +862,11 @@ export function DataTable({
                 {/* Badge de filtro ativo - tipo de pedido */}
                 {filters?.order_type && (
                     <Badge variant="secondary" className="h-9 gap-2 px-3">
-                        {filters.order_type === 'delivery' && '­ƒÜù Delivery'}
-                        {filters.order_type === 'takeout' &&
-                            '­ƒøì´©Å Retirada'}
-                        {filters.order_type === 'balcony' && '­ƒÅ¬ Balcão'}
+                        {filters.order_type === 'delivery' && '🚚 Delivery'}
+                        {filters.order_type === 'takeout' && '🏪 Retirada'}
+                        {filters.order_type === 'balcony' && '🍽️ Balcão'}
                         {filters.order_type === 'self-service' &&
-                            '­ƒì¢´©Å Autoatendimento'}
+                            '🤖 Autoatendimento'}
                         <button
                             onClick={() =>
                                 updateFilters({
@@ -893,7 +892,7 @@ export function DataTable({
                     </Badge>
                 )}
 
-                {/* Buscar por c├│digo */}
+                {/* Buscar por código */}
                 <Input
                     placeholder="Buscar pedido..."
                     value={searchValue}
@@ -909,18 +908,18 @@ export function DataTable({
                         { value: 'CONFIRMED', label: 'Confirmado' },
                         {
                             value: 'SEPARATION_START',
-                            label: 'Separa├ºão iniciada',
+                            label: 'Separação iniciada',
                         },
                         {
                             value: 'SEPARATION_END',
-                            label: 'Separa├ºão finalizada',
+                            label: 'Separação finalizada',
                         },
                         {
                             value: 'READY_TO_PICKUP',
                             label: 'Pronto para retirada',
                         },
                         { value: 'DISPATCHED', label: 'Despachado' },
-                        { value: 'CONCLUDED', label: 'Conclu├¡do' },
+                        { value: 'CONCLUDED', label: 'Concluído' },
                         { value: 'CANCELLED', label: 'Cancelado' },
                     ]}
                     placeholder="Filtrar status"
@@ -969,8 +968,8 @@ export function DataTable({
                 <MultiSelect
                     options={[
                         { value: 'CASH', label: 'Dinheiro' },
-                        { value: 'CREDIT', label: 'Cr├®dito' },
-                        { value: 'DEBIT', label: 'D├®bito' },
+                        { value: 'CREDIT', label: 'Crédito' },
+                        { value: 'DEBIT', label: 'Débito' },
                         { value: 'PIX', label: 'PIX' },
                         { value: 'VOUCHER', label: 'Voucher' },
                         { value: 'ONLINE', label: 'Online' },
@@ -986,19 +985,19 @@ export function DataTable({
                                     : undefined,
                         });
                     }}
-                    searchPlaceholder="Buscar m├®todo..."
+                    searchPlaceholder="Buscar método..."
                     className="w-[200px]"
                 />
                 {/* Filtro por tipo de pedido */}
                 <Combobox
                     options={[
                         { value: 'all', label: 'Todos os tipos' },
-                        { value: 'delivery', label: '­ƒÜù Delivery' },
-                        { value: 'takeout', label: '­ƒøì´©Å Retirada' },
-                        { value: 'balcony', label: '­ƒÅ¬ Balcão' },
+                        { value: 'delivery', label: '🚚 Delivery' },
+                        { value: 'takeout', label: '🏪 Retirada' },
+                        { value: 'balcony', label: '🍽️ Balcão' },
                         {
                             value: 'self-service',
-                            label: '­ƒì¢´©Å Autoatendimento',
+                            label: '🤖 Autoatendimento',
                         },
                     ]}
                     placeholder="Filtrar tipo"
@@ -1010,7 +1009,7 @@ export function DataTable({
                     }
                 />
 
-                {/* ­ƒôà Date Range */}
+                {/* ­Date Range */}
                 <DateRangePicker
                     value={dateRange}
                     onChange={(range) => {
@@ -1026,7 +1025,7 @@ export function DataTable({
                     }}
                 />
 
-                {/* ­ƒæü´©Å Colunas vis├¡veis - ├Ç direita */}
+                {/* ­Colunas visíveis - À direita */}
                 <div className="ml-auto">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -1064,7 +1063,7 @@ export function DataTable({
                 </div>
             </div>
 
-            {/* ­ƒôï Tabela */}
+            {/* ­Tabela */}
             <div className="mt-4 overflow-hidden rounded-lg border">
                 <Table className="text-xs lg:text-sm">
                     <TableHeader className="sticky top-0 z-10 bg-muted">
@@ -1073,11 +1072,11 @@ export function DataTable({
                                 {headerGroup.headers.map((header) => {
                                     const sorted = header.column.getIsSorted();
 
-                                    // Colunas que N├âO t├¬m order_by
+                                    // Colunas que NÃO têm order_by
                                     const nonSortableColumns = [
                                         'expand', // primeira (se tiver)
                                         'provider', // Canal
-                                        'actions', // ├║ltima (bot├Áes)
+                                        'actions', // última (botões)
                                         'status',
                                     ];
 
@@ -1087,7 +1086,7 @@ export function DataTable({
                                             header.column.id,
                                         );
 
-                                    // Colunas num├®ricas que devem alinhar ├á direita
+                                    // Colunas numéricas que devem alinhar õ direita
                                     const isNumeric = [
                                         'total',
                                         'cost',
@@ -1123,7 +1122,7 @@ export function DataTable({
                                                     header.getContext(),
                                                 )}
 
-                                                {/* ­ƒö¢ ├ìcones s├│ aparecem se a coluna for ordenável */}
+                                                {/* Ícones só aparecem se a coluna for ordenável */}
                                                 {isSortable && (
                                                     <>
                                                         {sorted === 'asc' && (
@@ -1185,7 +1184,7 @@ export function DataTable({
                                                     <TableCell
                                                         key={cell.id}
                                                         className={
-                                                            // Alinha ├á direita se for coluna de valores
+                                                            // Alinha õ direita se for coluna de valores
                                                             [
                                                                 'total',
                                                                 'cost',
@@ -1230,7 +1229,7 @@ export function DataTable({
                                                         </div>
                                                     ) : (
                                                         <div className="grid grid-cols-1 gap-4 p-4 duration-300 animate-in slide-in-from-top-2 xl:grid-cols-2">
-                                                            {/* Coluna 1: Itens + Observa├º├Áes */}
+                                                            {/* Coluna 1: Itens + Observações */}
                                                             <div className="flex flex-col gap-4">
                                                                 {/* Card: Itens do pedido */}
                                                                 <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 shadow-none dark:bg-neutral-950">
@@ -1248,7 +1247,7 @@ export function DataTable({
                                                                     </CardHeader>
                                                                     <CardContent className="rounded-md bg-card p-0">
                                                                         <ul className="m-0 flex w-full basis-full list-none flex-col gap-2 pt-2 pl-0">
-                                                                            {/* Cabe├ºalho */}
+                                                                            {/* Cabeçalho */}
                                                                             <li className="hidden flex-wrap items-center gap-2 px-3 py-2 md:flex">
                                                                                 <span className="text-start leading-4 font-bold no-underline md:min-w-[32px]">
                                                                                     Qtd.
@@ -1275,7 +1274,7 @@ export function DataTable({
                                                                                         key={`${item.id}-${index}`}
                                                                                         className="flex flex-wrap items-center gap-2 px-3 py-2"
                                                                                     >
-                                                                                        {/* Produto principal (1┬║ n├¡vel) */}
+                                                                                        {/* Produto principal (1┬║ nível) */}
                                                                                         <span className="md:min-w-[32px]">
                                                                                             {
                                                                                                 item.quantity
@@ -1303,7 +1302,7 @@ export function DataTable({
                                                                                                         true,
                                                                                                     );
                                                                                                 }}
-                                                                                                title="Editar associa├º├Áes"
+                                                                                                title="Editar associações"
                                                                                             >
                                                                                                 <Pencil className="h-3 w-3" />
                                                                                             </Button> */}
@@ -1342,7 +1341,7 @@ export function DataTable({
                                                                                             )}
                                                                                         </span>
 
-                                                                                        {/* Segundo n├¡vel (options) */}
+                                                                                        {/* Segundo nível (options) */}
                                                                                         {item
                                                                                             .options
                                                                                             ?.length >
@@ -1397,7 +1396,7 @@ export function DataTable({
                                                                                                                 )}
                                                                                                             </span>
 
-                                                                                                            {/* Terceiro n├¡vel (customizations) */}
+                                                                                                            {/* Terceiro nível (customizations) */}
                                                                                                             {opt
                                                                                                                 .customizations
                                                                                                                 ?.length >
@@ -1459,7 +1458,7 @@ export function DataTable({
                                                                                             </ul>
                                                                                         )}
 
-                                                                                        {/* Complementos/Add-ons (s├│ renderizar se N├âO houver options) */}
+                                                                                        {/* Complementos/Add-ons (só renderizar se NÃO houver options) */}
                                                                                         {item
                                                                                             .add_ons
                                                                                             ?.length >
@@ -1531,7 +1530,7 @@ export function DataTable({
                                                                             )}
                                                                         </ul>
 
-                                                                        {/* Rodap├® com total */}
+                                                                        {/* Rodapé com total */}
                                                                         <div className="flex w-full justify-between border-t px-3 py-4">
                                                                             <div className="flex w-full flex-row justify-between gap-2">
                                                                                 <span className="leading-4 font-semibold">
@@ -1700,7 +1699,7 @@ export function DataTable({
                                                                     </Card>
                                                                 )}
 
-                                                                {/* Card: Endere├ºo de Entrega */}
+                                                                {/* Card: Endereço de Entrega */}
                                                                 {row.original
                                                                     .raw
                                                                     ?.delivery
@@ -1708,7 +1707,7 @@ export function DataTable({
                                                                     <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
                                                                         <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
                                                                             <CardTitle className="flex h-[18px] items-center font-semibold">
-                                                                                Endere├ºo
+                                                                                Endereço
                                                                                 de
                                                                                 Entrega
                                                                             </CardTitle>
@@ -1822,7 +1821,7 @@ export function DataTable({
                                                                                         .deliveryAddress
                                                                                         .reference && (
                                                                                         <span className="text-xs text-muted-foreground">
-                                                                                            Refer├¬ncia:{' '}
+                                                                                            Referência:{' '}
                                                                                             {
                                                                                                 row
                                                                                                     .original
@@ -1863,7 +1862,7 @@ export function DataTable({
                                                                     <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
                                                                         <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
                                                                             <CardTitle className="flex h-[18px] items-center font-semibold">
-                                                                                Observa├º├Áes
+                                                                                Observações
                                                                                 da
                                                                                 Entrega
                                                                             </CardTitle>
@@ -1949,16 +1948,16 @@ export function DataTable({
                                                                                                                     ? 'Dinheiro'
                                                                                                                     : payment.method ===
                                                                                                                         'CREDIT'
-                                                                                                                      ? 'Cr├®dito'
+                                                                                                                      ? 'Crédito'
                                                                                                                       : payment.method ===
                                                                                                                           'DEBIT'
-                                                                                                                        ? 'D├®bito'
+                                                                                                                        ? 'Débito'
                                                                                                                         : payment.method ===
                                                                                                                             'MEAL_VOUCHER'
-                                                                                                                          ? 'Vale Refei├ºão'
+                                                                                                                          ? 'Vale Refeição'
                                                                                                                           : payment.method ===
                                                                                                                               'FOOD_VOUCHER'
-                                                                                                                            ? 'Vale Alimenta├ºão'
+                                                                                                                            ? 'Vale Alimentação'
                                                                                                                             : payment.method ===
                                                                                                                                 'DIGITAL_WALLET'
                                                                                                                               ? 'Carteira Digital'
@@ -2101,7 +2100,7 @@ export function DataTable({
                                                                                             )}
                                                                                         </span>
                                                                                     </div>
-                                                                                    {/* Detalhes dos m├®todos de pagamento como descri├ºão */}
+                                                                                    {/* Detalhes dos métodos de pagamento como descrição */}
                                                                                     <ul className="m-0 flex w-full flex-col gap-1 ps-0">
                                                                                         {row.original.raw.session.payments.map(
                                                                                             (
@@ -2194,11 +2193,11 @@ export function DataTable({
                                                                                         registrado
                                                                                     </p>
                                                                                     <p className="mt-1 text-xs text-muted-foreground">
-                                                                                        Informa├º├Áes
+                                                                                        Informações
                                                                                         de
                                                                                         pagamento
                                                                                         não
-                                                                                        dispon├¡veis
+                                                                                        disponíveis
                                                                                         para
                                                                                         este
                                                                                         pedido
@@ -2246,7 +2245,7 @@ export function DataTable({
                         )}
                     </TableBody>
 
-                    {/* Rodap├® com totais */}
+                    {/* Rodapé com totais */}
                     <TableFooter>
                         <TableRow className="bg-muted hover:bg-muted">
                             {table.getVisibleLeafColumns().map((column) => {
@@ -2265,14 +2264,14 @@ export function DataTable({
                                     return <TableCell key={column.id} />;
                                 }
 
-                                // Calcular totais das linhas vis├¡veis na tabela
+                                // Calcular totais das linhas visíveis na tabela
                                 let total = 0;
                                 const visibleRows = table.getRowModel().rows;
                                 const visibleOrders = visibleRows.map(
                                     (row) => row.original,
                                 );
 
-                                // Verificar se estamos mostrando todas as linhas do per├¡odo (sem pagina├ºão limitando)
+                                // Verificar se estamos mostrando todas as linhas do período (sem paginação limitando)
                                 const showingAllRows =
                                     visibleRows.length === pagination.total;
 
@@ -2280,10 +2279,10 @@ export function DataTable({
                                     column.id === 'net_total' &&
                                     showingAllRows
                                 ) {
-                                    // Total L├¡quido: usar indicators se estiver mostrando todas as linhas
+                                    // Total Líquido: usar indicators se estiver mostrando todas as linhas
                                     total = indicators.netRevenue;
                                 } else if (column.id === 'cost') {
-                                    // CMV: sempre calcular das linhas vis├¡veis
+                                    // CMV: sempre calcular das linhas visíveis
                                     total = visibleOrders.reduce(
                                         (sum, order) => {
                                             const items = order.items || [];
@@ -2305,7 +2304,7 @@ export function DataTable({
                                         0,
                                     );
                                 } else if (column.id === 'total') {
-                                    // Total do pedido: sempre calcular das linhas vis├¡veis
+                                    // Total do pedido: sempre calcular das linhas visíveis
                                     total = visibleOrders.reduce(
                                         (sum, order) => {
                                             const isCancelled =
@@ -2376,7 +2375,7 @@ export function DataTable({
                                         0,
                                     );
                                 } else if (column.id === 'net_total') {
-                                    // Total L├¡quido: calcular das linhas vis├¡veis (quando não está mostrando todas)
+                                    // Total Líquido: calcular das linhas visíveis (quando não está mostrando todas)
                                     total = visibleOrders.reduce(
                                         (sum, order) => {
                                             const isCancelled =
@@ -2390,7 +2389,7 @@ export function DataTable({
                                         0,
                                     );
                                 } else {
-                                    // Para outras colunas (tax, total_costs, etc), calcular das linhas vis├¡veis
+                                    // Para outras colunas (tax, total_costs, etc), calcular das linhas visíveis
 
                                     total = visibleOrders.reduce(
                                         (sum, order) => {
@@ -2498,7 +2497,7 @@ export function DataTable({
                                                 column.id ===
                                                 'total_commissions'
                                             ) {
-                                                // Comiss├Áes
+                                                // Comissões
                                                 const totalCommissions =
                                                     order.total_commissions;
                                                 if (
@@ -2550,7 +2549,7 @@ export function DataTable({
                                     );
                                 }
 
-                                // Alinhar ├á direita se for coluna num├®rica
+                                // Alinhar õ direita se for coluna numérica
                                 const isNumeric = [
                                     'total',
                                     'cost',
@@ -2580,7 +2579,7 @@ export function DataTable({
                 </Table>
             </div>
 
-            {/* ­ƒôî Pagina├ºão */}
+            {/* Paginação */}
             <div className="flex items-center justify-between px-4">
                 <div className="hidden flex-1 text-sm text-muted-foreground lg:flex">
                     Exibindo {pagination.from} ÔÇô {pagination.to} de{' '}
@@ -2674,7 +2673,7 @@ export function DataTable({
                             )}
                         </Button>
 
-                        {/* Pr├│xima */}
+                        {/* Próxima */}
                         <Button
                             variant="outline"
                             className="size-8"
@@ -2697,7 +2696,7 @@ export function DataTable({
                             )}
                         </Button>
 
-                        {/* ├Ültima */}
+                        {/* Última */}
                         <Button
                             variant="outline"
                             className="hidden size-8 lg:flex"
@@ -2726,7 +2725,7 @@ export function DataTable({
                 </div>
             </div>
 
-            {/* Modal de Associa├ºão Rápida */}
+            {/* Modal de Associação Rápida */}
             {selectedOrder && (
                 <QuickAssociateDialog
                     open={associateDialogOpen}
@@ -2742,7 +2741,7 @@ export function DataTable({
                 />
             )}
 
-            {/* Modal de Associa├º├Áes Detalhadas do Item */}
+            {/* Modal de Associações Detalhadas do Item */}
             <ItemMappingsDialog
                 open={itemMappingsDialogOpen}
                 onOpenChange={setItemMappingsDialogOpen}
@@ -2751,7 +2750,7 @@ export function DataTable({
                 provider={selectedOrder?.provider || 'ifood'}
             />
 
-            {/* Dialog de Sincroniza├ºão Takeat */}
+            {/* Dialog de Sincronização Takeat */}
             <SyncTakeatDialog
                 open={syncDialogOpen}
                 onOpenChange={setSyncDialogOpen}
