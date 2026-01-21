@@ -333,7 +333,15 @@ export function OrderFinancialCard({
             order?.provider === 'takeat' &&
             Boolean(order?.raw?.session?.total_delivery_price);
 
-        const skipDeliveryFeeInSubtotal = isTakeatIfoodOrder(order);
+        // Verificar se deve excluir taxa de entrega do subtotal
+        // Só excluir se for iFood via Takeat E a entrega for pelo marketplace (IFOOD/MARKETPLACE)
+        const deliveryBy =
+            order?.raw?.session?.delivery_by?.toUpperCase() || '';
+        const isMarketplaceDelivery = ['IFOOD', 'MARKETPLACE'].includes(
+            deliveryBy,
+        );
+        const skipDeliveryFeeInSubtotal =
+            isTakeatIfoodOrder(order) && isMarketplaceDelivery;
 
         // Se NÃO usou total_delivery_price, precisa somar subsídio e (quando aplicável) delivery
         if (!usedTotalDeliveryPrice) {
@@ -350,6 +358,7 @@ export function OrderFinancialCard({
         subtotal -= totalCashback;
 
         // Taxa fixa do iFood reduz o valor recebido pelo lojista
+        // Sempre subtrair para pedidos iFood via Takeat (independente de delivery_by)
         if (ifoodServiceFee > 0) {
             subtotal -= ifoodServiceFee;
         }
