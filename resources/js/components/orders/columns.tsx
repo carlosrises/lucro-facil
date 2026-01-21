@@ -332,10 +332,18 @@ export const columns: ColumnDef<Order>[] = [
             return (
                 <div className="flex flex-col">
                     <span className="font-medium">
-                        {date ? date.toLocaleTimeString('pt-BR') : '--:--'}
+                        {date
+                            ? date.toLocaleTimeString('pt-BR', {
+                                  timeZone: 'America/Sao_Paulo',
+                              })
+                            : '--:--'}
                     </span>
                     <span className="text-[10px] text-muted-foreground lg:text-xs">
-                        {date ? date.toLocaleDateString('pt-BR') : '--/--/----'}
+                        {date
+                            ? date.toLocaleDateString('pt-BR', {
+                                  timeZone: 'America/Sao_Paulo',
+                              })
+                            : '--/--/----'}
                     </span>
                 </div>
             );
