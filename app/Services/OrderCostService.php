@@ -994,32 +994,58 @@ class OrderCostService
             }
 
             if ($totalPaid > 0) {
-                return $totalPaid;
+                // Subtrair taxa de serviço iFood se aplicável
+                return $this->subtractIfoodServiceFee($order, $totalPaid);
             }
 
             if (isset($session['old_total_price'])) {
-                return (float) $session['old_total_price'];
+                return $this->subtractIfoodServiceFee($order, (float) $session['old_total_price']);
             }
         }
 
         if (isset($session['total_delivery_price'])) {
-            return (float) $session['total_delivery_price'];
+            return $this->subtractIfoodServiceFee($order, (float) $session['total_delivery_price']);
         }
 
         if (isset($session['total_price'])) {
-            return (float) $session['total_price'];
+            return $this->subtractIfoodServiceFee($order, (float) $session['total_price']);
         }
 
         if (isset($session['old_total_price'])) {
-            return (float) $session['old_total_price'];
+            return $this->subtractIfoodServiceFee($order, (float) $session['old_total_price']);
         }
 
         return null;
     }
 
+    /**
+     * Subtrai a taxa de serviço iFood do subtotal quando aplicável
+     * A Takeat inclui essa taxa no total mas não a informa separadamente
+     */
+    private function subtractIfoodServiceFee(Order $order, float $subtotal): float
+    {
+        // Taxa de serviço fixa do iFood (R$ 0,99)
+        // Só subtrair se for pedido iFood via Takeat
+        if ($this->isTakeatIfoodOrder($order)) {
+            return max($subtotal - 0.99, 0);
+        }
+
+        return $subtotal;
+    }
+
     private function shouldExcludeDeliveryFeeFromSubtotal(Order $order): bool
     {
-        return $this->isTakeatIfoodOrder($order);
+        // Só excluir taxa de entrega se for pedido Takeat do iFood E a entrega for feita pelo iFood
+        if (!$this->isTakeatIfoodOrder($order)) {
+            return false;
+        }
+
+        // Verificar se a entrega é feita pelo marketplace (iFood) e não pela loja
+        $deliveryBy = strtoupper((string) ($order->raw['session']['delivery_by'] ?? ''));
+
+        // Se for IFOOD ou MARKETPLACE, a entrega é pelo iFood -> excluir taxa do subtotal
+        // Se for MERCHANT, a entrega é pela loja -> manter taxa no subtotal
+        return in_array($deliveryBy, ['IFOOD', 'MARKETPLACE']);
     }
 
     private function getDeliveryFeeAmount(Order $order): float
