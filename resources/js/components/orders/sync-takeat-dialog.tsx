@@ -57,20 +57,20 @@ export function SyncTakeatDialog({
                 body: JSON.stringify({ date: dateString }),
             });
 
+            // Verificar status ANTES de fazer parse JSON
+            if (response.status === 419) {
+                toast.error('Sessão expirada. Recarregando a página...', {
+                    duration: 3000,
+                });
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+                return;
+            }
+
             const data = await response.json();
 
             if (!response.ok) {
-                // Erro 419: Token CSRF expirado - recarregar página
-                if (response.status === 419) {
-                    toast.error('Sessão expirada. Recarregando a página...', {
-                        duration: 3000,
-                    });
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 1000);
-                    return;
-                }
-
                 throw new Error(data.message || 'Erro ao sincronizar');
             }
 
