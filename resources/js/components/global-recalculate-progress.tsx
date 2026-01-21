@@ -14,24 +14,8 @@ interface ProgressData {
     message?: string;
 }
 
-interface ActiveRecalculation {
-    type: string;
-    reference_id: number;
-    status: string;
-    percentage: number;
-    total: number;
-    processed: number;
-    started_at: string | null;
-}
-
-interface RecalculationStatus {
-    has_active: boolean;
-    recalculations: ActiveRecalculation[];
-}
-
 const STORAGE_KEY = 'global_recalculate_cache_key';
 const LAST_CHECK_KEY = 'global_recalculate_last_check';
-const CHECK_INTERVAL = 5000; // Verificar a cada 5 segundos se há recálculos ativos
 
 export function GlobalRecalculateProgress() {
     const [progress, setProgress] = useState<ProgressData | null>(null);
@@ -46,78 +30,7 @@ export function GlobalRecalculateProgress() {
         }
     }, []);
 
-    // Polling global para verificar se há recálculos ativos (mesmo sem cache key)
-    useEffect(() => {
-        const checkActiveRecalculations = async () => {
-            try {
-                const response = await fetch('/recalculation-status');
-                const data: RecalculationStatus = await response.json();
-
-                if (data.has_active && data.recalculations.length > 0) {
-                    // Pegar o primeiro recálculo ativo
-                    const active = data.recalculations[0];
-
-                    // Se não temos cache key, criar uma baseada no tipo e ID
-                    if (!cacheKey) {
-                        // Gerar cache key baseada no tipo e ID
-                        // Não salvar no localStorage para não persistir entre reloads
-                    }
-
-                    // Se o job está completed mas acabou de iniciar (menos de 2 segundos),
-                    // pode ser um job antigo ainda no cache. Ignorar por enquanto.
-                    if (active.status === 'completed' && active.started_at) {
-                        const startedAt = new Date(active.started_at).getTime();
-                        const now = Date.now();
-                        const elapsedSeconds = (now - startedAt) / 1000;
-
-                        // Se completou em menos de 2 segundos do início do monitoramento,
-                        // pode ser cache antigo. Esperar um pouco.
-                        const monitoringStarted =
-                            localStorage.getItem(LAST_CHECK_KEY);
-                        if (monitoringStarted) {
-                            const monitoringStartTime =
-                                parseInt(monitoringStarted);
-                            const timeSinceMonitoringStart =
-                                (now - monitoringStartTime) / 1000;
-
-                            if (
-                                timeSinceMonitoringStart < 2 &&
-                                elapsedSeconds > 10
-                            ) {
-                                // Job completou há muito tempo, mas acabamos de iniciar monitoramento
-                                // Ignorar esse resultado
-                                return;
-                            }
-                        }
-                    }
-
-                    // Atualizar progresso diretamente dos dados da API
-                    setProgress({
-                        status: active.status as ProgressData['status'],
-                        total: active.total,
-                        processed: active.processed,
-                        percentage: active.percentage,
-                        started_at: active.started_at,
-                    });
-                    setIsVisible(true);
-                } else if (!cacheKey) {
-                    // Se não há recálculos ativos e não temos cache key local, esconder
-                    setIsVisible(false);
-                    setProgress(null);
-                }
-            } catch (error) {
-                console.error('Erro ao verificar recálculos ativos:', error);
-            }
-        };
-
-        // Executar imediatamente
-        checkActiveRecalculations();
-
-        // Polling a cada 5 segundos
-        const interval = setInterval(checkActiveRecalculations, CHECK_INTERVAL);
-
-        return () => clearInterval(interval);
-    }, [cacheKey]);
+    // TODO: substituir o polling antigo de /recalculation-status por um canal Reverb/WebSocket compartilhado
 
     // Listener para mudanças no localStorage (quando outra aba/página inicia um recálculo)
     useEffect(() => {
