@@ -535,7 +535,7 @@ export function OrderFinancialCard({
                                     <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
                                         {formatPercentage(
                                             financials.orderTotal,
-                                            financials.grossTotal,
+                                            financials.subtotal,
                                         )}
                                     </span>
                                 </div>
@@ -559,7 +559,7 @@ export function OrderFinancialCard({
                                         <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
                                             {formatPercentage(
                                                 financials.deliveryFee,
-                                                financials.grossTotal,
+                                                financials.subtotal,
                                             )}
                                         </span>
                                     </div>
@@ -584,7 +584,7 @@ export function OrderFinancialCard({
                                         <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
                                             {formatPercentage(
                                                 financials.ifoodServiceFee,
-                                                financials.grossTotal,
+                                                financials.subtotal,
                                             )}
                                         </span>
                                     </div>
@@ -614,7 +614,7 @@ export function OrderFinancialCard({
                                         <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
                                             {formatPercentage(
                                                 financials.totalCashback,
-                                                financials.grossTotal,
+                                                financials.subtotal,
                                             )}
                                         </span>
                                     </div>
@@ -640,7 +640,7 @@ export function OrderFinancialCard({
                                         <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
                                             {formatPercentage(
                                                 financials.discountTotal,
-                                                financials.grossTotal,
+                                                financials.subtotal,
                                             )}
                                         </span>
                                     </div>
@@ -713,7 +713,7 @@ export function OrderFinancialCard({
                                     <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
                                         {formatPercentage(
                                             financials.paidByClient,
-                                            financials.grossTotal,
+                                            financials.subtotal,
                                         )}
                                     </span>
                                 </div>
@@ -737,7 +737,7 @@ export function OrderFinancialCard({
                                         <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
                                             {formatPercentage(
                                                 financials.totalSubsidy,
-                                                financials.grossTotal,
+                                                financials.subtotal,
                                             )}
                                         </span>
                                     </div>
@@ -760,10 +760,7 @@ export function OrderFinancialCard({
                                         {formatCurrency(financials.subtotal)}
                                     </span>
                                     <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
-                                        {formatPercentage(
-                                            financials.subtotal,
-                                            financials.grossTotal,
-                                        )}
+                                        100,0%
                                     </span>
                                 </div>
                                 <ul className="flex w-full flex-col items-center justify-between gap-2 pl-0">
