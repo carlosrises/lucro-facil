@@ -1,4 +1,4 @@
-import {
+﻿import {
     ColumnFiltersState,
     flexRender,
     getCoreRowModel,
@@ -38,7 +38,7 @@ import {
 import { OrderActionsCell } from './order-actions-cell';
 
 /**
- * Calcula o custo de um item considerando múltiplas associações
+ * Calcula o custo de um item considerando m├║ltiplas associa├º├Áes
  */
 function calculateItemCost(item: any): number {
     // Prioridade 1: Usar total_cost calculado pelo backend (mais confiável)
@@ -138,6 +138,119 @@ type Filters = {
     page?: number;
 };
 
+type DisplayOrderItem = {
+    id: string | number;
+    quantity: number;
+    name: string;
+    unitPrice: number;
+    totalPrice: number;
+    observations?: string;
+    options: any[];
+    add_ons: any[];
+    internal_product?: any;
+    mappings?: any[];
+    sku?: string | null;
+};
+
+const toNumber = (value: unknown): number => {
+    if (value === null || value === undefined) {
+        return 0;
+    }
+
+    const parsed = parseFloat(String(value));
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const mapTakeatRawItem = (rawItem: any, dbItems: any[], index: number) => {
+    const dbItem =
+        dbItems.find(
+            (db: any) =>
+                db.sku === rawItem.product?.id?.toString() ||
+                db.name === rawItem.product?.name,
+        ) || dbItems[index];
+
+    const options: any[] = [];
+    rawItem.complement_categories?.forEach((category: any) => {
+        category.order_complements?.forEach((complement: any) => {
+            options.push({
+                id: complement.id,
+                name: complement.complement?.name || '',
+                quantity: complement.amount || 1,
+                unitPrice: toNumber(
+                    complement.price ?? complement.total_price ?? 0,
+                ),
+                totalPrice: toNumber(
+                    complement.total_price ?? complement.price ?? 0,
+                ),
+                customizations: complement.customizations || [],
+            });
+        });
+    });
+
+    const amount = rawItem.amount || 1;
+    const unitPrice = toNumber(rawItem.price);
+
+    return {
+        id: dbItem?.id || rawItem.id,
+        qty: amount,
+        quantity: amount,
+        name: rawItem.product?.name || '',
+        sku: dbItem?.sku || rawItem.product?.id?.toString(),
+        price: unitPrice,
+        unit_price: unitPrice,
+        total_price: toNumber(rawItem.total_price ?? unitPrice * amount),
+        internal_product: dbItem?.internal_product,
+        mappings: dbItem?.mappings || [],
+        add_ons: dbItem?.add_ons || [],
+        options,
+        observations: dbItem?.observations,
+    };
+};
+
+const buildDisplayItems = (
+    order: Order,
+): { items: DisplayOrderItem[]; total: number } => {
+    let normalizedItems: any[] = [];
+
+    if (order.provider === 'takeat' && order.raw?.basket?.orders) {
+        const rawItems = order.raw.basket.orders || [];
+        const dbItems = order.items || [];
+        normalizedItems = rawItems.map((rawItem: any, index: number) =>
+            mapTakeatRawItem(rawItem, dbItems, index),
+        );
+    } else {
+        normalizedItems = order.raw?.items || order.items || [];
+    }
+
+    const items: DisplayOrderItem[] = normalizedItems.map((item: any) => {
+        const quantity = toNumber(item.qty ?? item.quantity ?? 0);
+        const unitPrice = toNumber(
+            item.unit_price ?? item.unitPrice ?? item.price ?? 0,
+        );
+        const totalPrice = toNumber(
+            item.total_price ?? item.totalPrice ?? unitPrice * quantity,
+        );
+
+        return {
+            id: item.id,
+            quantity,
+            name: item.name,
+            unitPrice,
+            totalPrice,
+            observations: item.observations,
+            options: item.options || [],
+            add_ons: item.add_ons || [],
+            internal_product: item.internal_product,
+            mappings: item.mappings || [],
+            sku: item.sku || null,
+        };
+    });
+
+    const total = items.reduce((sum, item) => sum + item.totalPrice, 0);
+
+    return { items, total };
+};
+
 export function DataTable({
     data,
     pagination,
@@ -180,7 +293,7 @@ export function DataTable({
     };
 }) {
     const [sorting, setSorting] = React.useState<SortingState>([
-        { id: 'placed_at', desc: true }, // 🔧 padrão: ordenado por data
+        { id: 'placed_at', desc: true }, // ­ƒöº padrão: ordenado por data
     ]);
 
     // Hook para lazy loading de detalhes ao expandir
@@ -214,7 +327,7 @@ export function DataTable({
 
                 if (details) {
                     // Mesclar apenas os detalhes (items completos, mappings, sale)
-                    // Mantém os campos calculados que já vieram do backend
+                    // Mant├®m os campos calculados que já vieram do backend
                     setEnrichedData((prev) =>
                         prev.map((order) =>
                             order.id === orderId
@@ -245,7 +358,7 @@ export function DataTable({
     );
     const selectedOrderIdRef = React.useRef<number | null>(null);
 
-    // Estados para sincronização Takeat
+    // Estados para sincroniza├ºão Takeat
     const [syncDialogOpen, setSyncDialogOpen] = React.useState(false);
     const [isSyncingToday, setIsSyncingToday] = React.useState(false);
 
@@ -281,7 +394,7 @@ export function DataTable({
         selectedOrderIdRef.current = selectedOrder?.id || null;
     }, [selectedOrder]);
 
-    // Adicionar botão de associar na coluna de ações
+    // Adicionar botão de associar na coluna de a├º├Áes
     const columnsWithAssociate = React.useMemo(() => {
         return columns.map((col) => {
             // Modificar coluna expand para usar lazy loading
@@ -303,7 +416,7 @@ export function DataTable({
                 };
             }
 
-            // Modificar a coluna de ações para incluir o botão de associar
+            // Modificar a coluna de a├º├Áes para incluir o botão de associar
             if (col.id === 'actions') {
                 return {
                     ...col,
@@ -313,7 +426,7 @@ export function DataTable({
                         const handshakeDispute =
                             order.raw?.handshakeDispute ?? null;
 
-                        // Contar items sem associação
+                        // Contar items sem associa├ºão
                         const unmappedCount =
                             order.items?.filter((item) => {
                                 return (
@@ -336,7 +449,7 @@ export function DataTable({
                                             setSelectedOrder(order);
                                             setAssociateDialogOpen(true);
                                         }}
-                                        title={`${unmappedCount} produto(s) sem associação`}
+                                        title={`${unmappedCount} produto(s) sem associa├ºão`}
                                     >
                                         <Link2 className="h-3.5 w-3.5" />
                                         <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
@@ -345,7 +458,7 @@ export function DataTable({
                                     </Button>
                                 )} */}
 
-                                {/* Ações do pedido (confirmar, despachar, etc) */}
+                                {/* A├º├Áes do pedido (confirmar, despachar, etc) */}
                                 <OrderActionsCell
                                     orderId={order.id}
                                     orderStatus={order.status}
@@ -442,7 +555,7 @@ export function DataTable({
         return () => clearTimeout(timer);
     }, [searchValue]);
 
-    // Função para sincronizar pedidos de hoje
+    // Fun├ºão para sincronizar pedidos de hoje
     const handleSyncToday = async () => {
         setIsSyncingToday(true);
 
@@ -475,13 +588,13 @@ export function DataTable({
                 throw new Error(data.message || 'Erro ao sincronizar');
             }
 
-            toast.info('Sincronização iniciada!', {
+            toast.info('Sincroniza├ºão iniciada!', {
                 description:
-                    'Os pedidos aparecerão automaticamente quando a sincronização terminar.',
+                    'Os pedidos aparecerão automaticamente quando a sincroniza├ºão terminar.',
             });
             // Não recarregar - os pedidos virão via WebSocket
         } catch (error: any) {
-            // Se não foi tratado acima, mostrar mensagem genérica
+            // Se não foi tratado acima, mostrar mensagem gen├®rica
             if (error.message !== 'Sessão expirada. Recarregando a página...') {
                 toast.error(
                     error.message ||
@@ -516,7 +629,7 @@ export function DataTable({
         });
     };
 
-    // Helper para construir URL de paginação com todos os filtros
+    // Helper para construir URL de pagina├ºão com todos os filtros
     const buildPageUrl = (page: number) => {
         const params = new URLSearchParams();
 
@@ -582,7 +695,7 @@ export function DataTable({
                         </Button>
                     )}
 
-                    {/* Aviso: Pedidos sem método de pagamento */}
+                    {/* Aviso: Pedidos sem m├®todo de pagamento */}
                     {(noPaymentMethodCount ?? 0) > 0 && (
                         <Button
                             variant="ghost"
@@ -617,7 +730,7 @@ export function DataTable({
                     )}
                 </div>
 
-                {/* Botões de sincronização Takeat */}
+                {/* Bot├Áes de sincroniza├ºão Takeat */}
                 <div className="flex items-center gap-2">
                     <Button
                         variant="outline"
@@ -635,7 +748,7 @@ export function DataTable({
                         variant="outline"
                         size="sm"
                         onClick={() => setSyncDialogOpen(true)}
-                        title="Sincronizar período específico"
+                        title="Sincronizar per├¡odo espec├¡fico"
                     >
                         <Calendar className="h-4 w-4" />
                         <span className="ml-2">Sincronizar Data</span>
@@ -688,7 +801,7 @@ export function DataTable({
                     </Badge>
                 )}
 
-                {/* Badge de filtro ativo - sem método de pagamento */}
+                {/* Badge de filtro ativo - sem m├®todo de pagamento */}
                 {filters?.no_payment_method && (
                     <Badge variant="destructive" className="h-9 gap-2 px-3">
                         Sem taxa vinculada
@@ -749,11 +862,12 @@ export function DataTable({
                 {/* Badge de filtro ativo - tipo de pedido */}
                 {filters?.order_type && (
                     <Badge variant="secondary" className="h-9 gap-2 px-3">
-                        {filters.order_type === 'delivery' && '🚗 Delivery'}
-                        {filters.order_type === 'takeout' && '🛍️ Retirada'}
-                        {filters.order_type === 'balcony' && '🏪 Balcão'}
+                        {filters.order_type === 'delivery' && '­ƒÜù Delivery'}
+                        {filters.order_type === 'takeout' &&
+                            '­ƒøì´©Å Retirada'}
+                        {filters.order_type === 'balcony' && '­ƒÅ¬ Balcão'}
                         {filters.order_type === 'self-service' &&
-                            '🍽️ Autoatendimento'}
+                            '­ƒì¢´©Å Autoatendimento'}
                         <button
                             onClick={() =>
                                 updateFilters({
@@ -779,7 +893,7 @@ export function DataTable({
                     </Badge>
                 )}
 
-                {/* Buscar por código */}
+                {/* Buscar por c├│digo */}
                 <Input
                     placeholder="Buscar pedido..."
                     value={searchValue}
@@ -795,18 +909,18 @@ export function DataTable({
                         { value: 'CONFIRMED', label: 'Confirmado' },
                         {
                             value: 'SEPARATION_START',
-                            label: 'Separação iniciada',
+                            label: 'Separa├ºão iniciada',
                         },
                         {
                             value: 'SEPARATION_END',
-                            label: 'Separação finalizada',
+                            label: 'Separa├ºão finalizada',
                         },
                         {
                             value: 'READY_TO_PICKUP',
                             label: 'Pronto para retirada',
                         },
                         { value: 'DISPATCHED', label: 'Despachado' },
-                        { value: 'CONCLUDED', label: 'Concluído' },
+                        { value: 'CONCLUDED', label: 'Conclu├¡do' },
                         { value: 'CANCELLED', label: 'Cancelado' },
                     ]}
                     placeholder="Filtrar status"
@@ -855,8 +969,8 @@ export function DataTable({
                 <MultiSelect
                     options={[
                         { value: 'CASH', label: 'Dinheiro' },
-                        { value: 'CREDIT', label: 'Crédito' },
-                        { value: 'DEBIT', label: 'Débito' },
+                        { value: 'CREDIT', label: 'Cr├®dito' },
+                        { value: 'DEBIT', label: 'D├®bito' },
                         { value: 'PIX', label: 'PIX' },
                         { value: 'VOUCHER', label: 'Voucher' },
                         { value: 'ONLINE', label: 'Online' },
@@ -872,19 +986,19 @@ export function DataTable({
                                     : undefined,
                         });
                     }}
-                    searchPlaceholder="Buscar método..."
+                    searchPlaceholder="Buscar m├®todo..."
                     className="w-[200px]"
                 />
                 {/* Filtro por tipo de pedido */}
                 <Combobox
                     options={[
                         { value: 'all', label: 'Todos os tipos' },
-                        { value: 'delivery', label: '🚗 Delivery' },
-                        { value: 'takeout', label: '🛍️ Retirada' },
-                        { value: 'balcony', label: '🏪 Balcão' },
+                        { value: 'delivery', label: '­ƒÜù Delivery' },
+                        { value: 'takeout', label: '­ƒøì´©Å Retirada' },
+                        { value: 'balcony', label: '­ƒÅ¬ Balcão' },
                         {
                             value: 'self-service',
-                            label: '🍽️ Autoatendimento',
+                            label: '­ƒì¢´©Å Autoatendimento',
                         },
                     ]}
                     placeholder="Filtrar tipo"
@@ -896,7 +1010,7 @@ export function DataTable({
                     }
                 />
 
-                {/* 📅 Date Range */}
+                {/* ­ƒôà Date Range */}
                 <DateRangePicker
                     value={dateRange}
                     onChange={(range) => {
@@ -912,7 +1026,7 @@ export function DataTable({
                     }}
                 />
 
-                {/* 👁️ Colunas visíveis - À direita */}
+                {/* ­ƒæü´©Å Colunas vis├¡veis - ├Ç direita */}
                 <div className="ml-auto">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -950,7 +1064,7 @@ export function DataTable({
                 </div>
             </div>
 
-            {/* 📋 Tabela */}
+            {/* ­ƒôï Tabela */}
             <div className="mt-4 overflow-hidden rounded-lg border">
                 <Table className="text-xs lg:text-sm">
                     <TableHeader className="sticky top-0 z-10 bg-muted">
@@ -959,11 +1073,11 @@ export function DataTable({
                                 {headerGroup.headers.map((header) => {
                                     const sorted = header.column.getIsSorted();
 
-                                    // Colunas que NÃO têm order_by
+                                    // Colunas que N├âO t├¬m order_by
                                     const nonSortableColumns = [
                                         'expand', // primeira (se tiver)
                                         'provider', // Canal
-                                        'actions', // última (botões)
+                                        'actions', // ├║ltima (bot├Áes)
                                         'status',
                                     ];
 
@@ -973,7 +1087,7 @@ export function DataTable({
                                             header.column.id,
                                         );
 
-                                    // Colunas numéricas que devem alinhar à direita
+                                    // Colunas num├®ricas que devem alinhar ├á direita
                                     const isNumeric = [
                                         'total',
                                         'cost',
@@ -1009,7 +1123,7 @@ export function DataTable({
                                                     header.getContext(),
                                                 )}
 
-                                                {/* 🔽 Ícones só aparecem se a coluna for ordenável */}
+                                                {/* ­ƒö¢ ├ìcones s├│ aparecem se a coluna for ordenável */}
                                                 {isSortable && (
                                                     <>
                                                         {sorted === 'asc' && (
@@ -1053,301 +1167,115 @@ export function DataTable({
                                 </TableRow>
                             ))
                         ) : table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row) => (
-                                <React.Fragment key={row.id}>
-                                    {/* Linha principal */}
-                                    <TableRow
-                                        className={`bg-card ${row.getIsExpanded() ? 'border-b-0' : ''}`}
-                                    >
-                                        {row.getVisibleCells().map((cell) => (
-                                            <TableCell
-                                                key={cell.id}
-                                                className={
-                                                    // Alinha à direita se for coluna de valores
-                                                    [
-                                                        'total',
-                                                        'cost',
-                                                        'tax',
-                                                        'extra_cost',
-                                                        'net_total',
-                                                        'margin',
-                                                        'expand',
-                                                    ].includes(cell.column.id)
-                                                        ? 'text-end'
-                                                        : 'text-start'
-                                                }
-                                            >
-                                                {flexRender(
-                                                    cell.column.columnDef.cell,
-                                                    cell.getContext(),
-                                                )}
-                                            </TableCell>
-                                        ))}
-                                    </TableRow>
+                            table.getRowModel().rows.map((row) => {
+                                const {
+                                    items: displayItems,
+                                    total: itemsTotal,
+                                } = buildDisplayItems(row.original as Order);
 
-                                    {/* Linha expandida */}
-                                    {row.getIsExpanded() && (
-                                        <TableRow className="bg-card hover:bg-card">
-                                            <TableCell
-                                                colSpan={columns.length + 1}
-                                                className="border-t-0 p-0"
-                                            >
-                                                {isLoadingDetails(
-                                                    row.original.id,
-                                                ) ? (
-                                                    <div className="grid grid-cols-1 gap-4 p-4 xl:grid-cols-2">
-                                                        <div className="flex flex-col gap-4">
-                                                            <Skeleton className="h-48 w-full" />
+                                return (
+                                    <React.Fragment key={row.id}>
+                                        {/* Linha principal */}
+                                        <TableRow
+                                            className={`bg-card ${row.getIsExpanded() ? 'border-b-0' : ''}`}
+                                        >
+                                            {row
+                                                .getVisibleCells()
+                                                .map((cell) => (
+                                                    <TableCell
+                                                        key={cell.id}
+                                                        className={
+                                                            // Alinha ├á direita se for coluna de valores
+                                                            [
+                                                                'total',
+                                                                'cost',
+                                                                'tax',
+                                                                'extra_cost',
+                                                                'net_total',
+                                                                'margin',
+                                                                'expand',
+                                                            ].includes(
+                                                                cell.column.id,
+                                                            )
+                                                                ? 'text-end'
+                                                                : 'text-start'
+                                                        }
+                                                    >
+                                                        {flexRender(
+                                                            cell.column
+                                                                .columnDef.cell,
+                                                            cell.getContext(),
+                                                        )}
+                                                    </TableCell>
+                                                ))}
+                                        </TableRow>
+
+                                        {/* Linha expandida */}
+                                        {row.getIsExpanded() && (
+                                            <TableRow className="bg-card hover:bg-card">
+                                                <TableCell
+                                                    colSpan={columns.length + 1}
+                                                    className="border-t-0 p-0"
+                                                >
+                                                    {isLoadingDetails(
+                                                        row.original.id,
+                                                    ) ? (
+                                                        <div className="grid grid-cols-1 gap-4 p-4 xl:grid-cols-2">
+                                                            <div className="flex flex-col gap-4">
+                                                                <Skeleton className="h-48 w-full" />
+                                                            </div>
+                                                            <div className="flex flex-col gap-4">
+                                                                <Skeleton className="h-48 w-full" />
+                                                            </div>
                                                         </div>
-                                                        <div className="flex flex-col gap-4">
-                                                            <Skeleton className="h-48 w-full" />
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="grid grid-cols-1 gap-4 p-4 duration-300 animate-in slide-in-from-top-2 xl:grid-cols-2">
-                                                        {/* Coluna 1: Itens + Observações */}
-                                                        <div className="flex flex-col gap-4">
-                                                            {/* Card: Itens do pedido */}
-                                                            <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 shadow-none dark:bg-neutral-950">
-                                                                <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
-                                                                    <CardTitle className="flex items-center gap-1 font-semibold">
-                                                                        Itens do
-                                                                        Pedido{' '}
-                                                                        <Badge className="text-14px/[16px] bg-gray-200 px-3 py-0 text-gray-600">
-                                                                            {(() => {
-                                                                                const items =
-                                                                                    row
-                                                                                        .original
-                                                                                        .raw
-                                                                                        ?.items ||
-                                                                                    row
-                                                                                        .original
-                                                                                        .items ||
-                                                                                    [];
-                                                                                return items.length;
-                                                                            })()}
-                                                                        </Badge>
-                                                                    </CardTitle>
-                                                                </CardHeader>
-                                                                <CardContent className="rounded-md bg-card p-0">
-                                                                    <ul className="m-0 flex w-full basis-full list-none flex-col gap-2 pt-2 pl-0">
-                                                                        {/* Cabeçalho */}
-                                                                        <li className="hidden flex-wrap items-center gap-2 px-3 py-2 md:flex">
-                                                                            <span className="text-start leading-4 font-bold no-underline md:min-w-[32px]">
-                                                                                Qtd.
-                                                                            </span>
-                                                                            <span className="grow text-start leading-4 font-bold no-underline">
-                                                                                Item
-                                                                            </span>
-                                                                            <span className="hidden text-end leading-4 font-bold no-underline md:flex md:min-w-[120px] md:justify-end">
-                                                                                Valor
-                                                                                unitário
-                                                                            </span>
-                                                                            <span className="text-end leading-4 font-bold no-underline md:min-w-[120px]">
-                                                                                Subtotal
-                                                                            </span>
-                                                                        </li>
+                                                    ) : (
+                                                        <div className="grid grid-cols-1 gap-4 p-4 duration-300 animate-in slide-in-from-top-2 xl:grid-cols-2">
+                                                            {/* Coluna 1: Itens + Observa├º├Áes */}
+                                                            <div className="flex flex-col gap-4">
+                                                                {/* Card: Itens do pedido */}
+                                                                <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 shadow-none dark:bg-neutral-950">
+                                                                    <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                                                                        <CardTitle className="flex items-center gap-1 font-semibold">
+                                                                            Itens
+                                                                            do
+                                                                            Pedido{' '}
+                                                                            <Badge className="text-14px/[16px] bg-gray-200 px-3 py-0 text-gray-600">
+                                                                                {
+                                                                                    displayItems.length
+                                                                                }
+                                                                            </Badge>
+                                                                        </CardTitle>
+                                                                    </CardHeader>
+                                                                    <CardContent className="rounded-md bg-card p-0">
+                                                                        <ul className="m-0 flex w-full basis-full list-none flex-col gap-2 pt-2 pl-0">
+                                                                            {/* Cabe├ºalho */}
+                                                                            <li className="hidden flex-wrap items-center gap-2 px-3 py-2 md:flex">
+                                                                                <span className="text-start leading-4 font-bold no-underline md:min-w-[32px]">
+                                                                                    Qtd.
+                                                                                </span>
+                                                                                <span className="grow text-start leading-4 font-bold no-underline">
+                                                                                    Item
+                                                                                </span>
+                                                                                <span className="hidden text-end leading-4 font-bold no-underline md:flex md:min-w-[120px] md:justify-end">
+                                                                                    Valor
+                                                                                    unitário
+                                                                                </span>
+                                                                                <span className="text-end leading-4 font-bold no-underline md:min-w-[120px]">
+                                                                                    Subtotal
+                                                                                </span>
+                                                                            </li>
 
-                                                                        {/* Itens do pedido */}
-                                                                        {(() => {
-                                                                            const order =
-                                                                                row.original;
-                                                                            let items =
-                                                                                [];
-
-                                                                            // Para Takeat: mesclar dados do raw (valores corretos) com dados do banco (associações)
-                                                                            if (
-                                                                                order.provider ===
-                                                                                    'takeat' &&
-                                                                                order
-                                                                                    .raw
-                                                                                    ?.basket
-                                                                                    ?.orders
-                                                                            ) {
-                                                                                const rawItems =
-                                                                                    order
-                                                                                        .raw
-                                                                                        .basket
-                                                                                        .orders;
-                                                                                const dbItems =
-                                                                                    order.items ||
-                                                                                    [];
-
-                                                                                items =
-                                                                                    rawItems.map(
-                                                                                        (
-                                                                                            rawItem: any,
-                                                                                            index: number,
-                                                                                        ) => {
-                                                                                            // Encontrar item correspondente no banco pelo índice ou SKU
-                                                                                            const dbItem =
-                                                                                                dbItems.find(
-                                                                                                    (
-                                                                                                        db: any,
-                                                                                                    ) =>
-                                                                                                        db.sku ===
-                                                                                                            rawItem.product?.id?.toString() ||
-                                                                                                        db.name ===
-                                                                                                            rawItem
-                                                                                                                .product
-                                                                                                                ?.name,
-                                                                                                ) ||
-                                                                                                dbItems[
-                                                                                                    index
-                                                                                                ];
-
-                                                                                            // Mapear complement_categories para options (para exibição)
-                                                                                            const options: any[] =
-                                                                                                [];
-                                                                                            if (
-                                                                                                rawItem.complement_categories
-                                                                                            ) {
-                                                                                                rawItem.complement_categories.forEach(
-                                                                                                    (
-                                                                                                        cat: any,
-                                                                                                    ) => {
-                                                                                                        cat.order_complements?.forEach(
-                                                                                                            (
-                                                                                                                comp: any,
-                                                                                                            ) => {
-                                                                                                                options.push(
-                                                                                                                    {
-                                                                                                                        id: comp.id,
-                                                                                                                        name:
-                                                                                                                            comp
-                                                                                                                                .complement
-                                                                                                                                ?.name ||
-                                                                                                                            '',
-                                                                                                                        quantity:
-                                                                                                                            comp.amount ||
-                                                                                                                            1,
-                                                                                                                        unitPrice: 0,
-                                                                                                                        price: 0,
-                                                                                                                        totalPrice: 0,
-                                                                                                                    },
-                                                                                                                );
-                                                                                                            },
-                                                                                                        );
-                                                                                                    },
-                                                                                                );
-                                                                                            }
-
-                                                                                            // Mesclar dados: valores do raw + associações do banco
-                                                                                            return {
-                                                                                                id:
-                                                                                                    dbItem?.id ||
-                                                                                                    rawItem.id,
-                                                                                                qty:
-                                                                                                    rawItem.amount ||
-                                                                                                    1,
-                                                                                                quantity:
-                                                                                                    rawItem.amount ||
-                                                                                                    1,
-                                                                                                name:
-                                                                                                    rawItem
-                                                                                                        .product
-                                                                                                        ?.name ||
-                                                                                                    '',
-                                                                                                sku:
-                                                                                                    dbItem?.sku ||
-                                                                                                    rawItem.product?.id?.toString(),
-                                                                                                price: parseFloat(
-                                                                                                    rawItem.price ||
-                                                                                                        0,
-                                                                                                ),
-                                                                                                unit_price:
-                                                                                                    parseFloat(
-                                                                                                        rawItem.price ||
-                                                                                                            0,
-                                                                                                    ),
-                                                                                                total_price:
-                                                                                                    parseFloat(
-                                                                                                        rawItem.total_price ||
-                                                                                                            0,
-                                                                                                    ),
-                                                                                                // Dados do banco (associações)
-                                                                                                internal_product:
-                                                                                                    dbItem?.internal_product,
-                                                                                                mappings:
-                                                                                                    dbItem?.mappings ||
-                                                                                                    [],
-                                                                                                add_ons:
-                                                                                                    dbItem?.add_ons ||
-                                                                                                    [],
-                                                                                                complement_categories:
-                                                                                                    rawItem.complement_categories ||
-                                                                                                    [],
-                                                                                                options:
-                                                                                                    options,
-                                                                                                observations:
-                                                                                                    dbItem?.observations,
-                                                                                            };
-                                                                                        },
-                                                                                    );
-                                                                            } else {
-                                                                                // Para iFood e outros: usar raw.items ou items do banco
-                                                                                items =
-                                                                                    order
-                                                                                        .raw
-                                                                                        ?.items ||
-                                                                                    order.items ||
-                                                                                    [];
-                                                                            }
-
-                                                                            const displayItems =
-                                                                                items.map(
-                                                                                    (
-                                                                                        item: any,
-                                                                                    ) => ({
-                                                                                        id: item.id,
-                                                                                        quantity:
-                                                                                            item.qty ||
-                                                                                            item.quantity ||
-                                                                                            0,
-                                                                                        name: item.name,
-                                                                                        unitPrice:
-                                                                                            item.unit_price ||
-                                                                                            item.unitPrice ||
-                                                                                            item.price ||
-                                                                                            0,
-                                                                                        totalPrice:
-                                                                                            item.total_price ||
-                                                                                            item.totalPrice ||
-                                                                                            (item.unit_price ||
-                                                                                                item.unitPrice ||
-                                                                                                item.price ||
-                                                                                                0) *
-                                                                                                (item.qty ||
-                                                                                                    item.quantity ||
-                                                                                                    0) ||
-                                                                                            0,
-                                                                                        observations:
-                                                                                            item.observations,
-                                                                                        options:
-                                                                                            item.options ||
-                                                                                            [],
-                                                                                        add_ons:
-                                                                                            item.add_ons ||
-                                                                                            [],
-                                                                                        internal_product:
-                                                                                            item.internal_product,
-                                                                                        mappings:
-                                                                                            item.mappings ||
-                                                                                            [],
-                                                                                        sku: item.sku,
-                                                                                    }),
-                                                                                );
-
-                                                                            return displayItems.map(
+                                                                            {/* Itens do pedido */}
+                                                                            {displayItems.map(
                                                                                 (
-                                                                                    item: any,
-                                                                                    index: number,
+                                                                                    item,
+                                                                                    index,
                                                                                 ) => (
                                                                                     <li
                                                                                         key={`${item.id}-${index}`}
                                                                                         className="flex flex-wrap items-center gap-2 px-3 py-2"
                                                                                     >
-                                                                                        {/* Produto principal (1º nível) */}
+                                                                                        {/* Produto principal (1┬║ n├¡vel) */}
                                                                                         <span className="md:min-w-[32px]">
                                                                                             {
                                                                                                 item.quantity
@@ -1375,7 +1303,7 @@ export function DataTable({
                                                                                                         true,
                                                                                                     );
                                                                                                 }}
-                                                                                                title="Editar associações"
+                                                                                                title="Editar associa├º├Áes"
                                                                                             >
                                                                                                 <Pencil className="h-3 w-3" />
                                                                                             </Button> */}
@@ -1414,7 +1342,7 @@ export function DataTable({
                                                                                             )}
                                                                                         </span>
 
-                                                                                        {/* Segundo nível (options) */}
+                                                                                        {/* Segundo n├¡vel (options) */}
                                                                                         {item
                                                                                             .options
                                                                                             ?.length >
@@ -1469,7 +1397,7 @@ export function DataTable({
                                                                                                                 )}
                                                                                                             </span>
 
-                                                                                                            {/* Terceiro nível (customizations) */}
+                                                                                                            {/* Terceiro n├¡vel (customizations) */}
                                                                                                             {opt
                                                                                                                 .customizations
                                                                                                                 ?.length >
@@ -1531,7 +1459,7 @@ export function DataTable({
                                                                                             </ul>
                                                                                         )}
 
-                                                                                        {/* Complementos/Add-ons (só renderizar se NÃO houver options) */}
+                                                                                        {/* Complementos/Add-ons (s├│ renderizar se N├âO houver options) */}
                                                                                         {item
                                                                                             .add_ons
                                                                                             ?.length >
@@ -1600,80 +1528,19 @@ export function DataTable({
                                                                                             )}
                                                                                     </li>
                                                                                 ),
-                                                                            );
-                                                                        })()}
-                                                                    </ul>
+                                                                            )}
+                                                                        </ul>
 
-                                                                    {/* Rodapé com total */}
-                                                                    <div className="flex w-full justify-between border-t px-3 py-4">
-                                                                        <div className="flex w-full flex-row justify-between gap-2">
-                                                                            <span className="leading-4 font-semibold">
-                                                                                Total
-                                                                                dos
-                                                                                itens
-                                                                            </span>
-                                                                            <span className="leading-4 font-semibold">
-                                                                                {(() => {
-                                                                                    const order =
-                                                                                        row.original;
-                                                                                    let total = 0;
-
-                                                                                    // Para Takeat: usar basket total_price
-                                                                                    if (
-                                                                                        order.provider ===
-                                                                                            'takeat' &&
-                                                                                        order
-                                                                                            .raw
-                                                                                            ?.basket
-                                                                                            ?.total_price
-                                                                                    ) {
-                                                                                        total =
-                                                                                            parseFloat(
-                                                                                                String(
-                                                                                                    order
-                                                                                                        .raw
-                                                                                                        .basket
-                                                                                                        .total_price,
-                                                                                                ),
-                                                                                            );
-                                                                                    } else {
-                                                                                        // Para outros providers: somar items
-                                                                                        const items =
-                                                                                            order
-                                                                                                .raw
-                                                                                                ?.items ||
-                                                                                            order.items ||
-                                                                                            [];
-                                                                                        total =
-                                                                                            items.reduce(
-                                                                                                (
-                                                                                                    sum: number,
-                                                                                                    item: any,
-                                                                                                ) => {
-                                                                                                    const quantity =
-                                                                                                        item.qty ||
-                                                                                                        item.quantity ||
-                                                                                                        0;
-                                                                                                    const unitPrice =
-                                                                                                        item.unit_price ||
-                                                                                                        item.unitPrice ||
-                                                                                                        item.price ||
-                                                                                                        0;
-                                                                                                    const price =
-                                                                                                        item.totalPrice ||
-                                                                                                        unitPrice *
-                                                                                                            quantity ||
-                                                                                                        0;
-                                                                                                    return (
-                                                                                                        sum +
-                                                                                                        price
-                                                                                                    );
-                                                                                                },
-                                                                                                0,
-                                                                                            );
-                                                                                    }
-
-                                                                                    return new Intl.NumberFormat(
+                                                                        {/* Rodap├® com total */}
+                                                                        <div className="flex w-full justify-between border-t px-3 py-4">
+                                                                            <div className="flex w-full flex-row justify-between gap-2">
+                                                                                <span className="leading-4 font-semibold">
+                                                                                    Total
+                                                                                    dos
+                                                                                    itens
+                                                                                </span>
+                                                                                <span className="leading-4 font-semibold">
+                                                                                    {new Intl.NumberFormat(
                                                                                         'pt-BR',
                                                                                         {
                                                                                             style: 'currency',
@@ -1681,23 +1548,90 @@ export function DataTable({
                                                                                                 'BRL',
                                                                                         },
                                                                                     ).format(
-                                                                                        total,
-                                                                                    );
-                                                                                })()}
-                                                                            </span>
+                                                                                        itemsTotal,
+                                                                                    )}
+                                                                                </span>
+                                                                            </div>
                                                                         </div>
-                                                                    </div>
-                                                                </CardContent>
-                                                            </Card>
+                                                                    </CardContent>
+                                                                </Card>
 
-                                                            {/* Card: Dados do Cliente Takeat */}
-                                                            {row.original
-                                                                .provider ===
-                                                                'takeat' &&
-                                                                row.original.raw
-                                                                    ?.session
-                                                                    ?.bills?.[0]
-                                                                    ?.buyer && (
+                                                                {/* Card: Dados do Cliente Takeat */}
+                                                                {row.original
+                                                                    .provider ===
+                                                                    'takeat' &&
+                                                                    row.original
+                                                                        .raw
+                                                                        ?.session
+                                                                        ?.bills?.[0]
+                                                                        ?.buyer && (
+                                                                        <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+                                                                            <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                                                                                <CardTitle className="flex h-[18px] items-center font-semibold">
+                                                                                    Dados
+                                                                                    do
+                                                                                    Cliente
+                                                                                </CardTitle>
+                                                                            </CardHeader>
+                                                                            <CardContent className="rounded-md bg-card p-0">
+                                                                                <ul className="m-0 flex w-full flex-col ps-0">
+                                                                                    {row
+                                                                                        .original
+                                                                                        .raw
+                                                                                        .session
+                                                                                        .bills[0]
+                                                                                        .buyer
+                                                                                        .name && (
+                                                                                        <li className="flex flex-row items-center justify-between gap-2 border-b border-border px-3 py-4 last:border-b-0">
+                                                                                            <span className="text-sm leading-4 font-normal text-muted-foreground">
+                                                                                                Nome
+                                                                                            </span>
+                                                                                            <span className="text-sm leading-4 font-medium whitespace-nowrap">
+                                                                                                {
+                                                                                                    row
+                                                                                                        .original
+                                                                                                        .raw
+                                                                                                        .session
+                                                                                                        .bills[0]
+                                                                                                        .buyer
+                                                                                                        .name
+                                                                                                }
+                                                                                            </span>
+                                                                                        </li>
+                                                                                    )}
+                                                                                    {row
+                                                                                        .original
+                                                                                        .raw
+                                                                                        .session
+                                                                                        .bills[0]
+                                                                                        .buyer
+                                                                                        .phone && (
+                                                                                        <li className="flex flex-row items-center justify-between gap-2 px-3 py-4">
+                                                                                            <span className="text-sm leading-4 font-normal text-muted-foreground">
+                                                                                                Telefone
+                                                                                            </span>
+                                                                                            <span className="font-mono text-sm leading-4 font-medium whitespace-nowrap">
+                                                                                                {
+                                                                                                    row
+                                                                                                        .original
+                                                                                                        .raw
+                                                                                                        .session
+                                                                                                        .bills[0]
+                                                                                                        .buyer
+                                                                                                        .phone
+                                                                                                }
+                                                                                            </span>
+                                                                                        </li>
+                                                                                    )}
+                                                                                </ul>
+                                                                            </CardContent>
+                                                                        </Card>
+                                                                    )}
+
+                                                                {/* Card: Dados do Cliente iFood */}
+                                                                {row.original
+                                                                    .raw
+                                                                    ?.customer && (
                                                                     <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
                                                                         <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
                                                                             <CardTitle className="flex h-[18px] items-center font-semibold">
@@ -1708,660 +1642,598 @@ export function DataTable({
                                                                         </CardHeader>
                                                                         <CardContent className="rounded-md bg-card p-0">
                                                                             <ul className="m-0 flex w-full flex-col ps-0">
-                                                                                {row
-                                                                                    .original
-                                                                                    .raw
-                                                                                    .session
-                                                                                    .bills[0]
-                                                                                    .buyer
-                                                                                    .name && (
-                                                                                    <li className="flex flex-row items-center justify-between gap-2 border-b border-border px-3 py-4 last:border-b-0">
-                                                                                        <span className="text-sm leading-4 font-normal text-muted-foreground">
-                                                                                            Nome
-                                                                                        </span>
-                                                                                        <span className="text-sm leading-4 font-medium whitespace-nowrap">
+                                                                                <li className="flex flex-col gap-1 px-3 py-2">
+                                                                                    {typeof row
+                                                                                        .original
+                                                                                        .raw
+                                                                                        .customer
+                                                                                        .name ===
+                                                                                        'string' && (
+                                                                                        <span className="text-xs text-muted-foreground">
                                                                                             {
                                                                                                 row
                                                                                                     .original
                                                                                                     .raw
-                                                                                                    .session
-                                                                                                    .bills[0]
-                                                                                                    .buyer
+                                                                                                    .customer
                                                                                                     .name
                                                                                             }
                                                                                         </span>
-                                                                                    </li>
-                                                                                )}
-                                                                                {row
-                                                                                    .original
-                                                                                    .raw
-                                                                                    .session
-                                                                                    .bills[0]
-                                                                                    .buyer
-                                                                                    .phone && (
-                                                                                    <li className="flex flex-row items-center justify-between gap-2 px-3 py-4">
-                                                                                        <span className="text-sm leading-4 font-normal text-muted-foreground">
-                                                                                            Telefone
-                                                                                        </span>
-                                                                                        <span className="font-mono text-sm leading-4 font-medium whitespace-nowrap">
+                                                                                    )}
+                                                                                    {row
+                                                                                        .original
+                                                                                        .raw
+                                                                                        .customer
+                                                                                        .phone
+                                                                                        ?.number && (
+                                                                                        <span className="text-xs text-muted-foreground">
+                                                                                            Telefone:{' '}
                                                                                             {
                                                                                                 row
                                                                                                     .original
                                                                                                     .raw
-                                                                                                    .session
-                                                                                                    .bills[0]
-                                                                                                    .buyer
+                                                                                                    .customer
                                                                                                     .phone
+                                                                                                    .number
                                                                                             }
                                                                                         </span>
-                                                                                    </li>
-                                                                                )}
+                                                                                    )}
+                                                                                    {typeof row
+                                                                                        .original
+                                                                                        .raw
+                                                                                        .customer
+                                                                                        .documentNumber ===
+                                                                                        'string' && (
+                                                                                        <span className="text-xs text-muted-foreground">
+                                                                                            Documento:{' '}
+                                                                                            {
+                                                                                                row
+                                                                                                    .original
+                                                                                                    .raw
+                                                                                                    .customer
+                                                                                                    .documentNumber
+                                                                                            }
+                                                                                        </span>
+                                                                                    )}
+                                                                                </li>
                                                                             </ul>
                                                                         </CardContent>
                                                                     </Card>
                                                                 )}
 
-                                                            {/* Card: Dados do Cliente iFood */}
-                                                            {row.original.raw
-                                                                ?.customer && (
-                                                                <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
-                                                                    <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
-                                                                        <CardTitle className="flex h-[18px] items-center font-semibold">
-                                                                            Dados
-                                                                            do
-                                                                            Cliente
-                                                                        </CardTitle>
-                                                                    </CardHeader>
-                                                                    <CardContent className="rounded-md bg-card p-0">
-                                                                        <ul className="m-0 flex w-full flex-col ps-0">
-                                                                            <li className="flex flex-col gap-1 px-3 py-2">
-                                                                                {typeof row
-                                                                                    .original
-                                                                                    .raw
-                                                                                    .customer
-                                                                                    .name ===
-                                                                                    'string' && (
-                                                                                    <span className="text-xs text-muted-foreground">
-                                                                                        {
-                                                                                            row
-                                                                                                .original
-                                                                                                .raw
-                                                                                                .customer
-                                                                                                .name
-                                                                                        }
-                                                                                    </span>
-                                                                                )}
-                                                                                {row
-                                                                                    .original
-                                                                                    .raw
-                                                                                    .customer
-                                                                                    .phone
-                                                                                    ?.number && (
-                                                                                    <span className="text-xs text-muted-foreground">
-                                                                                        Telefone:{' '}
-                                                                                        {
-                                                                                            row
-                                                                                                .original
-                                                                                                .raw
-                                                                                                .customer
-                                                                                                .phone
-                                                                                                .number
-                                                                                        }
-                                                                                    </span>
-                                                                                )}
-                                                                                {typeof row
-                                                                                    .original
-                                                                                    .raw
-                                                                                    .customer
-                                                                                    .documentNumber ===
-                                                                                    'string' && (
-                                                                                    <span className="text-xs text-muted-foreground">
-                                                                                        Documento:{' '}
-                                                                                        {
-                                                                                            row
-                                                                                                .original
-                                                                                                .raw
-                                                                                                .customer
-                                                                                                .documentNumber
-                                                                                        }
-                                                                                    </span>
-                                                                                )}
-                                                                            </li>
-                                                                        </ul>
-                                                                    </CardContent>
-                                                                </Card>
-                                                            )}
-
-                                                            {/* Card: Endereço de Entrega */}
-                                                            {row.original.raw
-                                                                ?.delivery
-                                                                ?.deliveryAddress && (
-                                                                <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
-                                                                    <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
-                                                                        <CardTitle className="flex h-[18px] items-center font-semibold">
-                                                                            Endereço
-                                                                            de
-                                                                            Entrega
-                                                                        </CardTitle>
-                                                                    </CardHeader>
-                                                                    <CardContent className="rounded-md bg-card p-0">
-                                                                        <ul className="m-0 flex w-full flex-col ps-0">
-                                                                            <li className="flex flex-col gap-1 px-3 py-2">
-                                                                                {row
-                                                                                    .original
-                                                                                    .raw
-                                                                                    .delivery
-                                                                                    .deliveryAddress
-                                                                                    .streetName && (
-                                                                                    <span className="text-xs text-muted-foreground">
-                                                                                        {
-                                                                                            row
-                                                                                                .original
-                                                                                                .raw
-                                                                                                .delivery
-                                                                                                .deliveryAddress
-                                                                                                .streetName
-                                                                                        }
-
-                                                                                        ,{' '}
-                                                                                        {
-                                                                                            row
-                                                                                                .original
-                                                                                                .raw
-                                                                                                .delivery
-                                                                                                .deliveryAddress
-                                                                                                .streetNumber
-                                                                                        }
-                                                                                    </span>
-                                                                                )}
-                                                                                {row
-                                                                                    .original
-                                                                                    .raw
-                                                                                    .delivery
-                                                                                    .deliveryAddress
-                                                                                    .neighborhood && (
-                                                                                    <span className="text-xs text-muted-foreground">
-                                                                                        Bairro:{' '}
-                                                                                        {
-                                                                                            row
-                                                                                                .original
-                                                                                                .raw
-                                                                                                .delivery
-                                                                                                .deliveryAddress
-                                                                                                .neighborhood
-                                                                                        }
-                                                                                    </span>
-                                                                                )}
-                                                                                {row
-                                                                                    .original
-                                                                                    .raw
-                                                                                    .delivery
-                                                                                    .deliveryAddress
-                                                                                    .city && (
-                                                                                    <span className="text-xs text-muted-foreground">
-                                                                                        Cidade:{' '}
-                                                                                        {
-                                                                                            row
-                                                                                                .original
-                                                                                                .raw
-                                                                                                .delivery
-                                                                                                .deliveryAddress
-                                                                                                .city
-                                                                                        }
-                                                                                    </span>
-                                                                                )}
-                                                                                {row
-                                                                                    .original
-                                                                                    .raw
-                                                                                    .delivery
-                                                                                    .deliveryAddress
-                                                                                    .state && (
-                                                                                    <span className="text-xs text-muted-foreground">
-                                                                                        UF:{' '}
-                                                                                        {
-                                                                                            row
-                                                                                                .original
-                                                                                                .raw
-                                                                                                .delivery
-                                                                                                .deliveryAddress
-                                                                                                .state
-                                                                                        }
-                                                                                    </span>
-                                                                                )}
-                                                                                {row
-                                                                                    .original
-                                                                                    .raw
-                                                                                    .delivery
-                                                                                    .deliveryAddress
-                                                                                    .complement && (
-                                                                                    <span className="text-xs text-muted-foreground">
-                                                                                        Complemento:{' '}
-                                                                                        {
-                                                                                            row
-                                                                                                .original
-                                                                                                .raw
-                                                                                                .delivery
-                                                                                                .deliveryAddress
-                                                                                                .complement
-                                                                                        }
-                                                                                    </span>
-                                                                                )}
-                                                                                {row
-                                                                                    .original
-                                                                                    .raw
-                                                                                    .delivery
-                                                                                    .deliveryAddress
-                                                                                    .reference && (
-                                                                                    <span className="text-xs text-muted-foreground">
-                                                                                        Referência:{' '}
-                                                                                        {
-                                                                                            row
-                                                                                                .original
-                                                                                                .raw
-                                                                                                .delivery
-                                                                                                .deliveryAddress
-                                                                                                .reference
-                                                                                        }
-                                                                                    </span>
-                                                                                )}
-                                                                                {row
-                                                                                    .original
-                                                                                    .raw
-                                                                                    .delivery
-                                                                                    .deliveryAddress
-                                                                                    .postalCode && (
-                                                                                    <span className="text-xs text-muted-foreground">
-                                                                                        CEP:{' '}
-                                                                                        {
-                                                                                            row
-                                                                                                .original
-                                                                                                .raw
-                                                                                                .delivery
-                                                                                                .deliveryAddress
-                                                                                                .postalCode
-                                                                                        }
-                                                                                    </span>
-                                                                                )}
-                                                                            </li>
-                                                                        </ul>
-                                                                    </CardContent>
-                                                                </Card>
-                                                            )}
-                                                            {row.original.raw
-                                                                ?.delivery
-                                                                ?.observations && (
-                                                                <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
-                                                                    <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
-                                                                        <CardTitle className="flex h-[18px] items-center font-semibold">
-                                                                            Observações
-                                                                            da
-                                                                            Entrega
-                                                                        </CardTitle>
-                                                                    </CardHeader>
-                                                                    <CardContent className="rounded-md bg-card p-0">
-                                                                        <div className="px-3 py-4">
-                                                                            <p className="text-sm leading-4 font-normal text-gray-700">
-                                                                                {
-                                                                                    row
+                                                                {/* Card: Endere├ºo de Entrega */}
+                                                                {row.original
+                                                                    .raw
+                                                                    ?.delivery
+                                                                    ?.deliveryAddress && (
+                                                                    <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+                                                                        <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                                                                            <CardTitle className="flex h-[18px] items-center font-semibold">
+                                                                                Endere├ºo
+                                                                                de
+                                                                                Entrega
+                                                                            </CardTitle>
+                                                                        </CardHeader>
+                                                                        <CardContent className="rounded-md bg-card p-0">
+                                                                            <ul className="m-0 flex w-full flex-col ps-0">
+                                                                                <li className="flex flex-col gap-1 px-3 py-2">
+                                                                                    {row
                                                                                         .original
                                                                                         .raw
                                                                                         .delivery
-                                                                                        .observations
-                                                                                }
-                                                                            </p>
-                                                                        </div>
-                                                                    </CardContent>
-                                                                </Card>
-                                                            )}
+                                                                                        .deliveryAddress
+                                                                                        .streetName && (
+                                                                                        <span className="text-xs text-muted-foreground">
+                                                                                            {
+                                                                                                row
+                                                                                                    .original
+                                                                                                    .raw
+                                                                                                    .delivery
+                                                                                                    .deliveryAddress
+                                                                                                    .streetName
+                                                                                            }
 
-                                                            {/* Outros detalhes: Cupons, CPF, Tipo de Pedido/Entrega, Agendamento, etc. */}
-                                                            <OrderExpandedDetails
-                                                                order={
-                                                                    row.original
-                                                                }
-                                                            />
-
-                                                            {/* Card: Pagamento */}
-                                                            <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
-                                                                <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
-                                                                    <CardTitle className="flex h-[18px] items-center font-semibold">
-                                                                        Pagamento
-                                                                    </CardTitle>
-                                                                </CardHeader>
-                                                                <CardContent className="rounded-md bg-card p-0">
-                                                                    {/* Detalhes de pagamento - iFood */}
-                                                                    {row
-                                                                        .original
-                                                                        .raw
-                                                                        ?.payments
-                                                                        ?.methods &&
-                                                                        row
-                                                                            .original
-                                                                            .raw
-                                                                            .payments
-                                                                            .methods
-                                                                            .length >
-                                                                            0 && (
-                                                                            <>
-                                                                                <div className="flex w-full flex-row justify-between gap-2 border-b px-3 py-2">
-                                                                                    <span className="text-sm font-semibold">
-                                                                                        Pagamento
-                                                                                    </span>
-                                                                                    <span className="text-sm font-semibold">
-                                                                                        {row
+                                                                                            ,{' '}
+                                                                                            {
+                                                                                                row
+                                                                                                    .original
+                                                                                                    .raw
+                                                                                                    .delivery
+                                                                                                    .deliveryAddress
+                                                                                                    .streetNumber
+                                                                                            }
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {row
+                                                                                        .original
+                                                                                        .raw
+                                                                                        .delivery
+                                                                                        .deliveryAddress
+                                                                                        .neighborhood && (
+                                                                                        <span className="text-xs text-muted-foreground">
+                                                                                            Bairro:{' '}
+                                                                                            {
+                                                                                                row
+                                                                                                    .original
+                                                                                                    .raw
+                                                                                                    .delivery
+                                                                                                    .deliveryAddress
+                                                                                                    .neighborhood
+                                                                                            }
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {row
+                                                                                        .original
+                                                                                        .raw
+                                                                                        .delivery
+                                                                                        .deliveryAddress
+                                                                                        .city && (
+                                                                                        <span className="text-xs text-muted-foreground">
+                                                                                            Cidade:{' '}
+                                                                                            {
+                                                                                                row
+                                                                                                    .original
+                                                                                                    .raw
+                                                                                                    .delivery
+                                                                                                    .deliveryAddress
+                                                                                                    .city
+                                                                                            }
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {row
+                                                                                        .original
+                                                                                        .raw
+                                                                                        .delivery
+                                                                                        .deliveryAddress
+                                                                                        .state && (
+                                                                                        <span className="text-xs text-muted-foreground">
+                                                                                            UF:{' '}
+                                                                                            {
+                                                                                                row
+                                                                                                    .original
+                                                                                                    .raw
+                                                                                                    .delivery
+                                                                                                    .deliveryAddress
+                                                                                                    .state
+                                                                                            }
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {row
+                                                                                        .original
+                                                                                        .raw
+                                                                                        .delivery
+                                                                                        .deliveryAddress
+                                                                                        .complement && (
+                                                                                        <span className="text-xs text-muted-foreground">
+                                                                                            Complemento:{' '}
+                                                                                            {
+                                                                                                row
+                                                                                                    .original
+                                                                                                    .raw
+                                                                                                    .delivery
+                                                                                                    .deliveryAddress
+                                                                                                    .complement
+                                                                                            }
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {row
+                                                                                        .original
+                                                                                        .raw
+                                                                                        .delivery
+                                                                                        .deliveryAddress
+                                                                                        .reference && (
+                                                                                        <span className="text-xs text-muted-foreground">
+                                                                                            Refer├¬ncia:{' '}
+                                                                                            {
+                                                                                                row
+                                                                                                    .original
+                                                                                                    .raw
+                                                                                                    .delivery
+                                                                                                    .deliveryAddress
+                                                                                                    .reference
+                                                                                            }
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {row
+                                                                                        .original
+                                                                                        .raw
+                                                                                        .delivery
+                                                                                        .deliveryAddress
+                                                                                        .postalCode && (
+                                                                                        <span className="text-xs text-muted-foreground">
+                                                                                            CEP:{' '}
+                                                                                            {
+                                                                                                row
+                                                                                                    .original
+                                                                                                    .raw
+                                                                                                    .delivery
+                                                                                                    .deliveryAddress
+                                                                                                    .postalCode
+                                                                                            }
+                                                                                        </span>
+                                                                                    )}
+                                                                                </li>
+                                                                            </ul>
+                                                                        </CardContent>
+                                                                    </Card>
+                                                                )}
+                                                                {row.original
+                                                                    .raw
+                                                                    ?.delivery
+                                                                    ?.observations && (
+                                                                    <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+                                                                        <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                                                                            <CardTitle className="flex h-[18px] items-center font-semibold">
+                                                                                Observa├º├Áes
+                                                                                da
+                                                                                Entrega
+                                                                            </CardTitle>
+                                                                        </CardHeader>
+                                                                        <CardContent className="rounded-md bg-card p-0">
+                                                                            <div className="px-3 py-4">
+                                                                                <p className="text-sm leading-4 font-normal text-gray-700">
+                                                                                    {
+                                                                                        row
                                                                                             .original
                                                                                             .raw
-                                                                                            .payments
-                                                                                            .methods[0]
-                                                                                            ?.type ===
-                                                                                        'ONLINE'
-                                                                                            ? 'Online'
-                                                                                            : 'Offline'}
-                                                                                    </span>
-                                                                                </div>
-                                                                                <ul className="m-0 flex w-full flex-col ps-0">
-                                                                                    {row.original.raw.payments.methods.map(
-                                                                                        (
-                                                                                            payment: unknown,
-                                                                                            index: number,
-                                                                                        ) => (
-                                                                                            <li
-                                                                                                key={
-                                                                                                    index
-                                                                                                }
-                                                                                                className="flex flex-col gap-2 border-b-1 px-3 py-4 last:border-b-0"
-                                                                                            >
-                                                                                                <div className="flex w-full flex-row items-center justify-between gap-2">
-                                                                                                    <div className="flex items-center gap-2">
-                                                                                                        <span className="text-sm leading-4 font-medium">
-                                                                                                            {payment.method ===
-                                                                                                            'CASH'
-                                                                                                                ? 'Dinheiro'
-                                                                                                                : payment.method ===
-                                                                                                                    'CREDIT'
-                                                                                                                  ? 'Crédito'
-                                                                                                                  : payment.method ===
-                                                                                                                      'DEBIT'
-                                                                                                                    ? 'Débito'
-                                                                                                                    : payment.method ===
-                                                                                                                        'MEAL_VOUCHER'
-                                                                                                                      ? 'Vale Refeição'
-                                                                                                                      : payment.method ===
-                                                                                                                          'FOOD_VOUCHER'
-                                                                                                                        ? 'Vale Alimentação'
-                                                                                                                        : payment.method ===
-                                                                                                                            'DIGITAL_WALLET'
-                                                                                                                          ? 'Carteira Digital'
-                                                                                                                          : payment.method ===
-                                                                                                                              'PIX'
-                                                                                                                            ? 'PIX'
-                                                                                                                            : payment.method}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                    <span className="text-sm leading-4 font-semibold whitespace-nowrap">
-                                                                                                        {new Intl.NumberFormat(
-                                                                                                            'pt-BR',
-                                                                                                            {
-                                                                                                                style: 'currency',
-                                                                                                                currency:
-                                                                                                                    'BRL',
-                                                                                                            },
-                                                                                                        ).format(
-                                                                                                            payment.value ||
-                                                                                                                0,
-                                                                                                        )}
-                                                                                                    </span>
-                                                                                                </div>
-                                                                                                {(payment
-                                                                                                    .card
-                                                                                                    ?.brand ||
-                                                                                                    payment
-                                                                                                        .wallet
-                                                                                                        ?.name ||
-                                                                                                    payment
-                                                                                                        .cash
-                                                                                                        ?.changeFor) && (
-                                                                                                    <ul className="flex w-full flex-col gap-2 pl-0">
-                                                                                                        {payment
-                                                                                                            .card
-                                                                                                            ?.brand && (
-                                                                                                            <li className="flex w-full flex-row items-start justify-between px-0 py-0">
-                                                                                                                <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                                                                                    {
-                                                                                                                        payment
-                                                                                                                            .card
-                                                                                                                            .brand
-                                                                                                                    }
-                                                                                                                </span>
-                                                                                                            </li>
-                                                                                                        )}
-                                                                                                        {payment
-                                                                                                            .wallet
-                                                                                                            ?.name && (
-                                                                                                            <li className="flex w-full flex-row items-start justify-between px-0 py-0">
-                                                                                                                <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                                                                                    {payment.wallet.name
-                                                                                                                        .replace(
-                                                                                                                            '_',
-                                                                                                                            ' ',
-                                                                                                                        )
-                                                                                                                        .toLowerCase()
-                                                                                                                        .replace(
-                                                                                                                            /\b\w/g,
-                                                                                                                            (
-                                                                                                                                l: string,
-                                                                                                                            ) =>
-                                                                                                                                l.toUpperCase(),
-                                                                                                                        )}
-                                                                                                                </span>
-                                                                                                            </li>
-                                                                                                        )}
-                                                                                                        {payment
-                                                                                                            .cash
-                                                                                                            ?.changeFor && (
-                                                                                                            <li className="flex w-full flex-row items-start justify-between px-0 py-0">
-                                                                                                                <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                                                                                    Troco
-                                                                                                                    para:{' '}
-                                                                                                                    {new Intl.NumberFormat(
-                                                                                                                        'pt-BR',
-                                                                                                                        {
-                                                                                                                            style: 'currency',
-                                                                                                                            currency:
-                                                                                                                                'BRL',
-                                                                                                                        },
-                                                                                                                    ).format(
-                                                                                                                        payment
-                                                                                                                            .cash
-                                                                                                                            .changeFor,
-                                                                                                                    )}
-                                                                                                                </span>
-                                                                                                            </li>
-                                                                                                        )}
-                                                                                                    </ul>
-                                                                                                )}
-                                                                                            </li>
-                                                                                        ),
-                                                                                    )}
-                                                                                </ul>
-                                                                            </>
-                                                                        )}
+                                                                                            .delivery
+                                                                                            .observations
+                                                                                    }
+                                                                                </p>
+                                                                            </div>
+                                                                        </CardContent>
+                                                                    </Card>
+                                                                )}
 
-                                                                    {/* Detalhes de pagamento - Takeat */}
-                                                                    {row
-                                                                        .original
-                                                                        .raw
-                                                                        ?.session
-                                                                        ?.payments &&
-                                                                        row
+                                                                {/* Outros detalhes: Cupons, CPF, Tipo de Pedido/Entrega, Agendamento, etc. */}
+                                                                <OrderExpandedDetails
+                                                                    order={
+                                                                        row.original
+                                                                    }
+                                                                />
+
+                                                                {/* Card: Pagamento */}
+                                                                <Card className="h-fit gap-1 border-0 bg-gray-100 p-1 text-sm shadow-none dark:bg-neutral-950">
+                                                                    <CardHeader className="gap-0 bg-gray-100 px-2 py-2 dark:bg-neutral-950">
+                                                                        <CardTitle className="flex h-[18px] items-center font-semibold">
+                                                                            Pagamento
+                                                                        </CardTitle>
+                                                                    </CardHeader>
+                                                                    <CardContent className="rounded-md bg-card p-0">
+                                                                        {/* Detalhes de pagamento - iFood */}
+                                                                        {row
                                                                             .original
                                                                             .raw
-                                                                            .session
-                                                                            .payments
-                                                                            .length >
-                                                                            0 && (
-                                                                            <div className="flex w-full flex-col gap-2 px-3 py-4">
-                                                                                {/* Total pago */}
-                                                                                <div className="flex w-full flex-row justify-between gap-2">
-                                                                                    <span className="text-sm font-semibold">
-                                                                                        Total
-                                                                                        pago
-                                                                                    </span>
-                                                                                    <span className="text-sm font-semibold">
-                                                                                        {new Intl.NumberFormat(
-                                                                                            'pt-BR',
-                                                                                            {
-                                                                                                style: 'currency',
-                                                                                                currency:
-                                                                                                    'BRL',
-                                                                                            },
-                                                                                        ).format(
-                                                                                            row.original.raw.session.payments.reduce(
-                                                                                                (
-                                                                                                    sum: number,
-                                                                                                    p: any,
-                                                                                                ) =>
-                                                                                                    sum +
-                                                                                                    parseFloat(
-                                                                                                        p.payment_value ||
-                                                                                                            '0',
-                                                                                                    ),
-                                                                                                0,
-                                                                                            ),
-                                                                                        )}
-                                                                                    </span>
-                                                                                </div>
-                                                                                {/* Detalhes dos métodos de pagamento como descrição */}
-                                                                                <ul className="m-0 flex w-full flex-col gap-1 ps-0">
-                                                                                    {row.original.raw.session.payments.map(
-                                                                                        (
-                                                                                            payment: any,
-                                                                                            index: number,
-                                                                                        ) => {
-                                                                                            const keyword =
-                                                                                                payment
-                                                                                                    .payment_method
-                                                                                                    ?.keyword ||
-                                                                                                '';
-                                                                                            const paymentName =
-                                                                                                payment
-                                                                                                    .payment_method
-                                                                                                    ?.name ||
-                                                                                                'Pagamento';
-
-                                                                                            const isOnline =
-                                                                                                keyword.includes(
-                                                                                                    'pagamento_online',
-                                                                                                ) ||
-                                                                                                keyword.includes(
-                                                                                                    'ifood',
-                                                                                                ) ||
-                                                                                                keyword.includes(
-                                                                                                    '99food',
-                                                                                                ) ||
-                                                                                                keyword.includes(
-                                                                                                    'neemo',
-                                                                                                ) ||
-                                                                                                keyword.includes(
-                                                                                                    'rappi',
-                                                                                                );
-
-                                                                                            return (
+                                                                            ?.payments
+                                                                            ?.methods &&
+                                                                            row
+                                                                                .original
+                                                                                .raw
+                                                                                .payments
+                                                                                .methods
+                                                                                .length >
+                                                                                0 && (
+                                                                                <>
+                                                                                    <div className="flex w-full flex-row justify-between gap-2 border-b px-3 py-2">
+                                                                                        <span className="text-sm font-semibold">
+                                                                                            Pagamento
+                                                                                        </span>
+                                                                                        <span className="text-sm font-semibold">
+                                                                                            {row
+                                                                                                .original
+                                                                                                .raw
+                                                                                                .payments
+                                                                                                .methods[0]
+                                                                                                ?.type ===
+                                                                                            'ONLINE'
+                                                                                                ? 'Online'
+                                                                                                : 'Offline'}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <ul className="m-0 flex w-full flex-col ps-0">
+                                                                                        {row.original.raw.payments.methods.map(
+                                                                                            (
+                                                                                                payment: unknown,
+                                                                                                index: number,
+                                                                                            ) => (
                                                                                                 <li
                                                                                                     key={
                                                                                                         index
                                                                                                     }
-                                                                                                    className="flex w-full flex-row items-start justify-between gap-2"
+                                                                                                    className="flex flex-col gap-2 border-b-1 px-3 py-4 last:border-b-0"
                                                                                                 >
-                                                                                                    <span className="text-xs leading-4 text-muted-foreground">
-                                                                                                        {
-                                                                                                            paymentName
-                                                                                                        }
-                                                                                                        {isOnline
-                                                                                                            ? ' (Online)'
-                                                                                                            : ' (Offline)'}
-                                                                                                    </span>
-                                                                                                    <span className="text-xs leading-4 whitespace-nowrap text-muted-foreground">
-                                                                                                        {new Intl.NumberFormat(
-                                                                                                            'pt-BR',
-                                                                                                            {
-                                                                                                                style: 'currency',
-                                                                                                                currency:
-                                                                                                                    'BRL',
-                                                                                                            },
-                                                                                                        ).format(
-                                                                                                            parseFloat(
-                                                                                                                payment.payment_value ||
-                                                                                                                    '0',
-                                                                                                            ),
-                                                                                                        )}
-                                                                                                    </span>
+                                                                                                    <div className="flex w-full flex-row items-center justify-between gap-2">
+                                                                                                        <div className="flex items-center gap-2">
+                                                                                                            <span className="text-sm leading-4 font-medium">
+                                                                                                                {payment.method ===
+                                                                                                                'CASH'
+                                                                                                                    ? 'Dinheiro'
+                                                                                                                    : payment.method ===
+                                                                                                                        'CREDIT'
+                                                                                                                      ? 'Cr├®dito'
+                                                                                                                      : payment.method ===
+                                                                                                                          'DEBIT'
+                                                                                                                        ? 'D├®bito'
+                                                                                                                        : payment.method ===
+                                                                                                                            'MEAL_VOUCHER'
+                                                                                                                          ? 'Vale Refei├ºão'
+                                                                                                                          : payment.method ===
+                                                                                                                              'FOOD_VOUCHER'
+                                                                                                                            ? 'Vale Alimenta├ºão'
+                                                                                                                            : payment.method ===
+                                                                                                                                'DIGITAL_WALLET'
+                                                                                                                              ? 'Carteira Digital'
+                                                                                                                              : payment.method ===
+                                                                                                                                  'PIX'
+                                                                                                                                ? 'PIX'
+                                                                                                                                : payment.method}
+                                                                                                            </span>
+                                                                                                        </div>
+                                                                                                        <span className="text-sm leading-4 font-semibold whitespace-nowrap">
+                                                                                                            {new Intl.NumberFormat(
+                                                                                                                'pt-BR',
+                                                                                                                {
+                                                                                                                    style: 'currency',
+                                                                                                                    currency:
+                                                                                                                        'BRL',
+                                                                                                                },
+                                                                                                            ).format(
+                                                                                                                payment.value ||
+                                                                                                                    0,
+                                                                                                            )}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    {(payment
+                                                                                                        .card
+                                                                                                        ?.brand ||
+                                                                                                        payment
+                                                                                                            .wallet
+                                                                                                            ?.name ||
+                                                                                                        payment
+                                                                                                            .cash
+                                                                                                            ?.changeFor) && (
+                                                                                                        <ul className="flex w-full flex-col gap-2 pl-0">
+                                                                                                            {payment
+                                                                                                                .card
+                                                                                                                ?.brand && (
+                                                                                                                <li className="flex w-full flex-row items-start justify-between px-0 py-0">
+                                                                                                                    <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                                                                        {
+                                                                                                                            payment
+                                                                                                                                .card
+                                                                                                                                .brand
+                                                                                                                        }
+                                                                                                                    </span>
+                                                                                                                </li>
+                                                                                                            )}
+                                                                                                            {payment
+                                                                                                                .wallet
+                                                                                                                ?.name && (
+                                                                                                                <li className="flex w-full flex-row items-start justify-between px-0 py-0">
+                                                                                                                    <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                                                                        {payment.wallet.name
+                                                                                                                            .replace(
+                                                                                                                                '_',
+                                                                                                                                ' ',
+                                                                                                                            )
+                                                                                                                            .toLowerCase()
+                                                                                                                            .replace(
+                                                                                                                                /\b\w/g,
+                                                                                                                                (
+                                                                                                                                    l: string,
+                                                                                                                                ) =>
+                                                                                                                                    l.toUpperCase(),
+                                                                                                                            )}
+                                                                                                                    </span>
+                                                                                                                </li>
+                                                                                                            )}
+                                                                                                            {payment
+                                                                                                                .cash
+                                                                                                                ?.changeFor && (
+                                                                                                                <li className="flex w-full flex-row items-start justify-between px-0 py-0">
+                                                                                                                    <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                                                                        Troco
+                                                                                                                        para:{' '}
+                                                                                                                        {new Intl.NumberFormat(
+                                                                                                                            'pt-BR',
+                                                                                                                            {
+                                                                                                                                style: 'currency',
+                                                                                                                                currency:
+                                                                                                                                    'BRL',
+                                                                                                                            },
+                                                                                                                        ).format(
+                                                                                                                            payment
+                                                                                                                                .cash
+                                                                                                                                .changeFor,
+                                                                                                                        )}
+                                                                                                                    </span>
+                                                                                                                </li>
+                                                                                                            )}
+                                                                                                        </ul>
+                                                                                                    )}
                                                                                                 </li>
-                                                                                            );
-                                                                                        },
-                                                                                    )}
-                                                                                </ul>
-                                                                            </div>
-                                                                        )}
+                                                                                            ),
+                                                                                        )}
+                                                                                    </ul>
+                                                                                </>
+                                                                            )}
 
-                                                                    {/* Mensagem quando não há pagamentos */}
-                                                                    {!row
-                                                                        .original
-                                                                        .raw
-                                                                        ?.payments
-                                                                        ?.methods
-                                                                        ?.length &&
-                                                                        !row
+                                                                        {/* Detalhes de pagamento - Takeat */}
+                                                                        {row
                                                                             .original
                                                                             .raw
                                                                             ?.session
-                                                                            ?.payments
-                                                                            ?.length && (
-                                                                            <div className="flex flex-col items-center justify-center px-3 py-6 text-center">
-                                                                                <p className="text-sm text-muted-foreground">
-                                                                                    Nenhum
-                                                                                    pagamento
-                                                                                    registrado
-                                                                                </p>
-                                                                                <p className="mt-1 text-xs text-muted-foreground">
-                                                                                    Informações
-                                                                                    de
-                                                                                    pagamento
-                                                                                    não
-                                                                                    disponíveis
-                                                                                    para
-                                                                                    este
-                                                                                    pedido
-                                                                                </p>
-                                                                            </div>
-                                                                        )}
-                                                                </CardContent>
-                                                            </Card>
-                                                        </div>
+                                                                            ?.payments &&
+                                                                            row
+                                                                                .original
+                                                                                .raw
+                                                                                .session
+                                                                                .payments
+                                                                                .length >
+                                                                                0 && (
+                                                                                <div className="flex w-full flex-col gap-2 px-3 py-4">
+                                                                                    {/* Total pago */}
+                                                                                    <div className="flex w-full flex-row justify-between gap-2">
+                                                                                        <span className="text-sm font-semibold">
+                                                                                            Total
+                                                                                            pago
+                                                                                        </span>
+                                                                                        <span className="text-sm font-semibold">
+                                                                                            {new Intl.NumberFormat(
+                                                                                                'pt-BR',
+                                                                                                {
+                                                                                                    style: 'currency',
+                                                                                                    currency:
+                                                                                                        'BRL',
+                                                                                                },
+                                                                                            ).format(
+                                                                                                row.original.raw.session.payments.reduce(
+                                                                                                    (
+                                                                                                        sum: number,
+                                                                                                        p: any,
+                                                                                                    ) =>
+                                                                                                        sum +
+                                                                                                        parseFloat(
+                                                                                                            p.payment_value ||
+                                                                                                                '0',
+                                                                                                        ),
+                                                                                                    0,
+                                                                                                ),
+                                                                                            )}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    {/* Detalhes dos m├®todos de pagamento como descri├ºão */}
+                                                                                    <ul className="m-0 flex w-full flex-col gap-1 ps-0">
+                                                                                        {row.original.raw.session.payments.map(
+                                                                                            (
+                                                                                                payment: any,
+                                                                                                index: number,
+                                                                                            ) => {
+                                                                                                const keyword =
+                                                                                                    payment
+                                                                                                        .payment_method
+                                                                                                        ?.keyword ||
+                                                                                                    '';
+                                                                                                const paymentName =
+                                                                                                    payment
+                                                                                                        .payment_method
+                                                                                                        ?.name ||
+                                                                                                    'Pagamento';
 
-                                                        {/* Coluna 2: Detalhamento Financeiro */}
-                                                        <div className="flex flex-col gap-4">
-                                                            {/* Card: Detalhamento Financeiro */}
-                                                            <OrderFinancialCard
-                                                                sale={
-                                                                    row.original
-                                                                        .sale
-                                                                }
-                                                                order={
-                                                                    row.original
-                                                                }
-                                                                internalProducts={
-                                                                    internalProducts
-                                                                }
-                                                            />
+                                                                                                const isOnline =
+                                                                                                    keyword.includes(
+                                                                                                        'pagamento_online',
+                                                                                                    ) ||
+                                                                                                    keyword.includes(
+                                                                                                        'ifood',
+                                                                                                    ) ||
+                                                                                                    keyword.includes(
+                                                                                                        '99food',
+                                                                                                    ) ||
+                                                                                                    keyword.includes(
+                                                                                                        'neemo',
+                                                                                                    ) ||
+                                                                                                    keyword.includes(
+                                                                                                        'rappi',
+                                                                                                    );
+
+                                                                                                return (
+                                                                                                    <li
+                                                                                                        key={
+                                                                                                            index
+                                                                                                        }
+                                                                                                        className="flex w-full flex-row items-start justify-between gap-2"
+                                                                                                    >
+                                                                                                        <span className="text-xs leading-4 text-muted-foreground">
+                                                                                                            {
+                                                                                                                paymentName
+                                                                                                            }
+                                                                                                            {isOnline
+                                                                                                                ? ' (Online)'
+                                                                                                                : ' (Offline)'}
+                                                                                                        </span>
+                                                                                                        <span className="text-xs leading-4 whitespace-nowrap text-muted-foreground">
+                                                                                                            {new Intl.NumberFormat(
+                                                                                                                'pt-BR',
+                                                                                                                {
+                                                                                                                    style: 'currency',
+                                                                                                                    currency:
+                                                                                                                        'BRL',
+                                                                                                                },
+                                                                                                            ).format(
+                                                                                                                parseFloat(
+                                                                                                                    payment.payment_value ||
+                                                                                                                        '0',
+                                                                                                                ),
+                                                                                                            )}
+                                                                                                        </span>
+                                                                                                    </li>
+                                                                                                );
+                                                                                            },
+                                                                                        )}
+                                                                                    </ul>
+                                                                                </div>
+                                                                            )}
+
+                                                                        {/* Mensagem quando não há pagamentos */}
+                                                                        {!row
+                                                                            .original
+                                                                            .raw
+                                                                            ?.payments
+                                                                            ?.methods
+                                                                            ?.length &&
+                                                                            !row
+                                                                                .original
+                                                                                .raw
+                                                                                ?.session
+                                                                                ?.payments
+                                                                                ?.length && (
+                                                                                <div className="flex flex-col items-center justify-center px-3 py-6 text-center">
+                                                                                    <p className="text-sm text-muted-foreground">
+                                                                                        Nenhum
+                                                                                        pagamento
+                                                                                        registrado
+                                                                                    </p>
+                                                                                    <p className="mt-1 text-xs text-muted-foreground">
+                                                                                        Informa├º├Áes
+                                                                                        de
+                                                                                        pagamento
+                                                                                        não
+                                                                                        dispon├¡veis
+                                                                                        para
+                                                                                        este
+                                                                                        pedido
+                                                                                    </p>
+                                                                                </div>
+                                                                            )}
+                                                                    </CardContent>
+                                                                </Card>
+                                                            </div>
+
+                                                            {/* Coluna 2: Detalhamento Financeiro */}
+                                                            <div className="flex flex-col gap-4">
+                                                                {/* Card: Detalhamento Financeiro */}
+                                                                <OrderFinancialCard
+                                                                    sale={
+                                                                        row
+                                                                            .original
+                                                                            .sale
+                                                                    }
+                                                                    order={
+                                                                        row.original
+                                                                    }
+                                                                    internalProducts={
+                                                                        internalProducts
+                                                                    }
+                                                                />
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </React.Fragment>
-                            ))
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })
                         ) : (
                             <TableRow>
                                 <TableCell
@@ -2374,7 +2246,7 @@ export function DataTable({
                         )}
                     </TableBody>
 
-                    {/* Rodapé com totais */}
+                    {/* Rodap├® com totais */}
                     <TableFooter>
                         <TableRow className="bg-muted hover:bg-muted">
                             {table.getVisibleLeafColumns().map((column) => {
@@ -2393,14 +2265,14 @@ export function DataTable({
                                     return <TableCell key={column.id} />;
                                 }
 
-                                // Calcular totais das linhas visíveis na tabela
+                                // Calcular totais das linhas vis├¡veis na tabela
                                 let total = 0;
                                 const visibleRows = table.getRowModel().rows;
                                 const visibleOrders = visibleRows.map(
                                     (row) => row.original,
                                 );
 
-                                // Verificar se estamos mostrando todas as linhas do período (sem paginação limitando)
+                                // Verificar se estamos mostrando todas as linhas do per├¡odo (sem pagina├ºão limitando)
                                 const showingAllRows =
                                     visibleRows.length === pagination.total;
 
@@ -2408,10 +2280,10 @@ export function DataTable({
                                     column.id === 'net_total' &&
                                     showingAllRows
                                 ) {
-                                    // Total Líquido: usar indicators se estiver mostrando todas as linhas
+                                    // Total L├¡quido: usar indicators se estiver mostrando todas as linhas
                                     total = indicators.netRevenue;
                                 } else if (column.id === 'cost') {
-                                    // CMV: sempre calcular das linhas visíveis
+                                    // CMV: sempre calcular das linhas vis├¡veis
                                     total = visibleOrders.reduce(
                                         (sum, order) => {
                                             const items = order.items || [];
@@ -2433,7 +2305,7 @@ export function DataTable({
                                         0,
                                     );
                                 } else if (column.id === 'total') {
-                                    // Total do pedido: sempre calcular das linhas visíveis
+                                    // Total do pedido: sempre calcular das linhas vis├¡veis
                                     total = visibleOrders.reduce(
                                         (sum, order) => {
                                             const isCancelled =
@@ -2504,7 +2376,7 @@ export function DataTable({
                                         0,
                                     );
                                 } else if (column.id === 'net_total') {
-                                    // Total Líquido: calcular das linhas visíveis (quando não está mostrando todas)
+                                    // Total L├¡quido: calcular das linhas vis├¡veis (quando não está mostrando todas)
                                     total = visibleOrders.reduce(
                                         (sum, order) => {
                                             const isCancelled =
@@ -2518,7 +2390,7 @@ export function DataTable({
                                         0,
                                     );
                                 } else {
-                                    // Para outras colunas (tax, total_costs, etc), calcular das linhas visíveis
+                                    // Para outras colunas (tax, total_costs, etc), calcular das linhas vis├¡veis
 
                                     total = visibleOrders.reduce(
                                         (sum, order) => {
@@ -2626,7 +2498,7 @@ export function DataTable({
                                                 column.id ===
                                                 'total_commissions'
                                             ) {
-                                                // Comissões
+                                                // Comiss├Áes
                                                 const totalCommissions =
                                                     order.total_commissions;
                                                 if (
@@ -2678,7 +2550,7 @@ export function DataTable({
                                     );
                                 }
 
-                                // Alinhar à direita se for coluna numérica
+                                // Alinhar ├á direita se for coluna num├®rica
                                 const isNumeric = [
                                     'total',
                                     'cost',
@@ -2708,10 +2580,10 @@ export function DataTable({
                 </Table>
             </div>
 
-            {/* 📌 Paginação */}
+            {/* ­ƒôî Pagina├ºão */}
             <div className="flex items-center justify-between px-4">
                 <div className="hidden flex-1 text-sm text-muted-foreground lg:flex">
-                    Exibindo {pagination.from} – {pagination.to} de{' '}
+                    Exibindo {pagination.from} ÔÇô {pagination.to} de{' '}
                     {pagination.total} pedidos
                 </div>
 
@@ -2802,7 +2674,7 @@ export function DataTable({
                             )}
                         </Button>
 
-                        {/* Próxima */}
+                        {/* Pr├│xima */}
                         <Button
                             variant="outline"
                             className="size-8"
@@ -2825,7 +2697,7 @@ export function DataTable({
                             )}
                         </Button>
 
-                        {/* Última */}
+                        {/* ├Ültima */}
                         <Button
                             variant="outline"
                             className="hidden size-8 lg:flex"
@@ -2854,7 +2726,7 @@ export function DataTable({
                 </div>
             </div>
 
-            {/* Modal de Associação Rápida */}
+            {/* Modal de Associa├ºão Rápida */}
             {selectedOrder && (
                 <QuickAssociateDialog
                     open={associateDialogOpen}
@@ -2870,7 +2742,7 @@ export function DataTable({
                 />
             )}
 
-            {/* Modal de Associações Detalhadas do Item */}
+            {/* Modal de Associa├º├Áes Detalhadas do Item */}
             <ItemMappingsDialog
                 open={itemMappingsDialogOpen}
                 onOpenChange={setItemMappingsDialogOpen}
@@ -2879,7 +2751,7 @@ export function DataTable({
                 provider={selectedOrder?.provider || 'ifood'}
             />
 
-            {/* Dialog de Sincronização Takeat */}
+            {/* Dialog de Sincroniza├ºão Takeat */}
             <SyncTakeatDialog
                 open={syncDialogOpen}
                 onOpenChange={setSyncDialogOpen}

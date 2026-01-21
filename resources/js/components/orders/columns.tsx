@@ -15,6 +15,7 @@ import {
     calculateItemCost,
     calculateNetRevenue,
     calculateOrderCMV,
+    isTakeatIfoodOrder,
 } from '@/lib/order-calculations';
 import { IconChevronDown } from '@tabler/icons-react';
 import { ColumnDef } from '@tanstack/react-table';
@@ -880,10 +881,17 @@ export const columns: ColumnDef<Order>[] = [
             // Se for, NÃO precisa somar nada (já inclui delivery e subsídio)
             // Se não for, precisa somar subsídio e delivery
             const usedTotalDeliveryPrice =
-                provider === 'takeat' && raw?.session?.total_delivery_price;
+                provider === 'takeat' &&
+                Boolean(raw?.session?.total_delivery_price);
+            const skipDeliveryFeeInSubtotal = isTakeatIfoodOrder(row.original);
 
             if (!usedTotalDeliveryPrice) {
-                subtotal += totalSubsidy + deliveryFee;
+                subtotal += totalSubsidy;
+                if (!skipDeliveryFeeInSubtotal) {
+                    subtotal += deliveryFee;
+                }
+            } else if (skipDeliveryFeeInSubtotal && deliveryFee > 0) {
+                subtotal -= deliveryFee;
             }
 
             const netTotal =
