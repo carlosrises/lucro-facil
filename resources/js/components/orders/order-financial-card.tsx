@@ -413,6 +413,21 @@ export function OrderFinancialCard({
             0,
         );
 
+        // Custos de entrega do marketplace (category='cost' com 'delivery' no nome ou applies_to='delivery')
+        const costs = calculatedCosts?.costs || [];
+        const marketplaceDeliveryCosts = costs.reduce(
+            (sum: number, cost: CostCommissionItem) => {
+                // Verificar se é custo de entrega (nome contém 'entrega' ou 'delivery')
+                const isDeliveryCost =
+                    cost.name?.toLowerCase().includes('entrega') ||
+                    cost.name?.toLowerCase().includes('delivery');
+                return isDeliveryCost
+                    ? sum + (cost.calculated_value || 0)
+                    : sum;
+            },
+            0,
+        );
+
         // Taxas do meio de pagamento (da categoria 'payment_method' em cost_commissions)
         const paymentMethodFees = calculatedCosts?.payment_methods || [];
         const totalPaymentMethodFee = paymentMethodFees.reduce(
@@ -431,15 +446,11 @@ export function OrderFinancialCard({
             0,
         );
 
-        // Taxa de entrega do marketplace (apenas se isMarketplaceDelivery)
-        // Reutiliza a variável deliveryBy e isMarketplaceDelivery já declaradas acima
-        const marketplaceDeliveryFee = isMarketplaceDelivery ? deliveryFee : 0;
-
-        // Receita líquida marketplace = Subtotal - Comissão Marketplace - Taxa Entrega Marketplace - Taxa Pagamento Online
+        // Receita líquida marketplace = Subtotal - Comissão Marketplace - Custo Entrega Marketplace - Taxa Pagamento Online
         const marketplaceNetRevenue =
             subtotal -
             marketplaceCommissions -
-            marketplaceDeliveryFee -
+            marketplaceDeliveryCosts -
             totalOnlinePaymentFee;
 
         // Líquido = Subtotal - CMV - Impostos - Custos - Comissão - Taxas de Pagamento
