@@ -293,7 +293,17 @@ export function calculateNetRevenue(order: any): number {
     const usedTotalDeliveryPrice =
         order.provider === 'takeat' &&
         Boolean(raw?.session?.total_delivery_price);
-    const skipDeliveryFeeInSubtotal = isTakeatIfoodOrder(order);
+
+    // Verificar se deve excluir taxa de entrega do subtotal
+    // Só excluir se for iFood via Takeat E a entrega for pelo marketplace (IFOOD/MARKETPLACE)
+    const deliveryBy = raw?.session?.delivery_by?.toUpperCase() || '';
+    const isMarketplaceDelivery = ['IFOOD', 'MARKETPLACE'].includes(deliveryBy);
+    const skipDeliveryFeeInSubtotal =
+        isTakeatIfoodOrder(order) && isMarketplaceDelivery;
+
+    // Taxa de serviço iFood fixa (R$ 0,99) - Takeat inclui mas não informa separadamente
+    const ifoodServiceFee = isTakeatIfoodOrder(order) ? 0.99 : 0;
+
     if (!usedTotalDeliveryPrice) {
         subtotal += totalSubsidy;
         if (!skipDeliveryFeeInSubtotal) {
@@ -305,6 +315,11 @@ export function calculateNetRevenue(order: any): number {
 
     // Descontar cashback do subtotal (é desconto da loja)
     subtotal -= totalCashback;
+
+    // Subtrair taxa de serviço iFood (sempre que for iFood via Takeat)
+    if (ifoodServiceFee > 0) {
+        subtotal -= ifoodServiceFee;
+    }
 
     // CMV (custo dos produtos)
     const cmv = calculateOrderCMV(items);
