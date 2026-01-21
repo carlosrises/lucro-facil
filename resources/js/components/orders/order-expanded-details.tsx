@@ -1,8 +1,34 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
+type DeliverySession = {
+    delivery_by?: string;
+    delivery_address?: {
+        city?: string;
+        state?: string;
+        country?: string;
+        reference?: string;
+        complement?: string;
+        postalCode?: string;
+        postal_code?: string;
+        zipcode?: string;
+        streetName?: string;
+        street_name?: string;
+        neighborhood?: string;
+        district?: string;
+        streetNumber?: string;
+        street_number?: string;
+        formattedAddress?: string;
+        reference_point?: string;
+    };
+    table?: {
+        table_type?: string;
+    };
+};
+
 type OrderExpandedDetailsProps = {
     order: {
         provider?: string;
+        origin?: string | null;
         raw?: {
             payments?: {
                 methods?: Array<{
@@ -78,9 +104,66 @@ type OrderExpandedDetailsProps = {
                     streetNumber?: string;
                     formattedAddress?: string;
                 };
+                deliveredBy?: string;
+                delivered_by?: string;
             };
+            session?: DeliverySession;
         };
     };
+};
+
+const DELIVERY_PROVIDER_LABELS: Record<string, string> = {
+    ifood: 'iFood Entrega',
+    '99food': '99Food Entrega',
+    rappi: 'Rappi Entrega',
+    uber: 'Uber Entrega',
+    uber_eats: 'Uber Eats Entrega',
+    keeta: 'Keeta Entrega',
+    neemo: 'Neemo Entrega',
+    marketplace: 'Marketplace',
+};
+
+const STORE_DELIVERY_CODES = [
+    'MERCHANT',
+    'STORE',
+    'MERCHANT_DELIVERY',
+    'STORE_DELIVERY',
+    'OWN',
+    'SELF',
+    'LOJA',
+];
+
+const normalizeDeliveryValue = (value?: string | null) =>
+    value ? value.toString().trim().toUpperCase() : null;
+
+const isStoreDeliveryValue = (value?: string | null) =>
+    Boolean(
+        value &&
+            STORE_DELIVERY_CODES.some(
+                (code) => value === code || value.startsWith(code),
+            ),
+    );
+
+const getDeliveryProviderLabel = (
+    origin?: string | null,
+    provider?: string,
+) => {
+    const baseKey = (origin || provider || '').toLowerCase();
+    if (!baseKey) {
+        return 'Marketplace';
+    }
+
+    if (DELIVERY_PROVIDER_LABELS[baseKey]) {
+        return DELIVERY_PROVIDER_LABELS[baseKey];
+    }
+
+    const formatted = baseKey
+        .split(/[_-]/)
+        .filter(Boolean)
+        .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+        .join(' ');
+
+    return `${formatted} Entrega`;
 };
 
 export function OrderExpandedDetails({ order }: OrderExpandedDetailsProps) {
@@ -170,6 +253,16 @@ export function OrderExpandedDetails({ order }: OrderExpandedDetailsProps) {
     // Detecta tipo de pedido (delivery, takeout ou indoor)
     const orderType = order.raw?.orderType; // DELIVERY, TAKEOUT, INDOOR (iFood)
     const tableType = order.raw?.session?.table?.table_type; // delivery, pdv, etc (Takeat)
+    const normalizedSessionDeliveryBy = normalizeDeliveryValue(
+        order.raw?.session?.delivery_by,
+    );
+    const normalizedRawDeliveryBy = normalizeDeliveryValue(
+        order.raw?.delivery?.deliveredBy || order.raw?.delivery?.delivered_by,
+    );
+    const normalizedDeliveryBy =
+        order.provider === 'takeat'
+            ? normalizedSessionDeliveryBy || normalizedRawDeliveryBy
+            : normalizedRawDeliveryBy || normalizedSessionDeliveryBy;
 
     const isDelivery =
         orderType === 'DELIVERY' ||
@@ -187,34 +280,35 @@ export function OrderExpandedDetails({ order }: OrderExpandedDetailsProps) {
     let deliveryResponsible = 'Loja';
 
     if (isDelivery) {
-        if (order.provider === 'takeat') {
-            // Para Takeat: verificar session.delivery_by
-            const deliveryBy = order.raw?.session?.delivery_by;
-            deliveredByMarketplace = deliveryBy === 'MARKETPLACE';
+        const marketplaceLabel = getDeliveryProviderLabel(
+            order.origin,
+            order.provider,
+        );
 
-            if (deliveryBy === 'MARKETPLACE') {
-                // Se vier de marketplace (ifood, 99food, etc), mostrar o nome do marketplace
-                const origin = order.origin || 'Marketplace';
-                deliveryResponsible =
-                    origin === 'ifood'
-                        ? 'iFood Entrega'
-                        : origin === '99food'
-                          ? '99Food Entrega'
-                          : origin === 'neemo'
-                            ? 'Neemo Entrega'
-                            : origin === 'keeta'
-                              ? 'Keeta Entrega'
-                              : 'Marketplace';
-            } else {
+        if (normalizedDeliveryBy) {
+            if (isStoreDeliveryValue(normalizedDeliveryBy)) {
+                deliveredByMarketplace = false;
                 deliveryResponsible = 'Loja';
+            } else {
+                deliveredByMarketplace = true;
+                deliveryResponsible = marketplaceLabel;
             }
         } else if (order.provider === 'ifood') {
-            // Para iFood: verificar delivery.deliveredBy
-            const deliveredBy = order.raw?.delivery?.deliveredBy;
-            deliveredByMarketplace =
-                deliveredBy === 'MARKETPLACE' || deliveredBy === 'IFOOD';
+            const deliveredBy = normalizeDeliveryValue(
+                order.raw?.delivery?.deliveredBy,
+            );
+            deliveredByMarketplace = Boolean(
+                deliveredBy && !isStoreDeliveryValue(deliveredBy),
+            );
             deliveryResponsible = deliveredByMarketplace
-                ? 'iFood Entrega'
+                ? marketplaceLabel
+                : 'Loja';
+        } else if (normalizedSessionDeliveryBy) {
+            deliveredByMarketplace = !isStoreDeliveryValue(
+                normalizedSessionDeliveryBy,
+            );
+            deliveryResponsible = deliveredByMarketplace
+                ? marketplaceLabel
                 : 'Loja';
         }
     }

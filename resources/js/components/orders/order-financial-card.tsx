@@ -12,7 +12,10 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { calculateOrderCMV } from '@/lib/order-calculations';
+import {
+    calculateOrderCMV,
+    isTakeatIfoodOrder,
+} from '@/lib/order-calculations';
 import {
     AlertCircle,
     ArrowDownLeft,
@@ -43,6 +46,8 @@ const OPTION_TYPE_TO_ITEM_TYPE: Record<string, string> = {
     regular: 'optional',
     observation: 'optional',
 };
+
+const TAKEAT_IFOOD_SERVICE_FEE = 0.99; // Mantém alinhado com OrderCostService.php
 
 const resolveItemType = (
     productMappingType?: string | null,
@@ -191,6 +196,19 @@ export function OrderFinancialCard({
         const discountTotal =
             parseFloat(String(order?.discount_total || '0')) || 0;
         const deliveryFee = parseFloat(String(order?.delivery_fee || '0')) || 0;
+        const rawSessionServiceFee =
+            parseFloat(
+                String(
+                    order?.raw?.session?.service_fee ??
+                        order?.raw?.session?.serviceFee ??
+                        0,
+                ),
+            ) || 0;
+        const ifoodServiceFee = isTakeatIfoodOrder(order)
+            ? rawSessionServiceFee > 0
+                ? rawSessionServiceFee
+                : TAKEAT_IFOOD_SERVICE_FEE
+            : 0;
         const netTotal = parseFloat(String(order?.net_total || '0')) || 0;
 
         // Subsídio e métodos de pagamento (dos pagamentos da sessão)
@@ -313,15 +331,28 @@ export function OrderFinancialCard({
         // Verifica se usou total_delivery_price (que já inclui subsídio e delivery)
         const usedTotalDeliveryPrice =
             order?.provider === 'takeat' &&
-            order?.raw?.session?.total_delivery_price;
+            Boolean(order?.raw?.session?.total_delivery_price);
 
-        // Se NÃO usou total_delivery_price, precisa somar subsídio e delivery
+        const skipDeliveryFeeInSubtotal = isTakeatIfoodOrder(order);
+
+        // Se NÃO usou total_delivery_price, precisa somar subsídio e (quando aplicável) delivery
         if (!usedTotalDeliveryPrice) {
-            subtotal += totalSubsidy + deliveryFee;
+            subtotal += totalSubsidy;
+            if (!skipDeliveryFeeInSubtotal) {
+                subtotal += deliveryFee;
+            }
+        } else if (skipDeliveryFeeInSubtotal && deliveryFee > 0) {
+            // total_delivery_price inclui delivery; remover para pedidos iFood via Takeat
+            subtotal -= deliveryFee;
         }
 
         // Descontar cashback do subtotal (é desconto da loja)
         subtotal -= totalCashback;
+
+        // Taxa fixa do iFood reduz o valor recebido pelo lojista
+        if (ifoodServiceFee > 0) {
+            subtotal -= ifoodServiceFee;
+        }
 
         // CMV (custo dos produtos + add-ons)
         const items = order?.items || [];
@@ -402,6 +433,7 @@ export function OrderFinancialCard({
             netRevenue,
             deliveryFee,
             realPayments,
+            ifoodServiceFee,
         };
     };
 
@@ -491,6 +523,35 @@ export function OrderFinancialCard({
                                                 financials.grossTotal,
                                             )}
                                         </span>
+                                    </div>
+                                </li>
+                            )}
+
+                            {/* Taxa fixa do iFood repassada ao cliente */}
+                            {financials.ifoodServiceFee > 0 && (
+                                <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                                    <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                        <div className="flex items-center justify-center rounded-full bg-red-100 p-0.5 text-red-900">
+                                            <ArrowDownLeft className="h-4 w-4" />
+                                        </div>
+                                        <span className="flex-grow text-sm leading-4 font-semibold">
+                                            Taxa de serviço iFood
+                                        </span>
+                                        <span className="text-sm leading-4 font-semibold whitespace-nowrap">
+                                            {formatCurrency(
+                                                financials.ifoodServiceFee,
+                                            )}
+                                        </span>
+                                        <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                            {formatPercentage(
+                                                financials.ifoodServiceFee,
+                                                financials.grossTotal,
+                                            )}
+                                        </span>
+                                    </div>
+                                    <div className="flex w-full flex-row items-center gap-2 px-3 pb-0 text-xs text-muted-foreground">
+                                        Taxa cobrada do cliente e retida pelo
+                                        iFood
                                     </div>
                                 </li>
                             )}
