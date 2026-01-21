@@ -27,6 +27,7 @@ import {
     Layers,
     Link2Off,
     ListChecks,
+    Loader2,
     Package,
     Pizza,
     Plus,
@@ -170,6 +171,8 @@ export default function ItemTriage({
         new Set(),
     );
     const [lastClassifiedType, setLastClassifiedType] = useState<string>('');
+    const [isClassifying, setIsClassifying] = useState(false);
+    const [classifyingCount, setClassifyingCount] = useState(0);
     const classifyButtonRef = useRef<HTMLButtonElement>(null);
 
     const bulkSelectedItems = items.filter((item) =>
@@ -263,7 +266,12 @@ export default function ItemTriage({
     // Listener para tecla Enter
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Enter' && selectedItem && selectedType) {
+            if (
+                e.key === 'Enter' &&
+                selectedItem &&
+                selectedType &&
+                !isClassifying
+            ) {
                 // Evitar trigger se estiver digitando em input
                 const target = e.target as HTMLElement;
                 if (
@@ -278,7 +286,7 @@ export default function ItemTriage({
 
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [selectedItem, selectedType, selectedProduct]);
+    }, [selectedItem, selectedType, selectedProduct, isClassifying]);
 
     // Busca automática com debounce
     useEffect(() => {
@@ -344,7 +352,7 @@ export default function ItemTriage({
 
     // Classificar item (individual ou em lote)
     const handleClassify = () => {
-        if (!selectedType) return;
+        if (!selectedType || isClassifying) return;
 
         const targets = classificationTargets;
 
@@ -359,6 +367,9 @@ export default function ItemTriage({
             selectedItem && processedSkus.includes(selectedItem.sku)
                 ? selectedItem.sku
                 : processedSkus[0];
+
+        setIsClassifying(true);
+        setClassifyingCount(targets.length);
 
         router.post(
             '/item-triage/classify',
@@ -426,6 +437,10 @@ export default function ItemTriage({
                 },
                 onError: () => {
                     toast.error('Erro ao classificar item');
+                },
+                onFinish: () => {
+                    setIsClassifying(false);
+                    setClassifyingCount(0);
                 },
             },
         );
@@ -1210,13 +1225,31 @@ export default function ItemTriage({
                                                     <Button
                                                         ref={classifyButtonRef}
                                                         onClick={handleClassify}
-                                                        disabled={!canClassify}
+                                                        disabled={
+                                                            !canClassify ||
+                                                            isClassifying
+                                                        }
                                                         className="w-full"
                                                     >
-                                                        {
+                                                        {isClassifying ? (
+                                                            <span className="flex w-full items-center justify-center gap-2">
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                                {classifyingCount >
+                                                                1
+                                                                    ? `Processando ${classifyingCount} itens...`
+                                                                    : 'Processando classificação...'}
+                                                            </span>
+                                                        ) : (
                                                             classificationButtonLabel
-                                                        }
+                                                        )}
                                                     </Button>
+                                                    {isClassifying && (
+                                                        <div className="flex items-center justify-center gap-2 text-xs text-primary">
+                                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                            Aguarde, aplicando
+                                                            classificação
+                                                        </div>
+                                                    )}
                                                     <p className="text-center text-xs text-muted-foreground">
                                                         Pressione{' '}
                                                         <kbd className="rounded border bg-muted px-1.5 py-0.5 text-xs">
