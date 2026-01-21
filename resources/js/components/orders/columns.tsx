@@ -883,7 +883,15 @@ export const columns: ColumnDef<Order>[] = [
             const usedTotalDeliveryPrice =
                 provider === 'takeat' &&
                 Boolean(raw?.session?.total_delivery_price);
-            const skipDeliveryFeeInSubtotal = isTakeatIfoodOrder(row.original);
+
+            // Verificar se deve excluir taxa de entrega do subtotal
+            // Só excluir se for iFood via Takeat E a entrega for pelo marketplace (IFOOD/MARKETPLACE)
+            const deliveryBy = raw?.session?.delivery_by?.toUpperCase() || '';
+            const isMarketplaceDelivery = ['IFOOD', 'MARKETPLACE'].includes(
+                deliveryBy,
+            );
+            const skipDeliveryFeeInSubtotal =
+                isTakeatIfoodOrder(row.original) && isMarketplaceDelivery;
 
             if (!usedTotalDeliveryPrice) {
                 subtotal += totalSubsidy;
@@ -892,6 +900,42 @@ export const columns: ColumnDef<Order>[] = [
                 }
             } else if (skipDeliveryFeeInSubtotal && deliveryFee > 0) {
                 subtotal -= deliveryFee;
+            }
+
+            // Calcular cashback
+            const totalCashback =
+                typeof row.original.cashback_total === 'string'
+                    ? parseFloat(row.original.cashback_total)
+                    : (row.original.cashback_total ?? 0);
+
+            // Descontar cashback do subtotal (é desconto da loja)
+            subtotal -= totalCashback;
+
+            // Taxa fixa do iFood (R$ 0,99)
+            // Determinar se tem taxa de serviço iFood
+            const TAKEAT_IFOOD_SERVICE_FEE = 0.99;
+            let ifoodServiceFee = 0;
+
+            if (isTakeatIfoodOrder(row.original)) {
+                // Tentar pegar do raw primeiro
+                const rawServiceFee =
+                    raw?.session?.service_tax_amount ||
+                    raw?.session?.serviceTaxAmount ||
+                    raw?.session?.service_fee ||
+                    raw?.session?.serviceFee;
+
+                if (rawServiceFee) {
+                    ifoodServiceFee = parseFloat(String(rawServiceFee)) || 0;
+                } else {
+                    // Caso não tenha no raw, usar taxa fixa
+                    ifoodServiceFee = TAKEAT_IFOOD_SERVICE_FEE;
+                }
+            }
+
+            // Taxa fixa do iFood reduz o valor recebido pelo lojista
+            // Sempre subtrair para pedidos iFood via Takeat (independente de delivery_by)
+            if (ifoodServiceFee > 0) {
+                subtotal -= ifoodServiceFee;
             }
 
             const netTotal =
