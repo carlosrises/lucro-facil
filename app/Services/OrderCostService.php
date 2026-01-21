@@ -128,6 +128,19 @@ class OrderCostService
             }
         }
 
+        if ($this->isTakeatIfoodOrder($order)) {
+            $ifoodFixedFee = 0.99;
+            $commissions[] = [
+                'id' => null,
+                'name' => 'Taxa fixa iFood (Takeat)',
+                'type' => 'fixed',
+                'value' => $ifoodFixedFee,
+                'calculated_value' => $ifoodFixedFee,
+                'category' => 'commission',
+            ];
+            $totalCommissions += $ifoodFixedFee;
+        }
+
         $netRevenue = $baseValue - $totalCosts - $totalCommissions - $totalTaxes - $totalPaymentMethods;
 
         return [
@@ -941,62 +954,92 @@ class OrderCostService
      */
     private function getOrderSubtotal(Order $order): float
     {
+        $subtotal = null;
+
         if ($order->provider === 'takeat') {
-            // Verificar se há subsídio (discount_total > 0)
-            $hasSubsidy = isset($order->raw['session']['discount_total']) &&
-                         (float) $order->raw['session']['discount_total'] > 0;
+            $subtotal = $this->resolveTakeatSubtotal($order);
+        }
 
-            // Se há subsídio, somar: pago pelo cliente + subsídio do marketplace
-            if ($hasSubsidy) {
-                $totalPaid = 0;
-                $payments = $order->raw['session']['payments'] ?? [];
+        if ($subtotal === null && isset($order->raw['total']['orderAmount'])) {
+            $subtotal = (float) $order->raw['total']['orderAmount'];
+        }
 
-                foreach ($payments as $payment) {
-                    $value = (float) ($payment['payment_value'] ?? 0);
-                    $totalPaid += $value;
-                }
-
-                // Se totalPaid > 0, usar esse valor (cliente + subsídio)
-                // Se totalPaid = 0 (desconto 100%), usar old_total_price para calcular prejuízo real
-                if ($totalPaid > 0) {
-                    return $totalPaid;
-                }
-
-                // Desconto 100%: usar old_total_price para base de cálculo
-                // Isso permite calcular o prejuízo real (custos - receita zero)
-                if (isset($order->raw['session']['old_total_price'])) {
-                    return (float) $order->raw['session']['old_total_price'];
-                }
-            }
-
-            // Usar total_delivery_price (após descontos mas antes de taxas)
-            // Este é o valor efetivamente vendido (cliente + subsídio)
-            if (isset($order->raw['session']['total_delivery_price'])) {
-                return (float) $order->raw['session']['total_delivery_price'];
-            }
-
-            // Fallback para total_price
-            if (isset($order->raw['session']['total_price'])) {
-                return (float) $order->raw['session']['total_price'];
-            }
-
-            // Fallback para old_total_price (antes de descontos)
-            if (isset($order->raw['session']['old_total_price'])) {
-                return (float) $order->raw['session']['old_total_price'];
+        if ($subtotal === null) {
+            $subtotal = (float) $order->net_total;
+            if ($order->delivery_fee > 0) {
+                $subtotal += (float) $order->delivery_fee;
             }
         }
 
-        // iFood direto: usar orderAmount
-        if (isset($order->raw['total']['orderAmount'])) {
-            return (float) $order->raw['total']['orderAmount'];
+        if ($this->shouldExcludeDeliveryFeeFromSubtotal($order)) {
+            $subtotal -= $this->getDeliveryFeeAmount($order);
         }
 
-        // Fallback genérico: net_total + delivery_fee
-        $subtotal = (float) $order->net_total;
-        if ($order->delivery_fee > 0) {
-            $subtotal += (float) $order->delivery_fee;
+        return max($subtotal, 0);
+    }
+
+    private function resolveTakeatSubtotal(Order $order): ?float
+    {
+        $session = $order->raw['session'] ?? [];
+
+        $hasSubsidy = isset($session['discount_total']) &&
+            (float) $session['discount_total'] > 0;
+
+        if ($hasSubsidy) {
+            $totalPaid = 0;
+            $payments = $session['payments'] ?? [];
+
+            foreach ($payments as $payment) {
+                $totalPaid += (float) ($payment['payment_value'] ?? 0);
+            }
+
+            if ($totalPaid > 0) {
+                return $totalPaid;
+            }
+
+            if (isset($session['old_total_price'])) {
+                return (float) $session['old_total_price'];
+            }
         }
 
-        return $subtotal;
+        if (isset($session['total_delivery_price'])) {
+            return (float) $session['total_delivery_price'];
+        }
+
+        if (isset($session['total_price'])) {
+            return (float) $session['total_price'];
+        }
+
+        if (isset($session['old_total_price'])) {
+            return (float) $session['old_total_price'];
+        }
+
+        return null;
+    }
+
+    private function shouldExcludeDeliveryFeeFromSubtotal(Order $order): bool
+    {
+        return $this->isTakeatIfoodOrder($order);
+    }
+
+    private function getDeliveryFeeAmount(Order $order): float
+    {
+        if ($order->delivery_fee !== null) {
+            return (float) $order->delivery_fee;
+        }
+
+        return (float) ($order->raw['session']['delivery_tax_price'] ?? 0);
+    }
+
+    private function isTakeatIfoodOrder(Order $order): bool
+    {
+        if ($order->provider !== 'takeat') {
+            return false;
+        }
+
+        $origin = strtolower((string) ($order->origin ?? ''));
+        $sessionChannel = strtolower((string) ($order->raw['session']['sales_channel'] ?? ''));
+
+        return $origin === 'ifood' || $sessionChannel === 'ifood';
     }
 }
