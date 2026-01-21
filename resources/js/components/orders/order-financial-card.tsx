@@ -405,6 +405,14 @@ export function OrderFinancialCard({
                 ? parseFloat(order.total_commissions)
                 : (order?.total_commissions ?? 0);
 
+        // Comissões do marketplace (category='commission')
+        const commissions = calculatedCosts?.commissions || [];
+        const marketplaceCommissions = commissions.reduce(
+            (sum: number, comm: CostCommissionItem) =>
+                sum + (comm.calculated_value || 0),
+            0,
+        );
+
         // Taxas do meio de pagamento (da categoria 'payment_method' em cost_commissions)
         const paymentMethodFees = calculatedCosts?.payment_methods || [];
         const totalPaymentMethodFee = paymentMethodFees.reduce(
@@ -412,6 +420,27 @@ export function OrderFinancialCard({
                 sum + (fee.calculated_value || 0),
             0,
         );
+
+        // Taxas de pagamento online (filtrar apenas payment_type='online')
+        const onlinePaymentFees = paymentMethodFees.filter(
+            (fee: CostCommissionItem) => fee.payment_type === 'online',
+        );
+        const totalOnlinePaymentFee = onlinePaymentFees.reduce(
+            (sum: number, fee: CostCommissionItem) =>
+                sum + (fee.calculated_value || 0),
+            0,
+        );
+
+        // Taxa de entrega do marketplace (apenas se isMarketplaceDelivery)
+        // Reutiliza a variável deliveryBy e isMarketplaceDelivery já declaradas acima
+        const marketplaceDeliveryFee = isMarketplaceDelivery ? deliveryFee : 0;
+
+        // Receita líquida marketplace = Subtotal - Comissão Marketplace - Taxa Entrega Marketplace - Taxa Pagamento Online
+        const marketplaceNetRevenue =
+            subtotal -
+            marketplaceCommissions -
+            marketplaceDeliveryFee -
+            totalOnlinePaymentFee;
 
         // Líquido = Subtotal - CMV - Impostos - Custos - Comissão - Taxas de Pagamento
         const netRevenue =
@@ -439,6 +468,7 @@ export function OrderFinancialCard({
             totalCommissions,
             paymentMethodFees,
             totalPaymentMethodFee,
+            marketplaceNetRevenue,
             netRevenue,
             deliveryFee,
             realPayments,
@@ -1922,6 +1952,29 @@ export function OrderFinancialCard({
                                             )}
                                         </ul>
                                     )}
+                            </li>
+
+                            {/* Receita líquida marketplace */}
+                            <li className="flex flex-col gap-2 border-b-1 px-0 py-4">
+                                <div className="flex w-full flex-row items-center gap-2 px-3 py-0">
+                                    <div className="flex items-center justify-center rounded-full bg-blue-100 p-1 text-blue-900">
+                                        <DollarSign className="h-3 w-3" />
+                                    </div>
+                                    <span className="flex-grow text-sm leading-4 font-semibold">
+                                        Receita líquida marketplace
+                                    </span>
+                                    <span className="text-sm leading-4 font-semibold whitespace-nowrap text-blue-700">
+                                        {formatCurrency(
+                                            financials.marketplaceNetRevenue,
+                                        )}
+                                    </span>
+                                    <span className="text-sm leading-4 font-medium whitespace-nowrap text-muted-foreground">
+                                        {formatPercentage(
+                                            financials.marketplaceNetRevenue,
+                                            financials.subtotal,
+                                        )}
+                                    </span>
+                                </div>
                             </li>
 
                             {/* Receita líquida */}

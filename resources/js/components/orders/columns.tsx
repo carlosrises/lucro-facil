@@ -111,6 +111,7 @@ export type CostCommissionItem = {
     value: number;
     calculated_value: number;
     percentage_rate?: number;
+    payment_type?: 'online' | 'offline' | 'all' | null;
 };
 
 export type CalculatedCosts = {
