@@ -10,67 +10,122 @@ class FixTakeatOrderTimezones extends Command
 {
     protected $signature = 'orders:fix-takeat-timezones
                             {--tenant-id= : ID do tenant específico}
+                            {--date= : Data específica para corrigir (Y-m-d)}
+                            {--all : Corrigir TODOS os pedidos Takeat}
                             {--dry-run : Simula sem salvar no banco}';
 
-    protected $description = 'Corrige timezone dos pedidos Takeat que foram salvos com 3h de diferença';
+    protected $description = 'Corrige timezone dos pedidos Takeat comparando placed_at com raw.basket.start_time';
 
     public function handle(): int
     {
         $tenantId = $this->option('tenant-id');
         $isDryRun = $this->option('dry-run');
+        $specificDate = $this->option('date');
+        $fixAll = $this->option('all');
 
         if ($isDryRun) {
             $this->warn('🔍 Modo DRY-RUN ativado - Nenhuma alteração será salva');
         }
 
-        // Contar total de pedidos a corrigir
+        // Montar query base
         $query = Order::where('provider', 'takeat')
-            ->whereRaw('TIME(placed_at) >= "00:00:00"')
-            ->whereRaw('TIME(placed_at) < "03:00:00"');
+            ->whereNotNull('raw');
 
         if ($tenantId) {
             $query->where('tenant_id', $tenantId);
         }
 
+        // Filtrar por data se especificado
+        if ($specificDate && !$fixAll) {
+            try {
+                $date = Carbon::parse($specificDate);
+                $query->whereDate('placed_at', $date);
+                $this->info("📅 Filtrando pedidos de: {$date->format('d/m/Y')}");
+            } catch (\Exception $e) {
+                $this->error('❌ Data inválida. Use o formato: Y-m-d (ex: 2025-12-08)');
+                return self::FAILURE;
+            }
+        } elseif (!$fixAll) {
+            // Se não especificou --all nem --date, usar apenas pedidos recentes (últimos 30 dias)
+            $query->where('placed_at', '>=', now()->subDays(30));
+            $this->info("📅 Filtrando pedidos dos últimos 30 dias (use --all para todos)");
+        }
+
         $totalOrders = $query->count();
 
-        $this->info("📦 Encontrados {$totalOrders} pedidos Takeat entre 00:00 e 02:59");
+        $this->info("📦 Encontrados {$totalOrders} pedidos Takeat para analisar");
 
         if ($totalOrders === 0) {
-            $this->info('✅ Nenhum pedido para corrigir!');
+            $this->info('✅ Nenhum pedido para analisar!');
             return self::SUCCESS;
         }
 
         $fixed = 0;
+        $skipped = 0;
         $errors = 0;
-        $showDetails = $totalOrders <= 50; // Mostrar detalhes apenas se forem poucos pedidos
+        $showDetails = $totalOrders <= 20; // Mostrar detalhes apenas se forem poucos pedidos
+
+        // Configurar barra de progresso com formato melhorado
+        $bar = $this->output->createProgressBar($totalOrders);
+        $bar->setFormat(
+            " %current%/%max% [%bar%] %percent:3s%% \n".
+            " ⏱️  %elapsed:6s% | 🔧 Corrigidos: %message%"
+        );
+        $bar->setMessage('0');
+
+        if (!$showDetails) {
+            $bar->start();
+        }
 
         // Processar em lotes de 100 para não estourar memória
-        Order::where('provider', 'takeat')
-            ->whereRaw('TIME(placed_at) >= "00:00:00"')
-            ->whereRaw('TIME(placed_at) < "03:00:00"')
-            ->when($tenantId, fn($q) => $q->where('tenant_id', $tenantId))
-            ->select(['id', 'code', 'placed_at']) // Carregar apenas campos necessários
-            ->chunk(100, function ($orders) use (&$fixed, &$errors, $isDryRun, $showDetails) {
+        $query->select(['id', 'code', 'placed_at', 'raw'])
+            ->chunk(100, function ($orders) use (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar) {
                 foreach ($orders as $order) {
                     try {
-                        $oldDate = $order->placed_at;
+                        // Extrair start_time do raw
+                        $rawStartTime = $order->raw['basket']['start_time']
+                            ?? $order->raw['session']['start_time']
+                            ?? null;
 
-                        // Subtrair 3 horas
-                        $newDate = Carbon::parse($oldDate)->subHours(3);
+                        if (!$rawStartTime) {
+                            if ($showDetails) {
+                                $this->warn("   ⚠️  Pedido #{$order->id}: sem start_time no raw, pulando");
+                            }
+                            $skipped++;
+                            if (!$showDetails) $bar->advance();
+                            continue;
+                        }
+
+                        // Parse do start_time original (está em UTC na API do Takeat)
+                        $correctDate = Carbon::parse($rawStartTime, 'UTC');
+
+                        // Comparar com o placed_at atual
+                        $currentDate = Carbon::parse($order->placed_at);
+                        $diffInHours = $currentDate->diffInHours($correctDate, false);
+
+                        // Se a diferença for significativa (> 1 hora), precisa corrigir
+                        if (abs($diffInHours) < 1) {
+                            if ($showDetails) {
+                                $this->line("   ✅ Pedido #{$order->id} já está correto");
+                            }
+                            $skipped++;
+                            if (!$showDetails) $bar->advance();
+                            continue;
+                        }
 
                         if ($showDetails) {
                             $this->line('');
                             $this->info("📦 Pedido #{$order->id} - {$order->code}");
-                            $this->line("   ⏰ Data atual: {$oldDate->format('d/m/Y H:i:s')}");
-                            $this->line("   ✅ Data corrigida: {$newDate->format('d/m/Y H:i:s')}");
+                            $this->line("   ⏰ Data atual (banco): {$currentDate->format('d/m/Y H:i:s')}");
+                            $this->line("   📡 Data original (raw): {$correctDate->format('d/m/Y H:i:s')}");
+                            $this->line("   ⚡ Diferença: " . abs($diffInHours) . "h");
                         }
 
                         if (!$isDryRun) {
-                            $order->placed_at = $newDate;
+                            $order->placed_at = $correctDate;
                             $order->save();
                             if ($showDetails) {
-                                $this->info('   ✅ Corrigido!');
+                                $this->info("   ✅ Corrigido!");
                             }
                             $fixed++;
                         } else {
@@ -80,20 +135,28 @@ class FixTakeatOrderTimezones extends Command
                             $fixed++;
                         }
                     } catch (\Exception $e) {
-                        $this->error("   ❌ Erro ao corrigir pedido #{$order->id}: {$e->getMessage()}");
+                        if ($showDetails) {
+                            $this->error("   ❌ Erro ao corrigir pedido #{$order->id}: {$e->getMessage()}");
+                        }
                         $errors++;
                     }
-                }
 
-                // Mostrar progresso a cada lote se houver muitos pedidos
-                if (!$showDetails) {
-                    $this->info("   Processados: {$fixed}...");
+                    if (!$showDetails) {
+                        $bar->setMessage((string) $fixed);
+                        $bar->advance();
+                    }
                 }
             });
 
-        $this->line('');
+        if (!$showDetails) {
+            $bar->finish();
+            $this->newLine();
+        }
+
+        $this->newLine();
         $this->info('═══════════════════════════════════════');
         $this->info("📊 Total analisado: {$totalOrders} pedidos");
+        $this->info("✅ Já corretos: {$skipped}");
         $this->info('🔧 '.($isDryRun ? 'Seriam corrigidos' : 'Corrigidos').": {$fixed}");
 
         if ($errors > 0) {
@@ -104,6 +167,8 @@ class FixTakeatOrderTimezones extends Command
 
         if ($isDryRun) {
             $this->warn('🔍 DRY-RUN: Nenhuma alteração foi salva. Execute sem --dry-run para aplicar.');
+        } else if ($fixed > 0) {
+            $this->info('✅ Correção aplicada com sucesso!');
         }
 
         return self::SUCCESS;
