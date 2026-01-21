@@ -44,6 +44,19 @@ type OrderItem = {
     }>;
 };
 
+const normalizeChannel = (value?: string | null) =>
+    (value || '').toString().trim().toLowerCase();
+
+export function isTakeatIfoodOrder(order: any): boolean {
+    if (!order || order.provider !== 'takeat') {
+        return false;
+    }
+
+    const origin = normalizeChannel(order.origin);
+    const sessionChannel = normalizeChannel(order?.raw?.session?.sales_channel);
+    return origin === 'ifood' || sessionChannel === 'ifood';
+}
+
 /**
  * Calcula o custo de um item considerando múltiplas associações
  */
@@ -278,9 +291,16 @@ export function calculateNetRevenue(order: any): number {
     // Subtotal para cálculo de receita líquida
     let subtotal = grossTotal;
     const usedTotalDeliveryPrice =
-        order.provider === 'takeat' && raw?.session?.total_delivery_price;
+        order.provider === 'takeat' &&
+        Boolean(raw?.session?.total_delivery_price);
+    const skipDeliveryFeeInSubtotal = isTakeatIfoodOrder(order);
     if (!usedTotalDeliveryPrice) {
-        subtotal += totalSubsidy + deliveryFee;
+        subtotal += totalSubsidy;
+        if (!skipDeliveryFeeInSubtotal) {
+            subtotal += deliveryFee;
+        }
+    } else if (skipDeliveryFeeInSubtotal && deliveryFee > 0) {
+        subtotal -= deliveryFee;
     }
 
     // Descontar cashback do subtotal (é desconto da loja)
