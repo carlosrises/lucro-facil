@@ -483,29 +483,219 @@ export const columns: ColumnDef<Order>[] = [
             );
         },
     },
+    {
+        accessorKey: 'subtotal',
+        header: 'Subtotal',
+        cell: ({ row }) => {
+            const raw = row.original.raw;
+            const provider = row.original.provider;
+            const isCancelled = row.original.status === 'CANCELLED';
+
+            // Usar a mesma lógica do card financeiro para calcular o subtotal
+            let grossTotal =
+                parseFloat(String(row.original.gross_total || '0')) || 0;
+
+            if (provider === 'takeat') {
+                // Prioridade: total_delivery_price > total_price
+                if (raw?.session?.total_delivery_price) {
+                    grossTotal =
+                        parseFloat(String(raw.session.total_delivery_price)) ||
+                        0;
+                } else if (raw?.session?.total_price) {
+                    grossTotal =
+                        parseFloat(String(raw.session.total_price)) || 0;
+                }
+            }
+
+            // Delivery fee
+            const deliveryFee =
+                parseFloat(String(row.original.delivery_fee || '0')) || 0;
+
+            // Subsídio (para Takeat)
+            let totalSubsidy = 0;
+            if (provider === 'takeat') {
+                const payments = raw?.session?.payments || [];
+                totalSubsidy = payments.reduce((sum: number, payment: any) => {
+                    const paymentName = (
+                        payment.payment_method?.name || ''
+                    ).toLowerCase();
+                    const paymentKeyword = (
+                        payment.payment_method?.keyword || ''
+                    ).toLowerCase();
+                    const isSubsidy =
+                        paymentName.includes('subsid') ||
+                        paymentName.includes('cupom') ||
+                        paymentKeyword.includes('subsid') ||
+                        paymentKeyword.includes('cupom');
+
+                    return isSubsidy
+                        ? sum + parseFloat(payment.payment_value || '0')
+                        : sum;
+                }, 0);
+            }
+
+            // Cashback
+            const totalCashback =
+                parseFloat(String(row.original.cashback_total || '0')) || 0;
+
+            // Calcular subtotal
+            let subtotal = grossTotal;
+            const usedTotalDeliveryPrice =
+                provider === 'takeat' &&
+                Boolean(raw?.session?.total_delivery_price);
+
+            // Verificar se deve excluir taxa de entrega
+            const deliveryBy = raw?.session?.delivery_by?.toUpperCase() || '';
+            const isMarketplaceDelivery = ['IFOOD', 'MARKETPLACE'].includes(
+                deliveryBy,
+            );
+            const skipDeliveryFeeInSubtotal =
+                isTakeatIfoodOrder(row.original) && isMarketplaceDelivery;
+
+            if (!usedTotalDeliveryPrice) {
+                subtotal += totalSubsidy;
+                if (!skipDeliveryFeeInSubtotal) {
+                    subtotal += deliveryFee;
+                }
+            } else if (skipDeliveryFeeInSubtotal && deliveryFee > 0) {
+                subtotal -= deliveryFee;
+            }
+
+            // Descontar cashback
+            subtotal -= totalCashback;
+
+            // Taxa de serviço iFood
+            const ifoodServiceFee = isTakeatIfoodOrder(row.original) ? 0.99 : 0;
+            if (ifoodServiceFee > 0) {
+                subtotal -= ifoodServiceFee;
+            }
+
+            return !isNaN(subtotal) && subtotal > 0 ? (
+                <span
+                    className={`${isCancelled ? 'text-muted-foreground line-through' : ''}`}
+                >
+                    {new Intl.NumberFormat('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL',
+                    }).format(subtotal)}
+                </span>
+            ) : (
+                <div className="text-right">
+                    <span className="text-muted-foreground">--</span>
+                </div>
+            );
+        },
+    },
 
     {
         accessorKey: 'cost',
         header: 'CMV',
         cell: ({ row }) => {
             const items = row.original.items || [];
+            const raw = row.original.raw;
+            const provider = row.original.provider;
+            const isCancelled = row.original.status === 'CANCELLED';
 
             // Calcular CMV usando a função compartilhada
             const totalCost = calculateOrderCMV(items);
 
-            const isCancelled = row.original.status === 'CANCELLED';
+            // Calcular subtotal (mesma lógica da coluna Subtotal)
+            let grossTotal =
+                parseFloat(String(row.original.gross_total || '0')) || 0;
+
+            if (provider === 'takeat') {
+                if (raw?.session?.total_delivery_price) {
+                    grossTotal =
+                        parseFloat(String(raw.session.total_delivery_price)) ||
+                        0;
+                } else if (raw?.session?.total_price) {
+                    grossTotal =
+                        parseFloat(String(raw.session.total_price)) || 0;
+                }
+            }
+
+            const deliveryFee =
+                parseFloat(String(row.original.delivery_fee || '0')) || 0;
+
+            let totalSubsidy = 0;
+            if (provider === 'takeat') {
+                const payments = raw?.session?.payments || [];
+                totalSubsidy = payments.reduce((sum: number, payment: any) => {
+                    const paymentName = (
+                        payment.payment_method?.name || ''
+                    ).toLowerCase();
+                    const paymentKeyword = (
+                        payment.payment_method?.keyword || ''
+                    ).toLowerCase();
+                    const isSubsidy =
+                        paymentName.includes('subsid') ||
+                        paymentName.includes('cupom') ||
+                        paymentKeyword.includes('subsid') ||
+                        paymentKeyword.includes('cupom');
+                    return isSubsidy
+                        ? sum + parseFloat(payment.payment_value || '0')
+                        : sum;
+                }, 0);
+            }
+
+            const totalCashback =
+                parseFloat(String(row.original.cashback_total || '0')) || 0;
+
+            let subtotal = grossTotal;
+            const usedTotalDeliveryPrice =
+                provider === 'takeat' &&
+                Boolean(raw?.session?.total_delivery_price);
+
+            const deliveryBy = raw?.session?.delivery_by?.toUpperCase() || '';
+            const isMarketplaceDelivery = ['IFOOD', 'MARKETPLACE'].includes(
+                deliveryBy,
+            );
+            const skipDeliveryFeeInSubtotal =
+                isTakeatIfoodOrder(row.original) && isMarketplaceDelivery;
+
+            if (!usedTotalDeliveryPrice) {
+                subtotal += totalSubsidy;
+                if (!skipDeliveryFeeInSubtotal) {
+                    subtotal += deliveryFee;
+                }
+            } else if (skipDeliveryFeeInSubtotal && deliveryFee > 0) {
+                subtotal -= deliveryFee;
+            }
+
+            subtotal -= totalCashback;
+
+            const ifoodServiceFee = isTakeatIfoodOrder(row.original) ? 0.99 : 0;
+            if (ifoodServiceFee > 0) {
+                subtotal -= ifoodServiceFee;
+            }
+
+            // Calcular porcentagem do CMV sobre o subtotal
+            const cmvPercentage =
+                subtotal > 0 ? (totalCost / subtotal) * 100 : 0;
 
             return totalCost > 0 ? (
-                <span
-                    className={`text-sm ${
-                        isCancelled ? 'text-muted-foreground line-through' : ''
-                    }`}
-                >
-                    {new Intl.NumberFormat('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                    }).format(totalCost)}
-                </span>
+                <div className="flex items-center gap-2">
+                    <span
+                        className={`text-sm ${
+                            isCancelled
+                                ? 'text-muted-foreground line-through'
+                                : ''
+                        }`}
+                    >
+                        {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                        }).format(totalCost)}
+                    </span>
+                    {subtotal > 0 && (
+                        <Badge
+                            variant="outline"
+                            className="text-xs font-normal"
+                        >
+                            {cmvPercentage.toFixed(1)}%
+                        </Badge>
+                    )}
+                </div>
             ) : (
                 <div className="text-right">
                     <span className="text-muted-foreground">--</span>
