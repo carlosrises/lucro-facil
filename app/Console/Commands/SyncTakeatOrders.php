@@ -409,10 +409,8 @@ class SyncTakeatOrders extends Command
                 ->first();
 
             if ($addonMapping && $addonMapping->internal_product_id) {
-                // Se for sabor (flavor), o FlavorMappingService será chamado depois
-                // para processar todos os sabores do pedido de uma vez
+                // Para add-ons não-sabor (bebidas, complementos, etc), criar mapping normal
                 if ($addonMapping->item_type !== 'flavor') {
-                    // Para outros tipos de add-on (bebidas, complementos, etc), criar mapping normal
                     $addonQty = $addOn['quantity'] ?? 1;
 
                     // Buscar produto do addon para calcular CMV
@@ -435,24 +433,12 @@ class SyncTakeatOrders extends Command
             }
         }
 
-        // Agora processar TODOS os sabores (flavors) do order_item de uma vez
-        // usando o FlavorMappingService para garantir frações corretas
-        $this->applyFlavorMappings($orderItem);
-    }
-
-    /**
-     * Aplicar mapeamentos de sabores (com frações) a todos os add-ons classificados como flavor
-     */
-    protected function applyFlavorMappings(\App\Models\OrderItem $orderItem): void
-    {
-        $addOns = $orderItem->add_ons ?? [];
-        if (empty($addOns)) {
-            return;
-        }
-
-        // Coletar todos os sabores classificados (mesmo sem associação)
-        $classifiedFlavors = [];
-
+        // IMPORTANTE: Usar FlavorMappingService para processar sabores
+        // Isso garante que a mesma lógica da Triagem seja aplicada
+        $flavorService = app(FlavorMappingService::class);
+        
+        // O serviço vai buscar todos os add-ons classificados como 'flavor'
+        // e criar os mappings com frações e CMV corretos automaticamente
         foreach ($addOns as $index => $addOn) {
             $addonName = $addOn['name'] ?? '';
             if (!$addonName) {
@@ -460,63 +446,21 @@ class SyncTakeatOrders extends Command
             }
 
             $addonSku = 'addon_'.md5($addonName);
-
-            // Buscar ProductMapping
             $addonMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
                 ->where('external_item_id', $addonSku)
+                ->where('item_type', 'flavor')
                 ->first();
 
-            // Se for sabor classificado (independente se tem produto associado)
-            if ($addonMapping && $addonMapping->item_type === 'flavor') {
-                $existingMapping = OrderItemMapping::where('order_item_id', $orderItem->id)
-                    ->where('mapping_type', 'addon')
-                    ->where('external_reference', (string) $index)
-                    ->exists();
-
-                if (!$existingMapping) {
-                    $classifiedFlavors[] = [
-                        'index' => $index,
-                        'name' => $addonName,
-                        'mapping' => $addonMapping,
-                        'quantity' => $addOn['quantity'] ?? 1,
-                    ];
-                }
+            if ($addonMapping && $addonMapping->internal_product_id) {
+                // Usar o serviço para aplicar o mapeamento corretamente
+                // Ele vai calcular a fração baseado no total de sabores e aplicar o CMV correto
+                $flavorService->mapFlavorToAllOccurrences($addonMapping, $orderItem->tenant_id);
+                break; // Uma vez processado, todos os sabores já foram mapeados
             }
-        }
-
-        if (empty($classifiedFlavors)) {
-            return;
-        }
-
-        // Calcular fração baseado no total de sabores classificados
-        $totalFlavors = count($classifiedFlavors);
-        $fraction = 1.0 / $totalFlavors;
-
-        // Criar mappings com frações para cada sabor
-        foreach ($classifiedFlavors as $flavor) {
-            $product = null;
-            $correctCMV = null;
-
-            // Se tem produto associado, calcular CMV
-            if ($flavor['mapping']->internal_product_id) {
-                $product = InternalProduct::find($flavor['mapping']->internal_product_id);
-                $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
-            }
-
-            OrderItemMapping::create([
-                'tenant_id' => $orderItem->tenant_id,
-                'order_item_id' => $orderItem->id,
-                'internal_product_id' => $flavor['mapping']->internal_product_id, // Pode ser null
-                'quantity' => $fraction * $flavor['quantity'],
-                'mapping_type' => 'addon',
-                'option_type' => 'pizza_flavor',
-                'auto_fraction' => true,
-                'external_reference' => (string) $flavor['index'],
-                'external_name' => $flavor['name'],
-                'unit_cost_override' => $correctCMV,
-            ]);
         }
     }
+
+
 
     /**
      * Calcular CMV correto baseado no tamanho do produto
