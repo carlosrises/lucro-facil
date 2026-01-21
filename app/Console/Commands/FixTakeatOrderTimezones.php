@@ -99,8 +99,11 @@ class FixTakeatOrderTimezones extends Command
                         // Parse do start_time original (está em UTC na API do Takeat)
                         $correctDate = Carbon::parse($rawStartTime, 'UTC');
 
-                        // Comparar com o placed_at atual
-                        $currentDate = Carbon::parse($order->placed_at);
+                        // IMPORTANTE: Pegar o valor RAW do banco (em UTC) para comparação correta
+                        // Se pegarmos $order->placed_at, Laravel converte para timezone da app
+                        $currentDateRaw = $order->getAttributes()['placed_at'];
+                        $currentDate = Carbon::parse($currentDateRaw, 'UTC');
+
                         $diffInHours = $currentDate->diffInHours($correctDate, false);
 
                         // Se a diferença for significativa (> 1 hora), precisa corrigir
