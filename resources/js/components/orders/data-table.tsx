@@ -2582,7 +2582,7 @@ export function DataTable({
             {/* Paginação */}
             <div className="flex items-center justify-between px-4">
                 <div className="hidden flex-1 text-sm text-muted-foreground lg:flex">
-                    Exibindo {pagination.from} ÔÇô {pagination.to} de{' '}
+                    Exibindo {pagination.from} - {pagination.to} de{' '}
                     {pagination.total} pedidos
                 </div>
 
