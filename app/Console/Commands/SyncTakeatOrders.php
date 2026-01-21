@@ -436,7 +436,7 @@ class SyncTakeatOrders extends Command
         // IMPORTANTE: Usar FlavorMappingService para processar sabores
         // Isso garante que a mesma lógica da Triagem seja aplicada
         $flavorService = app(FlavorMappingService::class);
-        
+
         // O serviço vai buscar todos os add-ons classificados como 'flavor'
         // e criar os mappings com frações e CMV corretos automaticamente
         foreach ($addOns as $index => $addOn) {
