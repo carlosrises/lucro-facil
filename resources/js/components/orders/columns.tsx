@@ -578,7 +578,7 @@ export const columns: ColumnDef<Order>[] = [
                 subtotal -= ifoodServiceFee;
             }
 
-            return !isNaN(subtotal) && subtotal > 0 ? (
+            return (
                 <span
                     className={`${isCancelled ? 'text-muted-foreground line-through' : ''}`}
                 >
@@ -587,10 +587,6 @@ export const columns: ColumnDef<Order>[] = [
                         currency: 'BRL',
                     }).format(subtotal)}
                 </span>
-            ) : (
-                <div className="text-right">
-                    <span className="text-muted-foreground">--</span>
-                </div>
             );
         },
     },
@@ -1072,9 +1068,9 @@ export const columns: ColumnDef<Order>[] = [
                 }, 0);
             }
 
-            // Base de cálculo para margem (mesmo cálculo do card)
-            // Usar grossTotal (que tem total_delivery_price) ou orderTotal como fallback
-            let subtotal = grossTotal > 0 ? grossTotal : orderTotal;
+            // Base de cálculo para margem (MESMO cálculo do card financeiro)
+            // Usar grossTotal (não orderTotal) para consistência com o card
+            let subtotal = grossTotal;
 
             // Para Takeat: verificar se usou total_delivery_price
             // Se for, NÃO precisa somar nada (já inclui delivery e subsídio)
@@ -1144,22 +1140,33 @@ export const columns: ColumnDef<Order>[] = [
                 extraCosts -
                 commissions -
                 totalPaymentMethodFee;
-            const margin = (netTotal / subtotal) * 100;
 
-            if (margin === 0) {
+            // Margem: tratar caso especial de subtotal = 0
+            if (subtotal <= 0) {
+                // Se há prejuízo (custos sem receita), mostrar indicador vermelho
+                if (netTotal < 0) {
+                    return (
+                        <Badge variant="destructive" className="font-semibold">
+                            PREJUÍZO
+                        </Badge>
+                    );
+                }
+                // Se não há receita nem custos, mostrar neutro
                 return (
                     <Badge variant="secondary" className="text-gray-500">
-                        0%
+                        --%
                     </Badge>
                 );
             }
 
-            // Usa configurações de margem se disponíveis, senão usa valores padrão
+            const margin = (netTotal / subtotal) * 100;
+
+            // Determinar variante baseada na margem (permitir valores negativos)
             let variant: 'default' | 'warning' | 'destructive' = 'default';
 
             if (marginSettings) {
-                if (margin <= marginSettings.margin_poor) {
-                    variant = 'destructive'; // Vermelho - margem ruim
+                if (margin < 0 || margin <= marginSettings.margin_poor) {
+                    variant = 'destructive'; // Vermelho - margem negativa ou ruim
                 } else if (margin >= marginSettings.margin_excellent) {
                     variant = 'default'; // Verde - margem excelente
                 } else {
