@@ -1306,11 +1306,12 @@ export function OrderFinancialCard({
                                                                                 item.qty ||
                                                                                 item.quantity ||
                                                                                 1;
+                                                                            // mappingQuantity JÁ inclui a quantidade do sabor (ex: 2/3 para 2x de 3 sabores)
+                                                                            // então NÃO multiplicamos por addOn.quantity novamente
                                                                             addonCost =
                                                                                 unitCost *
                                                                                 mappingQuantity *
-                                                                                itemQty *
-                                                                                addOn.quantity;
+                                                                                itemQty;
                                                                         }
 
                                                                         // Calcular fração para exibição
