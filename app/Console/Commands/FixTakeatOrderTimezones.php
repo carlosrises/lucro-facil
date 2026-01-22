@@ -55,8 +55,11 @@ class FixTakeatOrderTimezones extends Command
             }
         } elseif (! $fixAll) {
             // Se não especificou --all nem --date, usar apenas pedidos recentes (últimos 30 dias)
-            $query->where('placed_at', '>=', now()->subDays(30));
+            $cutoffDate = Carbon::now('UTC')->subDays(30);
+            $query->where('placed_at', '>=', $cutoffDate);
             $this->info('📅 Filtrando pedidos dos últimos 30 dias (use --all para todos)');
+        } else {
+            $this->info('📅 Analisando TODOS os pedidos Takeat');
         }
 
         $totalOrders = $query->count();
@@ -78,7 +81,7 @@ class FixTakeatOrderTimezones extends Command
         $errors = 0;
         $debugCount = 0;
         $incorrectFound = 0;
-        $showDetails = $totalOrders <= 20 || $debug; // Mostrar detalhes se debug ativo
+        $showDetails = $debug; // Mostrar detalhes apenas se debug ativo
 
         // Configurar barra de progresso com formato melhorado
         $bar = $this->output->createProgressBar($totalOrders);
@@ -88,18 +91,16 @@ class FixTakeatOrderTimezones extends Command
         );
         $bar->setMessage('0');
 
-        if (! $showDetails) {
-            $bar->start();
-        }
+        $bar->start();
 
         // Processar em lotes de 100 para não estourar memória
         $orderDirection = $this->option('oldest') ? 'asc' : 'desc';
         $orderLabel = $this->option('oldest') ? 'mais antigos' : 'mais recentes';
-        
+
         if ($debug) {
             $this->comment("🔄 Ordenação: {$orderLabel} primeiro");
         }
-        
+
         $query->select(['id', 'code', 'placed_at', 'raw'])
             ->orderBy('placed_at', $orderDirection)
             ->chunk(100, function ($orders) use (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar, $debug, &$debugCount, &$incorrectFound) {
@@ -109,10 +110,7 @@ class FixTakeatOrderTimezones extends Command
                         $skipped++;
                         if (! $showDetails) {
                             $bar->advance();
-                        }
-
-                        continue;
-                    }
+                        $bar->advance();                    }
 
                     try {
                         // Extrair start_time do raw
@@ -128,9 +126,7 @@ class FixTakeatOrderTimezones extends Command
                             if (! $showDetails) {
                                 $bar->advance();
                             }
-                            if ($debug) {
-                                $debugCount++;
-                            }
+                            $bar->advance();
 
                             continue;
                         }
@@ -158,9 +154,7 @@ class FixTakeatOrderTimezones extends Command
                             }
                             if ($debug) {
                                 $debugCount++;
-                            }
-
-                            continue;
+                            $bar->advance();ontinue;
                         }
 
                         // Pedido precisa ser corrigido
@@ -204,17 +198,13 @@ class FixTakeatOrderTimezones extends Command
                         $bar->setMessage((string) $fixed);
                         $bar->advance();
                     }
+                }$bar->setMessage((string) $fixed);
+                    $bar->advance();
                 }
             });
 
-        if (! $showDetails) {
-            $bar->finish();
-            $this->newLine();
-        }
-
-        $this->newLine();
-        $this->info('═══════════════════════════════════════');
-        $this->info("📊 Total analisado: {$totalOrders} pedidos");
+        $bar->finish();
+        $this->newLine();this->info("📊 Total analisado: {$totalOrders} pedidos");
         $this->info("✅ Já corretos: {$skipped}");
         $this->info("🔍 Incorretos encontrados: {$incorrectFound}");
         $this->info('🔧 '.($isDryRun ? 'Seriam corrigidos' : 'Corrigidos').": {$fixed}");
