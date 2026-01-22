@@ -449,7 +449,12 @@ export const columns: ColumnDef<Order>[] = [
     },
     {
         accessorKey: 'total',
-        header: 'Total do pedido',
+        header: () => (
+            <span>
+                <span className="hidden lg:inline">Total do pedido</span>
+                <span className="lg:hidden">Total</span>
+            </span>
+        ),
         cell: ({ row }) => {
             const raw = row.original.raw;
             let amount = 0;
@@ -809,7 +814,12 @@ export const columns: ColumnDef<Order>[] = [
     },
     {
         accessorKey: 'total_commissions',
-        header: 'Comissões',
+        header: () => (
+            <span>
+                <span className="hidden xl:inline">Comissões</span>
+                <span className="xl:hidden">Comiss.</span>
+            </span>
+        ),
         meta: {
             label: 'Comissões',
         },
@@ -854,7 +864,12 @@ export const columns: ColumnDef<Order>[] = [
     },
     {
         accessorKey: 'payment_fees',
-        header: 'Taxa Pgto',
+        header: () => (
+            <span>
+                <span className="hidden xl:inline">Taxa Pgto</span>
+                <span className="xl:hidden">Taxa Pg.</span>
+            </span>
+        ),
         meta: {
             label: 'Taxa Pgto',
         },
@@ -892,7 +907,12 @@ export const columns: ColumnDef<Order>[] = [
     },
     {
         accessorKey: 'net_total',
-        header: 'Total líquido',
+        header: () => (
+            <span>
+                <span className="hidden lg:inline">Total líquido</span>
+                <span className="lg:hidden">Líquido</span>
+            </span>
+        ),
         cell: ({ row }) => {
             // Usar o mesmo cálculo do card de detalhamento financeiro
             const netRevenue = calculateNetRevenue(row.original);
