@@ -321,12 +321,12 @@ export function DataTable({
             const orderId = row.original.id;
             const isExpanding = !row.getIsExpanded();
 
-            // Se está expandindo E não tem detalhes ainda
-            if (isExpanding && !getOrderDetails(orderId)) {
+            // Se está expandindo, sempre carregar detalhes atualizados
+            if (isExpanding) {
                 // Expandir imediatamente (vai mostrar loading)
                 row.toggleExpanded();
 
-                // Carregar detalhes em background
+                // Carregar detalhes em background (sempre busca dados mais recentes)
                 const details = await loadOrderDetails(orderId);
 
                 if (details) {
@@ -346,11 +346,11 @@ export function DataTable({
                     );
                 }
             } else {
-                // Apenas toggle normal (já tem dados ou está recolhendo)
+                // Apenas recolher (não precisa carregar nada)
                 row.toggleExpanded();
             }
         },
-        [loadOrderDetails, getOrderDetails],
+        [loadOrderDetails],
     );
 
     const [associateDialogOpen, setAssociateDialogOpen] = React.useState(false);
