@@ -515,6 +515,7 @@ class SyncTakeatOrders extends Command
                 ]);
             } elseif ($addonMapping->internal_product_id) {
                 // Para add-ons não-sabor COM produto vinculado, criar OrderItemMapping
+                // MESMA LÓGICA DA TRIAGEM (applyMappingToHistoricalOrders)
                 $addonQty = $addOn['quantity'] ?? 1;
 
                 // Buscar produto do addon para calcular CMV
@@ -550,7 +551,7 @@ class SyncTakeatOrders extends Command
         }
 
         // Processar sabores usando FlavorMappingService
-        // Este método detecta automaticamente os sabores nos add_ons e cria os OrderItemMappings com frações corretas
+        // MESMA LÓGICA DA TRIAGEM (mapFlavorToAllOccurrences mas só para este pedido)
         if ($hasFlavors) {
             logger()->info('🍕 Processando sabores via FlavorMappingService', [
                 'order_item_id' => $orderItem->id,
