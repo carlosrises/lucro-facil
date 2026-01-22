@@ -16,12 +16,12 @@ class OrderCreated implements ShouldBroadcastNow
     public function __construct(
         public Order $order
     ) {
-        \Log::info('[OrderCreated Event] Disparando evento', [
-            'tenant_id' => $order->tenant_id,
-            'order_id' => $order->id,
-            'order_code' => $order->code,
-            'channel' => "orders.tenant.{$order->tenant_id}",
-        ]);
+        // \Log::info('[OrderCreated Event] Disparando evento', [
+        //     'tenant_id' => $order->tenant_id,
+        //     'order_id' => $order->id,
+        //     'order_code' => $order->code,
+        //     'channel' => "orders.tenant.{$order->tenant_id}",
+        // ]);
     }
 
     /**

@@ -180,13 +180,13 @@ class SyncTakeatOrders extends Command
 
                             if (! $dryRun) {
                                 try {
-                                    logger()->info('💾 Salvando pedido', ['basket_id' => $basketId]);
+                                    // logger()->info('💾 Salvando pedido', ['basket_id' => $basketId]);
                                     $this->processOrderBasket($basket, $session, $store);
                                     $savedOrders++;
-                                    logger()->info('✅ Pedido salvo com sucesso', [
-                                        'basket_id' => $basketId,
-                                        'saved_count' => $savedOrders,
-                                    ]);
+                                    // logger()->info('✅ Pedido salvo com sucesso', [
+                                    //     'basket_id' => $basketId,
+                                    //     'saved_count' => $savedOrders,
+                                    // ]);
                                 } catch (\Throwable $e) {
                                     $this->error("  ❌ Erro ao salvar pedido: {$e->getMessage()}");
                                     logger()->error('Erro ao salvar pedido Takeat', [
@@ -198,17 +198,17 @@ class SyncTakeatOrders extends Command
                             }
                         }
 
-                        logger()->info('✅ Bill processada', ['bill_index' => $billIndex + 1]);
+                        // logger()->info('✅ Bill processada', ['bill_index' => $billIndex + 1]);
                     }
 
-                    logger()->info('✅ Sessão processada', ['session_index' => $sessionIndex + 1]);
+                    // logger()->info('✅ Sessão processada', ['session_index' => $sessionIndex + 1]);
                 }
 
-                logger()->info('🎉 Todas as sessões processadas', [
-                    'store_id' => $store->id,
-                    'total_orders' => $totalOrders,
-                    'saved_orders' => $savedOrders,
-                ]);
+                // logger()->info('🎉 Todas as sessões processadas', [
+                //     'store_id' => $store->id,
+                //     'total_orders' => $totalOrders,
+                //     'saved_orders' => $savedOrders,
+                // ]);
 
                 $excluded = $totalOrders - $filteredOrders;
                 $this->info("  ✅ Total de pedidos: {$totalOrders}");
@@ -410,11 +410,11 @@ class SyncTakeatOrders extends Command
      */
     protected function autoApplyMappings(\App\Models\OrderItem $orderItem): void
     {
-        logger()->info('🔍 Iniciando auto-apply mappings', [
-            'order_item_id' => $orderItem->id,
-            'sku' => $orderItem->sku,
-            'name' => $orderItem->name,
-        ]);
+        // logger()->info('🔍 Iniciando auto-apply mappings', [
+        //     'order_item_id' => $orderItem->id,
+        //     'sku' => $orderItem->sku,
+        //     'name' => $orderItem->name,
+        // ]);
 
         // Buscar ProductMapping pelo SKU
         $productMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
@@ -427,16 +427,16 @@ class SyncTakeatOrders extends Command
             return; // Sem mapeamento configurado
         }
 
-        logger()->info('✅ Mapeamento principal encontrado', [
-            'mapping_id' => $productMapping->id,
-            'product_id' => $productMapping->internal_product_id,
-        ]);
+        // logger()->info('✅ Mapeamento principal encontrado', [
+        //     'mapping_id' => $productMapping->id,
+        //     'product_id' => $productMapping->internal_product_id,
+        // ]);
 
         // Buscar o produto interno para calcular CMV correto
         $product = InternalProduct::find($productMapping->internal_product_id);
         $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
 
-        logger()->info('💰 CMV calculado', ['cmv' => $correctCMV]);
+        // logger()->info('💰 CMV calculado', ['cmv' => $correctCMV]);
 
         // Criar OrderItemMapping principal
         OrderItemMapping::create([
@@ -450,11 +450,11 @@ class SyncTakeatOrders extends Command
             'unit_cost_override' => $correctCMV,
         ]);
 
-        logger()->info('✅ Mapping principal criado');
+        // logger()->info('✅ Mapping principal criado');
 
         // Auto-mapear complementos (add_ons) se houverem
         $addOns = $orderItem->add_ons ?? [];
-        logger()->info('🔍 Processando add-ons', ['count' => count($addOns)]);
+        // logger()->info('🔍 Processando add-ons', ['count' => count($addOns)]);
 
         $hasFlavors = false; // Flag para detectar se há sabores
 
@@ -464,10 +464,10 @@ class SyncTakeatOrders extends Command
                 continue;
             }
 
-            logger()->info('🔍 Processando add-on', [
-                'index' => $index,
-                'name' => $addonName,
-            ]);
+            // logger()->info('🔍 Processando add-on', [
+            //     'index' => $index,
+            //     'name' => $addonName,
+            // ]);
 
             // Criar SKU único para o add-on baseado no nome (mesmo padrão da Triagem)
             $addonSku = 'addon_'.md5($addonName);
@@ -509,12 +509,12 @@ class SyncTakeatOrders extends Command
             if ($addonMapping->item_type === 'flavor') {
                 // Para sabores, marcar flag para processar depois via FlavorMappingService
                 $hasFlavors = true;
-                logger()->info('🍕 Sabor detectado, será processado via FlavorMappingService', [
-                    'name' => $addonName,
-                    'mapping_id' => $addonMapping->id,
-                    'product_id' => $addonMapping->internal_product_id,
-                    'has_product' => $addonMapping->internal_product_id !== null,
-                ]);
+                // logger()->info('🍕 Sabor detectado, será processado via FlavorMappingService', [
+                //     'name' => $addonName,
+                //     'mapping_id' => $addonMapping->id,
+                //     'product_id' => $addonMapping->internal_product_id,
+                //     'has_product' => $addonMapping->internal_product_id !== null,
+                // ]);
             } elseif ($addonMapping->internal_product_id) {
                 // Para add-ons não-sabor COM produto vinculado, criar OrderItemMapping
                 // MESMA LÓGICA DA TRIAGEM (applyMappingToHistoricalOrders)
@@ -537,11 +537,11 @@ class SyncTakeatOrders extends Command
                     'unit_cost_override' => $addonCMV,
                 ]);
 
-                logger()->info('✅ Add-on não-sabor mapeado', [
-                    'name' => $addonName,
-                    'quantity' => $addonQty,
-                    'cmv' => $addonCMV,
-                ]);
+                // logger()->info('✅ Add-on não-sabor mapeado', [
+                //     'name' => $addonName,
+                //     'quantity' => $addonQty,
+                //     'cmv' => $addonCMV,
+                // ]);
             } else {
                 // Add-on classificado mas SEM produto vinculado - apenas criar ProductMapping (já existe)
                 logger()->info('🔗 Add-on classificado mas sem produto vinculado', [
@@ -555,11 +555,11 @@ class SyncTakeatOrders extends Command
         // Processar sabores usando FlavorMappingService
         // MESMA LÓGICA DA TRIAGEM (mapFlavorToAllOccurrences mas só para este pedido)
         if ($hasFlavors) {
-            logger()->info('🍕 Processando sabores via FlavorMappingService', [
-                'order_item_id' => $orderItem->id,
-                'order_item_name' => $orderItem->name,
-                'add_ons_count' => count($orderItem->add_ons ?? []),
-            ]);
+            // logger()->info('🍕 Processando sabores via FlavorMappingService', [
+            //     'order_item_id' => $orderItem->id,
+            //     'order_item_name' => $orderItem->name,
+            //     'add_ons_count' => count($orderItem->add_ons ?? []),
+            // ]);
 
             try {
                 // Refresh do OrderItem para garantir que os add_ons estão atualizados
@@ -573,9 +573,9 @@ class SyncTakeatOrders extends Command
                     ->where('option_type', 'pizza_flavor')
                     ->count();
 
-                logger()->info('✅ Sabores processados com sucesso via FlavorMappingService', [
-                    'mappings_created' => $mappingsCreated,
-                ]);
+                // logger()->info('✅ Sabores processados com sucesso via FlavorMappingService', [
+                //     'mappings_created' => $mappingsCreated,
+                // ]);
             } catch (\Exception $e) {
                 logger()->error('❌ Erro ao processar sabores via FlavorMappingService', [
                     'error' => $e->getMessage(),

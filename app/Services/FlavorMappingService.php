@@ -189,11 +189,11 @@ class FlavorMappingService
             // Verificar se este add-on tem ProductMapping do tipo 'flavor'
             $addOnSku = 'addon_'.md5($addOnName);
 
-            logger()->info('🔍 FlavorMappingService: Buscando ProductMapping para add-on', [
-                'index' => $index,
-                'name' => $addOnName,
-                'sku' => $addOnSku,
-            ]);
+            // logger()->info('🔍 FlavorMappingService: Buscando ProductMapping para add-on', [
+            //     'index' => $index,
+            //     'name' => $addOnName,
+            //     'sku' => $addOnSku,
+            // ]);
 
             $productMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
                 ->where('external_item_id', $addOnSku)
@@ -201,11 +201,11 @@ class FlavorMappingService
                 ->first();
 
             if ($productMapping && $productMapping->internal_product_id) {
-                logger()->info('✅ FlavorMappingService: ProductMapping encontrado', [
-                    'mapping_id' => $productMapping->id,
-                    'product_id' => $productMapping->internal_product_id,
-                    'item_type' => $productMapping->item_type,
-                ]);
+                // logger()->info('✅ FlavorMappingService: ProductMapping encontrado', [
+                //     'mapping_id' => $productMapping->id,
+                //     'product_id' => $productMapping->internal_product_id,
+                //     'item_type' => $productMapping->item_type,
+                // ]);
 
                 $classifiedFlavors[] = [
                     'index' => $index,
@@ -214,13 +214,13 @@ class FlavorMappingService
                     'quantity' => $addOn['quantity'] ?? $addOn['qty'] ?? 1,
                 ];
             } else {
-                logger()->warning('⚠️ FlavorMappingService: ProductMapping NÃO encontrado ou sem produto', [
-                    'name' => $addOnName,
-                    'sku' => $addOnSku,
-                    'found' => $productMapping !== null,
-                    'has_product' => $productMapping?->internal_product_id !== null,
-                    'item_type' => $productMapping?->item_type,
-                ]);
+                // logger()->warning('⚠️ FlavorMappingService: ProductMapping NÃO encontrado ou sem produto', [
+                //     'name' => $addOnName,
+                //     'sku' => $addOnSku,
+                //     'found' => $productMapping !== null,
+                //     'has_product' => $productMapping?->internal_product_id !== null,
+                //     'item_type' => $productMapping?->item_type,
+                // ]);
             }
         }
 
@@ -232,11 +232,11 @@ class FlavorMappingService
             return;
         }
 
-        logger()->info('✅ FlavorMappingService: Sabores classificados encontrados', [
-            'order_item_id' => $orderItem->id,
-            'classified_count' => count($classifiedFlavors),
-            'flavors' => array_column($classifiedFlavors, 'name'),
-        ]);
+        // logger()->info('✅ FlavorMappingService: Sabores classificados encontrados', [
+        //     'order_item_id' => $orderItem->id,
+        //     'classified_count' => count($classifiedFlavors),
+        //     'flavors' => array_column($classifiedFlavors, 'name'),
+        // ]);
 
         // Somar as quantidades de todos os sabores (2x Portuguesa + 1x Calabresa = 3 sabores)
         $totalFlavorQuantity = array_sum(array_column($classifiedFlavors, 'quantity'));
@@ -276,13 +276,13 @@ class FlavorMappingService
                 ]);
             } else {
                 // Criar novo mapping
-                logger()->info('✨ Criando OrderItemMapping de sabor', [
-                    'flavor' => $flavor['name'],
-                    'product_id' => $flavor['product_mapping']->internal_product_id,
-                    'quantity' => $flavorFraction,
-                    'fraction' => "{$flavor['quantity']}/{$totalFlavorQuantity}",
-                    'cmv' => $correctCMV,
-                ]);
+                // logger()->info('✨ Criando OrderItemMapping de sabor', [
+                //     'flavor' => $flavor['name'],
+                //     'product_id' => $flavor['product_mapping']->internal_product_id,
+                //     'quantity' => $flavorFraction,
+                //     'fraction' => "{$flavor['quantity']}/{$totalFlavorQuantity}",
+                //     'cmv' => $correctCMV,
+                // ]);
 
                 OrderItemMapping::create([
                     'tenant_id' => $orderItem->tenant_id,
