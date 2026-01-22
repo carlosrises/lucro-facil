@@ -142,11 +142,13 @@ class FlavorMappingService
                 $addOnQuantity = $addOn['quantity'] ?? $addOn['qty'] ?? 1;
 
                 // Criar o mapeamento com CMV correto
+                // IMPORTANTE: Aqui criamos com a fração simples * quantidade
+                // mas depois recalculateAllFlavorsForOrderItem vai ajustar considerando TODOS os sabores
                 OrderItemMapping::create([
                     'tenant_id' => $tenantId,
                     'order_item_id' => $orderItem->id,
                     'internal_product_id' => $mapping->internal_product_id,
-                    'quantity' => $fraction * $addOnQuantity, // Fração x Quantidade do add-on
+                    'quantity' => $fraction, // Fração será recalculada considerando todos os sabores
                     'mapping_type' => 'addon',
                     'option_type' => 'pizza_flavor',
                     'auto_fraction' => true,
@@ -205,9 +207,19 @@ class FlavorMappingService
             return;
         }
 
-        $totalFlavors = count($classifiedFlavors);
-        $newFraction = 1.0 / $totalFlavors;        // Para cada sabor classificado, criar ou atualizar OrderItemMapping
+        // Somar as quantidades de todos os sabores (2x Portuguesa + 1x Calabresa = 3 sabores)
+        $totalFlavorQuantity = array_sum(array_column($classifiedFlavors, 'quantity'));
+
+        if ($totalFlavorQuantity === 0) {
+            return;
+        }
+
+        // Para cada sabor classificado, criar ou atualizar OrderItemMapping
         foreach ($classifiedFlavors as $flavor) {
+            // Calcular a fração baseada na quantidade deste sabor / total de sabores
+            // Ex: 2x Portuguesa de 3 sabores = 2/3
+            $flavorFraction = $flavor['quantity'] / $totalFlavorQuantity;
+
             $existingMapping = OrderItemMapping::where('order_item_id', $orderItem->id)
                 ->where('mapping_type', 'addon')
                 ->where('external_reference', (string) $flavor['index'])
@@ -220,7 +232,7 @@ class FlavorMappingService
             if ($existingMapping) {
                 // Atualizar mapping existente
                 $existingMapping->update([
-                    'quantity' => $newFraction * $flavor['quantity'],
+                    'quantity' => $flavorFraction,
                     'unit_cost_override' => $correctCMV,
                 ]);
             } else {
@@ -229,7 +241,7 @@ class FlavorMappingService
                     'tenant_id' => $orderItem->tenant_id,
                     'order_item_id' => $orderItem->id,
                     'internal_product_id' => $flavor['product_mapping']->internal_product_id,
-                    'quantity' => $newFraction * $flavor['quantity'],
+                    'quantity' => $flavorFraction,
                     'mapping_type' => 'addon',
                     'option_type' => 'pizza_flavor',
                     'auto_fraction' => true,

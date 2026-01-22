@@ -501,41 +501,12 @@ class SyncTakeatOrders extends Command
 
         // IMPORTANTE: Usar FlavorMappingService para processar sabores
         // Isso garante que a mesma lógica da Triagem seja aplicada
-        logger()->info('🍕 Verificando sabores para processar');
+        // ⚠️ DESABILITADO durante sincronização para evitar timeout
+        // Motivo: mapFlavorToAllOccurrences processa TODOS os pedidos históricos
+        // causando lentidão extrema em produção. Sabores devem ser mapeados
+        // manualmente via Triagem ou via job assíncrono específico.
 
-        $flavorService = app(FlavorMappingService::class);
-
-        // O serviço vai buscar todos os add-ons classificados como 'flavor'
-        // e criar os mappings com frações e CMV corretos automaticamente
-        foreach ($addOns as $index => $addOn) {
-            $addonName = $addOn['name'] ?? '';
-            if (! $addonName) {
-                continue;
-            }
-
-            $addonSku = 'addon_'.md5($addonName);
-            $addonMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
-                ->where('external_item_id', $addonSku)
-                ->where('item_type', 'flavor')
-                ->first();
-
-            if ($addonMapping && $addonMapping->internal_product_id) {
-                logger()->info('🍕 Sabor encontrado, aplicando mapeamento', [
-                    'addon_name' => $addonName,
-                    'addon_sku' => $addonSku,
-                    'mapping_id' => $addonMapping->id,
-                ]);
-
-                // Usar o serviço para aplicar o mapeamento corretamente
-                // Ele vai calcular a fração baseado no total de sabores e aplicar o CMV correto
-                $flavorService->mapFlavorToAllOccurrences($addonMapping, $orderItem->tenant_id);
-
-                logger()->info('✅ Sabor mapeado com sucesso');
-                break; // Uma vez processado, todos os sabores já foram mapeados
-            }
-        }
-
-        logger()->info('✅ Auto-apply mappings concluído', ['order_item_id' => $orderItem->id]);
+        logger()->info('⏭️ Auto-mapping de sabores desabilitado durante sincronização');
     }
 
     /**

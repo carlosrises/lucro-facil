@@ -187,15 +187,20 @@ class FixIncorrectPizzaFractions extends Command
 
                     // Aplicar fração APENAS para sabores de pizza
                     // Outros add-ons (bebidas, complementos) são 100% completos
-                    $correctQuantity = $isFlavor ? $correctFraction : 1.0;
-                    $correctSubtotal = $correctCMV * $correctQuantity * $addonQuantity;
+                    // IMPORTANTE: Para sabores, a quantidade no OrderItemMapping deve ser addonQuantity / totalFlavors
+                    // Ex: 2x Portuguesa de 3 sabores = 2/3
+                    $correctQuantity = $isFlavor ? ($addonQuantity / $numFlavors) : 1.0;
+                    $correctSubtotal = $correctCMV * $correctQuantity;
 
                     $currentTotal += $currentSubtotal;
                     $correctTotal += $correctSubtotal;
 
                     // Formatar frações para exibição (apenas para sabores)
-                    $currentFractionText = $mappingQuantity == 0.5 ? '1/2' : ($mappingQuantity == 0.33 || abs($mappingQuantity - 0.33) < 0.01 ? '1/3' : ($mappingQuantity == 0.25 ? '1/4' : number_format($mappingQuantity, 2)));
-                    $correctFractionText = $correctQuantity == 0.5 ? '1/2' : ($correctQuantity == 0.33 || abs($correctQuantity - 0.33) < 0.01 ? '1/3' : ($correctQuantity == 0.25 ? '1/4' : number_format($correctQuantity, 2)));
+                    // Para correctQuantity, usar a fração real (ex: 2/3) quando quantidade > 1
+                    $currentFractionText = $this->formatFraction($mappingQuantity);
+                    $correctFractionText = $isFlavor && $addonQuantity > 1
+                        ? "{$addonQuantity}/{$numFlavors}"
+                        : $this->formatFraction($correctQuantity);
 
                     // Verificar se está incorreto:
                     // - CMV errado
@@ -207,12 +212,12 @@ class FixIncorrectPizzaFractions extends Command
                     if ($isIncorrect) {
                         $this->line("   ├ ⚠️  {$currentFractionText} {$productName}");
                         $this->line('      OrderItemMapping ID: '.($addon['order_item_mapping_id'] ?? 'N/A'));
-                        $this->line('      ❌ ATUAL: R$ '.number_format($currentCMV, 2, ',', '.').' × '.$currentFractionText.' × '.$addonQuantity.' = R$ '.number_format($currentSubtotal, 2, ',', '.'));
-                        $this->line("      ✅ CORRETO ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.').' × '.$correctFractionText.' × '.$addonQuantity.' = R$ '.number_format($correctSubtotal, 2, ',', '.'));
+                        $this->line('      ❌ ATUAL: R$ '.number_format($currentCMV, 2, ',', '.').' × '.$currentFractionText.' = R$ '.number_format($currentSubtotal, 2, ',', '.'));
+                        $this->line("      ✅ CORRETO ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.').' × '.$correctFractionText.' = R$ '.number_format($correctSubtotal, 2, ',', '.'));
                         $hasIncorrectCost = true;
                     } else {
-                        $this->line("   ├ ✅ {$currentFractionText} {$productName}");
-                        $this->line('      💰 R$ '.number_format($currentSubtotal, 2, ',', '.'));
+                        $this->line("   ├ ✅ {$correctFractionText} {$productName}");
+                        $this->line('      💰 R$ '.number_format($correctSubtotal, 2, ',', '.'));
                     }
                 }
 
@@ -278,15 +283,20 @@ class FixIncorrectPizzaFractions extends Command
                         // Calcular CMV correto baseado no tamanho (mesma lógica do FlavorMappingService)
                         $correctCMV = $pizzaSize ? $product->calculateCMV($pizzaSize) : $product->unit_cost;
 
-                        // Obter quantidade do add-on (não usar aqui, só para validação)
+                        // Obter quantidade do add-on
                         $addOnQuantity = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
 
-                        // Criar novo OrderItemMapping (mesma estrutura do FlavorMappingService linha 227-239)
+                        // Calcular fração considerando a quantidade do sabor
+                        // Ex: 2x Portuguesa de 3 sabores totais = 2/3
+                        // Isso porque detectNumFlavors() já soma as quantidades (2x + 1x = 3 sabores)
+                        $quantityWithFraction = ($addOnQuantity / $numFlavors);
+
+                        // Criar novo OrderItemMapping (mesma estrutura do FlavorMappingService)
                         \App\Models\OrderItemMapping::create([
                             'tenant_id' => $orderItem->tenant_id,
                             'order_item_id' => $orderItem->id,
                             'internal_product_id' => $product->id,
-                            'quantity' => $correctFraction, // APENAS a fração (ex: 0.5), NÃO multiplica por addOnQuantity aqui
+                            'quantity' => $quantityWithFraction, // Fração baseada na quantidade (ex: 2/3 para 2x de 3 sabores)
                             'mapping_type' => 'addon',
                             'option_type' => 'pizza_flavor',
                             'auto_fraction' => true,
@@ -418,5 +428,19 @@ class FixIncorrectPizzaFractions extends Command
         }
 
         return null;
+    }
+
+    /**
+     * Formatar fração para exibição legível
+     */
+    protected function formatFraction(float $fraction): string
+    {
+        if (abs($fraction - 0.5) < 0.01) return '1/2';
+        if (abs($fraction - 0.33) < 0.01 || abs($fraction - 1/3) < 0.01) return '1/3';
+        if (abs($fraction - 0.25) < 0.01) return '1/4';
+        if (abs($fraction - 0.66) < 0.01 || abs($fraction - 2/3) < 0.01) return '2/3';
+        if (abs($fraction - 0.75) < 0.01) return '3/4';
+
+        return number_format($fraction, 2);
     }
 }
