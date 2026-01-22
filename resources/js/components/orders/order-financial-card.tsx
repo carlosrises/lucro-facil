@@ -181,7 +181,7 @@ export function OrderFinancialCard({
             }
 
             // grossTotal = valor APÓS desconto (usado no cálculo de subtotal/receita)
-            // Prioridade: total_delivery_price > total_price
+            // Prioridade: total_delivery_price > total_price > order.gross_total (fallback)
             if (order?.raw?.session?.total_delivery_price) {
                 grossTotal =
                     parseFloat(
@@ -190,6 +190,10 @@ export function OrderFinancialCard({
             } else if (order?.raw?.session?.total_price) {
                 grossTotal =
                     parseFloat(String(order.raw.session.total_price)) || 0;
+            }
+            // Se ainda estiver zerado, usar order.gross_total como fallback
+            if (grossTotal === 0 && order?.gross_total) {
+                grossTotal = parseFloat(String(order.gross_total)) || 0;
             }
         }
 
@@ -323,10 +327,12 @@ export function OrderFinancialCard({
         }
 
         // Subtotal para cálculo de receita líquida
-        // Se usar total_delivery_price, NÃO somar subsídio (já está incluído)
-        // Se usar old_total_price ou total_price, SOMAR subsídio
-        // IMPORTANTE: usar grossTotal (após desconto), não orderTotal (antes do desconto)
+        // Começar com grossTotal e aplicar ajustes
+        // IMPORTANTE: grossTotal já pode incluir ou não os descontos dependendo da fonte
         let subtotal = grossTotal;
+
+        // Aplicar desconto de loja (descontos reais pagos pela loja, não subsídios)
+        subtotal -= storeDiscount;
 
         // Verifica se usou total_delivery_price (que já inclui subsídio e delivery)
         const usedTotalDeliveryPrice =
@@ -508,7 +514,7 @@ export function OrderFinancialCard({
 
         // Helper para formatar porcentagem
         const formatPercentage = (value: number, total: number) => {
-            // Proteção contra valores inválidos
+            // Proteção contra valores inválidos ou divisão por zero
             if (
                 isNaN(value) ||
                 isNaN(total) ||
@@ -518,7 +524,9 @@ export function OrderFinancialCard({
             ) {
                 return '0,0%';
             }
-            return `${((value / total) * 100).toFixed(1).replace('.', ',')}%`;
+            const percentage = (value / total) * 100;
+            // Permitir valores negativos
+            return `${percentage.toFixed(1).replace('.', ',')}%`;
         };
 
         return (
