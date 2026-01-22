@@ -187,7 +187,7 @@ export default function Orders() {
             // Verificar filtro de loja
             if (
                 currentFilters.store_id &&
-                order.store_id !== currentFilters.store_id
+                order.store_id != currentFilters.store_id // Use != para coerção de tipo (10 == '10')
             ) {
                 console.warn(
                     '[Realtime] ❌ Pedido de loja diferente do filtro, ignorando',
