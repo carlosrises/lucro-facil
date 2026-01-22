@@ -245,13 +245,15 @@ class FixIncorrectPizzaFractions extends Command
                 $this->warn('   ⚠️  NECESSITA CORREÇÃO');
 
                 if (! $dryRun) {
-                    // Deletar mappings antigos de addons para forçar reassociação
+                    // Deletar APENAS mappings de sabores (option_type = 'pizza_flavor')
+                    // Preservar outros add-ons como bebidas, complementos, etc
                     $deletedCount = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
                         ->where('mapping_type', 'addon')
+                        ->where('option_type', 'pizza_flavor')
                         ->delete();
 
                     if ($deletedCount > 0) {
-                        $this->line("   🗑️  Deletados {$deletedCount} mappings antigos");
+                        $this->line("   🗑️  Deletados {$deletedCount} mappings de sabores antigos");
                     }
 
                     // Recriar mappings para cada sabor

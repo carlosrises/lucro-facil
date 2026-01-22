@@ -455,7 +455,7 @@ class SyncTakeatOrders extends Command
         $addOns = $orderItem->add_ons ?? [];
         logger()->info('🔍 Processando add-ons', ['count' => count($addOns)]);
 
-        $flavorMappings = []; // Coletar sabores para processar depois
+        $hasFlavors = false; // Flag para detectar se há sabores
 
         foreach ($addOns as $index => $addOn) {
             $addonName = $addOn['name'] ?? '';
@@ -477,14 +477,9 @@ class SyncTakeatOrders extends Command
                 ->first();
 
             if ($addonMapping && $addonMapping->internal_product_id) {
-                // Para sabores, coletar para processar com FlavorMappingService
+                // Para sabores, marcar flag para processar depois
                 if ($addonMapping->item_type === 'flavor') {
-                    $flavorMappings[] = [
-                        'mapping' => $addonMapping,
-                        'index' => $index,
-                        'name' => $addonName,
-                        'quantity' => $addOn['quantity'] ?? 1,
-                    ];
+                    $hasFlavors = true;
                     logger()->info('🍕 Sabor detectado, será processado via FlavorMappingService', [
                         'name' => $addonName,
                         'product_id' => $addonMapping->internal_product_id,
@@ -509,15 +504,21 @@ class SyncTakeatOrders extends Command
                         'external_name' => $addonName,
                         'unit_cost_override' => $addonCMV,
                     ]);
+
+                    logger()->info('✅ Add-on não-sabor mapeado', [
+                        'name' => $addonName,
+                        'quantity' => $addonQty,
+                        'cmv' => $addonCMV,
+                    ]);
                 }
             }
         }
 
         // Processar sabores usando FlavorMappingService
-        // Agora é seguro - recalculateAllFlavorsForOrderItem() só processa o OrderItem atual
-        if (! empty($flavorMappings)) {
+        // Este método detecta automaticamente os sabores nos add_ons e cria os OrderItemMappings com frações corretas
+        if ($hasFlavors) {
             logger()->info('🍕 Processando sabores via FlavorMappingService', [
-                'count' => count($flavorMappings),
+                'order_item_id' => $orderItem->id,
             ]);
 
             try {
@@ -529,6 +530,7 @@ class SyncTakeatOrders extends Command
                 logger()->error('❌ Erro ao processar sabores via FlavorMappingService', [
                     'error' => $e->getMessage(),
                     'order_item_id' => $orderItem->id,
+                    'trace' => $e->getTraceAsString(),
                 ]);
             }
         }
