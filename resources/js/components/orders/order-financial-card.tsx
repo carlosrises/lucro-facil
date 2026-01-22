@@ -1324,14 +1324,26 @@ export function OrderFinancialCard({
                                                                                 .mapping
                                                                                 ?.quantity ||
                                                                             1;
+                                                                        const addonQuantity =
+                                                                            addOn.quantity ||
+                                                                            1;
+
+                                                                        // Se tem quantidade > 1 (ex: 2x), calcular a fração individual
+                                                                        // Ex: mappingQuantity=1.0 (2/2) e addonQuantity=2 → fração individual = 1/2
+                                                                        const individualFraction =
+                                                                            addonQuantity >
+                                                                            1
+                                                                                ? mappingQuantity /
+                                                                                  addonQuantity
+                                                                                : mappingQuantity;
 
                                                                         if (
-                                                                            mappingQuantity <
+                                                                            individualFraction <
                                                                             1
                                                                         ) {
                                                                             if (
                                                                                 Math.abs(
-                                                                                    mappingQuantity -
+                                                                                    individualFraction -
                                                                                         0.5,
                                                                                 ) <
                                                                                 0.01
@@ -1340,12 +1352,12 @@ export function OrderFinancialCard({
                                                                                     '1/2';
                                                                             } else if (
                                                                                 Math.abs(
-                                                                                    mappingQuantity -
+                                                                                    individualFraction -
                                                                                         0.333,
                                                                                 ) <
                                                                                     0.01 ||
                                                                                 Math.abs(
-                                                                                    mappingQuantity -
+                                                                                    individualFraction -
                                                                                         1 /
                                                                                             3,
                                                                                 ) <
@@ -1355,7 +1367,7 @@ export function OrderFinancialCard({
                                                                                     '1/3';
                                                                             } else if (
                                                                                 Math.abs(
-                                                                                    mappingQuantity -
+                                                                                    individualFraction -
                                                                                         0.25,
                                                                                 ) <
                                                                                 0.01
@@ -1364,7 +1376,7 @@ export function OrderFinancialCard({
                                                                                     '1/4';
                                                                             } else if (
                                                                                 Math.abs(
-                                                                                    mappingQuantity -
+                                                                                    individualFraction -
                                                                                         0.2,
                                                                                 ) <
                                                                                 0.01
@@ -1373,12 +1385,12 @@ export function OrderFinancialCard({
                                                                                     '1/5';
                                                                             } else if (
                                                                                 Math.abs(
-                                                                                    mappingQuantity -
+                                                                                    individualFraction -
                                                                                         0.166,
                                                                                 ) <
                                                                                     0.01 ||
                                                                                 Math.abs(
-                                                                                    mappingQuantity -
+                                                                                    individualFraction -
                                                                                         1 /
                                                                                             6,
                                                                                 ) <
@@ -1386,8 +1398,32 @@ export function OrderFinancialCard({
                                                                             ) {
                                                                                 fractionText =
                                                                                     '1/6';
+                                                                            } else if (
+                                                                                Math.abs(
+                                                                                    individualFraction -
+                                                                                        0.666,
+                                                                                ) <
+                                                                                    0.01 ||
+                                                                                Math.abs(
+                                                                                    individualFraction -
+                                                                                        2 /
+                                                                                            3,
+                                                                                ) <
+                                                                                    0.01
+                                                                            ) {
+                                                                                fractionText =
+                                                                                    '2/3';
+                                                                            } else if (
+                                                                                Math.abs(
+                                                                                    individualFraction -
+                                                                                        0.75,
+                                                                                ) <
+                                                                                0.01
+                                                                            ) {
+                                                                                fractionText =
+                                                                                    '3/4';
                                                                             } else {
-                                                                                fractionText = `${(mappingQuantity * 100).toFixed(0)}%`;
+                                                                                fractionText = `${(individualFraction * 100).toFixed(0)}%`;
                                                                             }
                                                                         }
 
