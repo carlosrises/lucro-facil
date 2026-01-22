@@ -12,7 +12,8 @@ class FixTakeatOrderTimezones extends Command
                             {--tenant-id= : ID do tenant específico}
                             {--date= : Data específica para corrigir (Y-m-d)}
                             {--all : Corrigir TODOS os pedidos Takeat}
-                            {--dry-run : Simula sem salvar no banco}';
+                            {--dry-run : Simula sem salvar no banco}
+                            {--debug : Mostrar detalhes dos primeiros 10 pedidos}';
 
     protected $description = 'Corrige timezone dos pedidos Takeat comparando placed_at com raw.basket.start_time';
 
@@ -22,9 +23,14 @@ class FixTakeatOrderTimezones extends Command
         $isDryRun = $this->option('dry-run');
         $specificDate = $this->option('date');
         $fixAll = $this->option('all');
+        $debug = $this->option('debug');
 
         if ($isDryRun) {
             $this->warn('🔍 Modo DRY-RUN ativado - Nenhuma alteração será salva');
+        }
+
+        if ($debug) {
+            $this->warn('🐛 Modo DEBUG ativado - Mostrando detalhes dos primeiros 10 pedidos');
         }
 
         // Montar query base
@@ -58,7 +64,8 @@ class FixTakeatOrderTimezones extends Command
         if ($totalOrders === 0) {
             $this->info('✅ Nenhum pedido para analisar!');
             return self::SUCCESS;
-        }
+        }debugCount = 0;
+        $showDetails = $totalOrders <= 20 || $debug; // Mostrar detalhes se debug ativo
 
         $fixed = 0;
         $skipped = 0;
@@ -78,8 +85,15 @@ class FixTakeatOrderTimezones extends Command
         }
 
         // Processar em lotes de 100 para não estourar memória
-        $query->select(['id', 'code', 'placed_at', 'raw'])
-            ->chunk(100, function ($orders) use (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar) {
+        $query->select(['id', 'code', 'placed_at', 'raw']), $debug, &$debugCount) {
+                foreach ($orders as $order) {
+                    // Modo debug: mostrar apenas primeiros 10
+                    if ($debug && $debugCount >= 10) {
+                        $skipped++;
+                        if (!$showDetails) $bar->advance();
+                        continue;
+                    }
+se (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar) {
                 foreach ($orders as $order) {
                     try {
                         // Extrair start_time do raw
@@ -106,17 +120,19 @@ class FixTakeatOrderTimezones extends Command
                         $currentDateRaw = $order->getAttributes()['placed_at'];
                         $currentDate = Carbon::parse($currentDateRaw, 'UTC');
 
-                        $diffInHours = $currentDate->diffInHours($correctDate, false);
+                        $diffInHours = abs($currentDate->diffInHours($correctDate, false));
 
-                        // Se a diferença for significativa (> 1 hora), precisa corrigir
-                        if (abs($diffInHours) < 1) {
-                            if ($showDetails) {
-                                $this->line("   ✅ Pedido #{$order->id} já está correto");
-                            }
-                            $skipped++;
-                            if (!$showDetails) $bar->advance();
+                        // Sif ($debug) $debugCount++;
                             continue;
                         }
+
+                        if ($showDetails) {
+                            $this->line('');
+                            $this->info("📦 Pedido #{$order->id} - {$order->code}");
+                            $this->line("   📡 Raw start_time: {$rawStartTime}");
+                            $this->line("   ⏰ Data atual (banco UTC): {$currentDate->format('d/m/Y H:i:s')}");
+                            $this->line("   📡 Data correta (UTC): {$correctDate->format('d/m/Y H:i:s')}");
+                            $this->line("   ⚡ Diferença: {$diffInHours}
 
                         if ($showDetails) {
                             $this->line('');
@@ -130,6 +146,8 @@ class FixTakeatOrderTimezones extends Command
                             $order->placed_at = $correctDate;
                             $order->save();
                             if ($showDetails) {
+                        
+                        if ($debug) $debugCount++;
                                 $this->info("   ✅ Corrigido!");
                             }
                             $fixed++;
