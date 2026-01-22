@@ -85,7 +85,12 @@ export default function Orders() {
     // Isso garante que o skeleton apareça apenas em navegações/filtros
     useEffect(() => {
         setLocalOrders(orders.data);
-    }, [orders.data]);
+        console.log('[Orders] Filtros atualizados:', {
+            start_date: filters.start_date,
+            end_date: filters.end_date,
+            status: filters.status,
+        });
+    }, [orders.data, filters]);
 
     // Hook para sincronização bidirecional de status (Critérios 12-13)
     // Recarrega automaticamente a lista quando há mudanças externas
