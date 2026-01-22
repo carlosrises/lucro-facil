@@ -42,19 +42,20 @@ class FixTakeatOrderTimezones extends Command
         }
 
         // Filtrar por data se especificado
-        if ($specificDate && !$fixAll) {
+        if ($specificDate && ! $fixAll) {
             try {
                 $date = Carbon::parse($specificDate);
                 $query->whereDate('placed_at', $date);
                 $this->info("📅 Filtrando pedidos de: {$date->format('d/m/Y')}");
             } catch (\Exception $e) {
                 $this->error('❌ Data inválida. Use o formato: Y-m-d (ex: 2025-12-08)');
+
                 return self::FAILURE;
             }
-        } elseif (!$fixAll) {
+        } elseif (! $fixAll) {
             // Se não especificou --all nem --date, usar apenas pedidos recentes (últimos 30 dias)
             $query->where('placed_at', '>=', now()->subDays(30));
-            $this->info("📅 Filtrando pedidos dos últimos 30 dias (use --all para todos)");
+            $this->info('📅 Filtrando pedidos dos últimos 30 dias (use --all para todos)');
         }
 
         $totalOrders = $query->count();
@@ -63,50 +64,60 @@ class FixTakeatOrderTimezones extends Command
 
         if ($totalOrders === 0) {
             $this->info('✅ Nenhum pedido para analisar!');
+
             return self::SUCCESS;
-        }debugCount = 0;
-        $showDetails = $totalOrders <= 20 || $debug; // Mostrar detalhes se debug ativo
+        }
 
         $fixed = 0;
         $skipped = 0;
         $errors = 0;
-        $showDetails = $totalOrders <= 20; // Mostrar detalhes apenas se forem poucos pedidos
+        $debugCount = 0;
+        $showDetails = $totalOrders <= 20 || $debug; // Mostrar detalhes se debug ativo
 
         // Configurar barra de progresso com formato melhorado
         $bar = $this->output->createProgressBar($totalOrders);
         $bar->setFormat(
             " %current%/%max% [%bar%] %percent:3s%% \n".
-            " ⏱️  %elapsed:6s% | 🔧 Corrigidos: %message%"
+            ' ⏱️  %elapsed:6s% | 🔧 Corrigidos: %message%'
         );
         $bar->setMessage('0');
 
-        if (!$showDetails) {
+        if (! $showDetails) {
             $bar->start();
         }
 
         // Processar em lotes de 100 para não estourar memória
-        $query->select(['id', 'code', 'placed_at', 'raw']), $debug, &$debugCount) {
+        $query->select(['id', 'code', 'placed_at', 'raw'])
+            ->chunk(100, function ($orders) use (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar, $debug, &$debugCount) {
                 foreach ($orders as $order) {
                     // Modo debug: mostrar apenas primeiros 10
                     if ($debug && $debugCount >= 10) {
                         $skipped++;
-                        if (!$showDetails) $bar->advance();
+                        if (! $showDetails) {
+                            $bar->advance();
+                        }
+
                         continue;
                     }
-se (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar) {
-                foreach ($orders as $order) {
+
                     try {
                         // Extrair start_time do raw
                         $rawStartTime = $order->raw['basket']['start_time']
                             ?? $order->raw['session']['start_time']
                             ?? null;
 
-                        if (!$rawStartTime) {
+                        if (! $rawStartTime) {
                             if ($showDetails) {
                                 $this->warn("   ⚠️  Pedido #{$order->id}: sem start_time no raw, pulando");
                             }
                             $skipped++;
-                            if (!$showDetails) $bar->advance();
+                            if (! $showDetails) {
+                                $bar->advance();
+                            }
+                            if ($debug) {
+                                $debugCount++;
+                            }
+
                             continue;
                         }
 
@@ -122,7 +133,19 @@ se (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar) {
 
                         $diffInHours = abs($currentDate->diffInHours($correctDate, false));
 
-                        // Sif ($debug) $debugCount++;
+                        // Se a diferença for significativa (>= 1 hora), precisa corrigir
+                        if ($diffInHours < 1) {
+                            if ($showDetails) {
+                                $this->line("   ✅ Pedido #{$order->id} já está correto");
+                            }
+                            $skipped++;
+                            if (! $showDetails) {
+                                $bar->advance();
+                            }
+                            if ($debug) {
+                                $debugCount++;
+                            }
+
                             continue;
                         }
 
@@ -132,23 +155,14 @@ se (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar) {
                             $this->line("   📡 Raw start_time: {$rawStartTime}");
                             $this->line("   ⏰ Data atual (banco UTC): {$currentDate->format('d/m/Y H:i:s')}");
                             $this->line("   📡 Data correta (UTC): {$correctDate->format('d/m/Y H:i:s')}");
-                            $this->line("   ⚡ Diferença: {$diffInHours}
-
-                        if ($showDetails) {
-                            $this->line('');
-                            $this->info("📦 Pedido #{$order->id} - {$order->code}");
-                            $this->line("   ⏰ Data atual (banco): {$currentDate->format('d/m/Y H:i:s')}");
-                            $this->line("   📡 Data original (raw): {$correctDate->format('d/m/Y H:i:s')}");
-                            $this->line("   ⚡ Diferença: " . abs($diffInHours) . "h");
+                            $this->line("   ⚡ Diferença: {$diffInHours}h");
                         }
 
-                        if (!$isDryRun) {
+                        if (! $isDryRun) {
                             $order->placed_at = $correctDate;
                             $order->save();
                             if ($showDetails) {
-                        
-                        if ($debug) $debugCount++;
-                                $this->info("   ✅ Corrigido!");
+                                $this->info('   ✅ Corrigido!');
                             }
                             $fixed++;
                         } else {
@@ -157,6 +171,10 @@ se (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar) {
                             }
                             $fixed++;
                         }
+
+                        if ($debug) {
+                            $debugCount++;
+                        }
                     } catch (\Exception $e) {
                         if ($showDetails) {
                             $this->error("   ❌ Erro ao corrigir pedido #{$order->id}: {$e->getMessage()}");
@@ -164,14 +182,14 @@ se (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar) {
                         $errors++;
                     }
 
-                    if (!$showDetails) {
+                    if (! $showDetails) {
                         $bar->setMessage((string) $fixed);
                         $bar->advance();
                     }
                 }
             });
 
-        if (!$showDetails) {
+        if (! $showDetails) {
             $bar->finish();
             $this->newLine();
         }
@@ -190,7 +208,7 @@ se (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar) {
 
         if ($isDryRun) {
             $this->warn('🔍 DRY-RUN: Nenhuma alteração foi salva. Execute sem --dry-run para aplicar.');
-        } else if ($fixed > 0) {
+        } elseif ($fixed > 0) {
             $this->info('✅ Correção aplicada com sucesso!');
         }
 
