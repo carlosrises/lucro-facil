@@ -476,42 +476,10 @@ class SyncTakeatOrders extends Command
                 ->where('external_item_id', $addonSku)
                 ->first();
 
-            if ($addonMapping && $addonMapping->internal_product_id) {
-                // Para sabores, marcar flag para processar depois
-                if ($addonMapping->item_type === 'flavor') {
-                    $hasFlavors = true;
-                    logger()->info('🍕 Sabor detectado, será processado via FlavorMappingService', [
-                        'name' => $addonName,
-                        'product_id' => $addonMapping->internal_product_id,
-                    ]);
-                } else {
-                    // Para add-ons não-sabor (bebidas, complementos, etc), criar mapping normal
-                    $addonQty = $addOn['quantity'] ?? 1;
-
-                    // Buscar produto do addon para calcular CMV
-                    $addonProduct = InternalProduct::find($addonMapping->internal_product_id);
-                    $addonCMV = $addonProduct ? $this->calculateCorrectCMV($addonProduct, $orderItem) : null;
-
-                    OrderItemMapping::create([
-                        'tenant_id' => $orderItem->tenant_id,
-                        'order_item_id' => $orderItem->id,
-                        'internal_product_id' => $addonMapping->internal_product_id,
-                        'quantity' => $addonQty,
-                        'mapping_type' => 'addon',
-                        'option_type' => 'addon',
-                        'auto_fraction' => false,
-                        'external_reference' => (string) $index,
-                        'external_name' => $addonName,
-                        'unit_cost_override' => $addonCMV,
-                    ]);
-
-                    logger()->info('✅ Add-on não-sabor mapeado', [
-                        'name' => $addonName,
-                        'quantity' => $addonQty,
-                        'cmv' => $addonCMV,
-                    ]);
-                }
-            } elseif (! $addonMapping) {
+            // Se não existe ProductMapping, criar um pendente
+            if (! $addonMapping) {
+            // Se não existe ProductMapping, criar um pendente
+            if (! $addonMapping) {
                 // Se não existe ProductMapping para este add-on, criar um sem produto vinculado
                 // Isso permite que o item apareça na Triagem para ser classificado manualmente
                 logger()->info('📝 Criando ProductMapping pendente para add-on', [
@@ -519,7 +487,7 @@ class SyncTakeatOrders extends Command
                     'sku' => $addonSku,
                 ]);
 
-                ProductMapping::firstOrCreate(
+                $addonMapping = ProductMapping::firstOrCreate(
                     [
                         'tenant_id' => $orderItem->tenant_id,
                         'external_item_id' => $addonSku,
@@ -531,6 +499,50 @@ class SyncTakeatOrders extends Command
                         'provider' => 'takeat',
                     ]
                 );
+            }
+
+            // Processar add-on baseado no tipo e se tem produto vinculado
+            if ($addonMapping->item_type === 'flavor') {
+                // Para sabores, marcar flag para processar depois via FlavorMappingService
+                $hasFlavors = true;
+                logger()->info('🍕 Sabor detectado, será processado via FlavorMappingService', [
+                    'name' => $addonName,
+                    'product_id' => $addonMapping->internal_product_id,
+                    'has_product' => $addonMapping->internal_product_id !== null,
+                ]);
+            } elseif ($addonMapping->internal_product_id) {
+                // Para add-ons não-sabor COM produto vinculado, criar OrderItemMapping
+                $addonQty = $addOn['quantity'] ?? 1;
+
+                // Buscar produto do addon para calcular CMV
+                $addonProduct = InternalProduct::find($addonMapping->internal_product_id);
+                $addonCMV = $addonProduct ? $this->calculateCorrectCMV($addonProduct, $orderItem) : null;
+
+                OrderItemMapping::create([
+                    'tenant_id' => $orderItem->tenant_id,
+                    'order_item_id' => $orderItem->id,
+                    'internal_product_id' => $addonMapping->internal_product_id,
+                    'quantity' => $addonQty,
+                    'mapping_type' => 'addon',
+                    'option_type' => 'addon',
+                    'auto_fraction' => false,
+                    'external_reference' => (string) $index,
+                    'external_name' => $addonName,
+                    'unit_cost_override' => $addonCMV,
+                ]);
+
+                logger()->info('✅ Add-on não-sabor mapeado', [
+                    'name' => $addonName,
+                    'quantity' => $addonQty,
+                    'cmv' => $addonCMV,
+                ]);
+            } else {
+                // Add-on classificado mas SEM produto vinculado - apenas criar ProductMapping (já existe)
+                logger()->info('🔗 Add-on classificado mas sem produto vinculado', [
+                    'name' => $addonName,
+                    'item_type' => $addonMapping->item_type,
+                    'message' => 'Aguardando vínculo na Triagem',
+                ]);
             }
         }
 
