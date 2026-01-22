@@ -13,7 +13,8 @@ class FixTakeatOrderTimezones extends Command
                             {--date= : Data específica para corrigir (Y-m-d)}
                             {--all : Corrigir TODOS os pedidos Takeat}
                             {--dry-run : Simula sem salvar no banco}
-                            {--debug : Mostrar detalhes dos primeiros 10 pedidos}';
+                            {--debug : Mostrar detalhes dos primeiros 50 pedidos}
+                            {--oldest : Analisar pedidos mais antigos primeiro (útil com --debug)}';
 
     protected $description = 'Corrige timezone dos pedidos Takeat comparando placed_at com raw.basket.start_time';
 
@@ -92,9 +93,15 @@ class FixTakeatOrderTimezones extends Command
         }
 
         // Processar em lotes de 100 para não estourar memória
-        // Ordenar por placed_at DESC para pegar pedidos mais recentes primeiro
+        $orderDirection = $this->option('oldest') ? 'asc' : 'desc';
+        $orderLabel = $this->option('oldest') ? 'mais antigos' : 'mais recentes';
+        
+        if ($debug) {
+            $this->comment("🔄 Ordenação: {$orderLabel} primeiro");
+        }
+        
         $query->select(['id', 'code', 'placed_at', 'raw'])
-            ->orderBy('placed_at', 'desc')
+            ->orderBy('placed_at', $orderDirection)
             ->chunk(100, function ($orders) use (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar, $debug, &$debugCount, &$incorrectFound) {
                 foreach ($orders as $order) {
                     // Modo debug: mostrar apenas primeiros 50
