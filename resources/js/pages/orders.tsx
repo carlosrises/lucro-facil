@@ -99,13 +99,16 @@ export default function Orders() {
             // IMPORTANTE: placed_at vem em UTC, converter para Brasília (UTC-3)
             const orderDateUTC = new Date(order.placed_at);
 
-            // Converter para Brasília: subtrair 3 horas do UTC
-            const orderDateBR = new Date(
-                orderDateUTC.getTime() - 3 * 60 * 60 * 1000,
-            );
+            // Converter para Brasília usando Intl para respeitar horário de verão
+            const orderDateBRString = orderDateUTC.toLocaleString('en-CA', {
+                timeZone: 'America/Sao_Paulo',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+            });
 
             // Extrair apenas a data no formato YYYY-MM-DD para comparação
-            const orderDateOnly = orderDateBR.toISOString().split('T')[0];
+            const orderDateOnly = orderDateBRString.split(',')[0];
 
             // Verificar se o pedido está dentro do período filtrado
             if (
@@ -116,7 +119,7 @@ export default function Orders() {
                     '[Realtime] Pedido fora do período filtrado, ignorando',
                     {
                         order_date_utc: order.placed_at,
-                        order_date_br: orderDateBR.toISOString(),
+                        order_date_br: orderDateBRString,
                         order_date_only: orderDateOnly,
                         filter_start: filters.start_date,
                         filter_end: filters.end_date,

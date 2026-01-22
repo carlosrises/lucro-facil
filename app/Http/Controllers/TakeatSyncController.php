@@ -21,10 +21,13 @@ class TakeatSyncController extends Controller
                 'user_id' => $request->user()->id,
             ]);
 
+            // Usar timezone BRT explicitamente
+            $todayBRT = now('America/Sao_Paulo')->format('Y-m-d');
+
             // Despachar job em background para não bloquear a requisição HTTP
             Artisan::queue('takeat:sync-orders', [
                 '--tenant-id' => $tenantId,
-                '--date' => now()->format('Y-m-d'),
+                '--date' => $todayBRT,
             ]);
 
             return response()->json([
