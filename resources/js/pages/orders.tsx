@@ -152,8 +152,8 @@ export default function Orders() {
             // Verificar filtro de status
             if (filters.status && filters.status !== 'all') {
                 if (order.status !== filters.status) {
-                    console.log(
-                        '[Realtime] Pedido com status diferente do filtro, ignorando',
+                    console.warn(
+                        '[Realtime] ❌ Pedido com status diferente do filtro, ignorando',
                         { order_status: order.status, filter: filters.status },
                     );
                     return;
@@ -162,6 +162,13 @@ export default function Orders() {
 
             // Verificar filtro de loja
             if (filters.store_id && order.store_id !== filters.store_id) {
+                console.warn(
+                    '[Realtime] ❌ Pedido de loja diferente do filtro, ignorando',
+                    {
+                        order_store_id: order.store_id,
+                        filter: filters.store_id,
+                    },
+                );
                 return;
             }
 
@@ -173,20 +180,54 @@ export default function Orders() {
                         order.provider !== provider ||
                         order.origin !== origin
                     ) {
+                        console.warn(
+                            '[Realtime] ❌ Pedido com provider/origin diferente do filtro, ignorando',
+                            {
+                                order_provider: order.provider,
+                                order_origin: order.origin,
+                                filter: filters.provider,
+                            },
+                        );
                         return;
                     }
                 } else if (order.provider !== filters.provider) {
+                    console.warn(
+                        '[Realtime] ❌ Pedido com provider diferente do filtro, ignorando',
+                        {
+                            order_provider: order.provider,
+                            filter: filters.provider,
+                        },
+                    );
                     return;
                 }
             }
 
             // Pedido atende todos os filtros, adicionar/atualizar
+            console.log(
+                '✅ [Realtime] Pedido passou em todos os filtros, adicionando/atualizando',
+                {
+                    order_id: order.id,
+                    order_code: order.code,
+                    isNew,
+                },
+            );
+
             setLocalOrders((prev) => {
                 if (isNew) {
                     // Novo pedido: adicionar no topo
+                    console.log(
+                        '✅ [Realtime] Adicionando novo pedido no topo da lista',
+                        {
+                            order_id: order.id,
+                            current_count: prev.length,
+                        },
+                    );
                     return [order, ...prev];
                 } else {
                     // Atualização: substituir existente
+                    console.log('✅ [Realtime] Atualizando pedido existente', {
+                        order_id: order.id,
+                    });
                     return prev.map((o) => (o.id === order.id ? order : o));
                 }
             });
