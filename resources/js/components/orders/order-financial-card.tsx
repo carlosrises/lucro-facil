@@ -442,18 +442,37 @@ export function OrderFinancialCard({
             0,
         );
 
-        // Taxas de pagamento online (filtrar apenas payment_type='online')
-        const onlinePaymentFees = paymentMethodFees.filter(
-            (fee: CostCommissionItem) => fee.payment_type === 'online',
-        );
-        const totalOnlinePaymentFee = onlinePaymentFees.reduce(
-            (sum: number, fee: CostCommissionItem) =>
-                sum + (fee.calculated_value || 0),
-            0,
-        );
+        // Verificar se o pedido tem pagamento online
+        const hasOnlinePayment = realPayments.some((payment: any) => {
+            const paymentKeyword = (
+                payment.payment_method?.keyword || ''
+            ).toLowerCase();
+            return (
+                paymentKeyword.includes('pagamento_online') ||
+                paymentKeyword.includes('ifood') ||
+                paymentKeyword.includes('online')
+            );
+        });
+
+        // Taxas de pagamento online
+        // Se o pedido tem pagamento online, considerar TODAS as taxas de pagamento como online
+        // Caso contrário, filtrar apenas payment_type='online'
+        const totalOnlinePaymentFee = hasOnlinePayment
+            ? totalPaymentMethodFee
+            : paymentMethodFees
+                  .filter(
+                      (fee: CostCommissionItem) =>
+                          fee.payment_type === 'online',
+                  )
+                  .reduce(
+                      (sum: number, fee: CostCommissionItem) =>
+                          sum + (fee.calculated_value || 0),
+                      0,
+                  );
 
         // Receita líquida marketplace = Subtotal - Comissão Marketplace - Custo Entrega Marketplace (se aplicável) - Taxa Pagamento Online
         // Só descontar marketplaceDeliveryCosts se a entrega foi pelo marketplace
+        // Nota: As comissões do marketplace já incluem a taxa fixa do iFood se cadastrada pelo usuário
         const marketplaceNetRevenue =
             subtotal -
             marketplaceCommissions -
