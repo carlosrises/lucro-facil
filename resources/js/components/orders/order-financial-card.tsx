@@ -853,12 +853,19 @@ export function OrderFinancialCard({
                                                           )
                                                         : hasLegacyProduct;
 
-                                            // Verificar se tem ProductMapping COM produto vinculado
-                                            const hasProductMapping =
-                                                item.product_mapping?.internal_product_id != null;
+                                                // Verificar se tem ProductMapping COM produto vinculado
+                                                const hasProductMapping =
+                                                    item.product_mapping
+                                                        ?.internal_product_id !=
+                                                    null;
 
-                                            const hasAnyMapping =
-                                                hasInternalProduct && hasProductMapping;
+                                                const hasAnyMapping =
+                                                    hasInternalProduct &&
+                                                    hasProductMapping;
+
+                                                // Função para obter ícone baseado no tipo do item
+                                                const getItemIcon = () => {
+                                                    const itemType =
                                                         item.product_mapping
                                                             ?.item_type;
 
