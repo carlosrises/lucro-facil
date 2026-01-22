@@ -511,6 +511,7 @@ class SyncTakeatOrders extends Command
                 $hasFlavors = true;
                 logger()->info('🍕 Sabor detectado, será processado via FlavorMappingService', [
                     'name' => $addonName,
+                    'mapping_id' => $addonMapping->id,
                     'product_id' => $addonMapping->internal_product_id,
                     'has_product' => $addonMapping->internal_product_id !== null,
                 ]);
@@ -556,6 +557,8 @@ class SyncTakeatOrders extends Command
         if ($hasFlavors) {
             logger()->info('🍕 Processando sabores via FlavorMappingService', [
                 'order_item_id' => $orderItem->id,
+                'order_item_name' => $orderItem->name,
+                'add_ons_count' => count($orderItem->add_ons ?? []),
             ]);
 
             try {
@@ -565,7 +568,14 @@ class SyncTakeatOrders extends Command
                 $flavorService = app(FlavorMappingService::class);
                 $flavorService->recalculateAllFlavorsForOrderItem($orderItem);
 
-                logger()->info('✅ Sabores processados com sucesso via FlavorMappingService');
+                // Verificar se mappings foram criados
+                $mappingsCreated = OrderItemMapping::where('order_item_id', $orderItem->id)
+                    ->where('option_type', 'pizza_flavor')
+                    ->count();
+
+                logger()->info('✅ Sabores processados com sucesso via FlavorMappingService', [
+                    'mappings_created' => $mappingsCreated,
+                ]);
             } catch (\Exception $e) {
                 logger()->error('❌ Erro ao processar sabores via FlavorMappingService', [
                     'error' => $e->getMessage(),

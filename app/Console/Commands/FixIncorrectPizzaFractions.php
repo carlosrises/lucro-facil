@@ -27,7 +27,7 @@ class FixIncorrectPizzaFractions extends Command
             $this->warn('🔍 MODO DRY-RUN - Nenhuma alteração será feita');
         }
 
-        $this->info("🔍 Buscando pedidos com add_ons (pizzas)...");
+        $this->info('🔍 Buscando pedidos com add_ons (pizzas)...');
         $this->line('');
 
         // Contar total primeiro
@@ -58,8 +58,8 @@ class FixIncorrectPizzaFractions extends Command
         // Processar em lotes de 50 para não estourar memória
         OrderItem::whereNotNull('add_ons')
             ->where('add_ons', '!=', '[]')
-            ->when($orderId, fn($q) => $q->where('order_id', $orderId))
-            ->when($tenantId, fn($q) => $q->where('tenant_id', $tenantId))
+            ->when($orderId, fn ($q) => $q->where('order_id', $orderId))
+            ->when($tenantId, fn ($q) => $q->where('tenant_id', $tenantId))
             ->with(['mappings', 'order'])
             ->chunkById(50, function ($orderItems) use (
                 &$fixed,
@@ -69,310 +69,367 @@ class FixIncorrectPizzaFractions extends Command
                 &$processed,
                 $totalItems,
                 $threshold,
-                $dryRun,
-                $pizzaService
+                $dryRun
+
             ) {
                 foreach ($orderItems as $orderItem) {
-            try {
-                // Detectar tamanho e quantidade de sabores da pizza
-                $pizzaSize = $this->detectPizzaSize($orderItem);
-                $numFlavors = $this->detectNumFlavors($orderItem);
-                $correctFraction = $numFlavors > 0 ? (1.0 / $numFlavors) : 1.0;
+                    try {
+                        // Detectar tamanho e quantidade de sabores da pizza
+                        $pizzaSize = $this->detectPizzaSize($orderItem);
+                        $numFlavors = $this->detectNumFlavors($orderItem);
+                        $correctFraction = $numFlavors > 0 ? (1.0 / $numFlavors) : 1.0;
 
-                // SEMPRE mostrar detalhes para debug
-                $this->line('');
-                $this->info("📦 Pedido #{$orderItem->order_id} - Item #{$orderItem->id}");
-                $this->line("   🍕 {$orderItem->name}");
-                $this->line('   📏 Tamanho detectado: '.($pizzaSize ?: 'não detectado'));
-                $this->line("   🍕 Sabores detectados: {$numFlavors} (fração: {$correctFraction})");
-                $this->line('');
+                        // SEMPRE mostrar detalhes para debug
+                        $this->line('');
+                        $this->info("📦 Pedido #{$orderItem->order_id} - Item #{$orderItem->id}");
+                        $this->line("   🍕 {$orderItem->name}");
+                        $this->line('   📏 Tamanho detectado: '.($pizzaSize ?: 'não detectado'));
+                        $this->line("   🍕 Sabores detectados: {$numFlavors} (fração: {$correctFraction})");
+                        $this->line('');
 
-                // COPIAR EXATAMENTE A LÓGICA DO OrdersController (linhas 133-180)
-                $addOnsWithMappings = [];
-                foreach ($orderItem->add_ons as $index => $addOn) {
-                    $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
-                    $addOnQuantity = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
-                    $addOnSku = 'addon_'.md5($addOnName);
+                        // VERIFICAR SE EXISTEM OrderItemMappings de sabores
+                        $existingFlavorMappings = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
+                            ->where('mapping_type', 'addon')
+                            ->where('option_type', 'pizza_flavor')
+                            ->count();
 
-                    // Buscar ProductMapping do add-on
-                    $mapping = \App\Models\ProductMapping::where('external_item_id', $addOnSku)
-                        ->where('tenant_id', $orderItem->tenant_id)
-                        ->with('internalProduct:id,name,unit_cost,product_category')
-                        ->first();
+                        // Se não existem mappings de sabores MAS existem ProductMappings de sabores classificados,
+                        // usar FlavorMappingService para criar os mappings
+                        if ($existingFlavorMappings === 0) {
+                            $hasClassifiedFlavors = false;
+                            foreach ($orderItem->add_ons as $addOn) {
+                                $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
+                                $addOnSku = 'addon_'.md5($addOnName);
 
-                    // CRÍTICO: Buscar OrderItemMapping do add-on para obter unit_cost_override e quantity (fração)
-                    $orderItemMapping = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
-                        ->where('mapping_type', 'addon')
-                        ->where('external_reference', (string) $index)
-                        ->first();
+                                $mapping = \App\Models\ProductMapping::where('external_item_id', $addOnSku)
+                                    ->where('tenant_id', $orderItem->tenant_id)
+                                    ->where('item_type', 'flavor')
+                                    ->whereNotNull('internal_product_id')
+                                    ->exists();
 
-                    // Usar unit_cost_override do OrderItemMapping se existir, senão fallback para unit_cost do produto
-                    $unitCost = null;
-                    $mappingQuantity = null;
-                    if ($orderItemMapping && $orderItemMapping->unit_cost_override !== null) {
-                        $unitCost = (float) $orderItemMapping->unit_cost_override;
-                        $mappingQuantity = (float) $orderItemMapping->quantity; // Fração do sabor (ex: 0.25 para 1/4)
-                    } elseif ($mapping && $mapping->internalProduct) {
-                        $unitCost = (float) $mapping->internalProduct->unit_cost;
-                        $mappingQuantity = 1.0; // Sem fração
-                    }
+                                if ($mapping) {
+                                    $hasClassifiedFlavors = true;
+                                    break;
+                                }
+                            }
 
-                    $addOnsWithMappings[] = [
-                        'name' => $addOnName,
-                        'quantity' => $addOnQuantity, // Quantidade do add-on (ex: 2 para "2x Don Rafaello")
-                        'unit_cost_override' => $unitCost, // CMV unitário
-                        'mapping_quantity' => $mappingQuantity, // Fração ATUAL do OrderItemMapping (para diagnóstico)
-                        'product' => $mapping?->internalProduct,
-                        'product_mapping' => $mapping, // Adicionar ProductMapping completo
-                        'order_item_mapping_id' => $orderItemMapping?->id,
-                        'order_item_mapping' => $orderItemMapping, // Adicionar OrderItemMapping completo
-                    ];
-                }
+                            if ($hasClassifiedFlavors) {
+                                $this->line('   🔍 Sabores classificados encontrados sem OrderItemMappings');
+                                $this->line('   🍕 Usando FlavorMappingService para criar mappings...');
 
-                $this->line('   🔍 Add-ons processados: '.count($addOnsWithMappings));
+                                if (! $dryRun) {
+                                    try {
+                                        $flavorService = app(\App\Services\FlavorMappingService::class);
+                                        $flavorService->recalculateAllFlavorsForOrderItem($orderItem);
 
-                // Processar add_ons_enriched como o frontend faz
-                $hasIncorrectCost = false;
-                $hasPizzaFlavor = false;
-                $currentTotal = 0;
-                $correctTotal = 0;
+                                        $createdMappings = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
+                                            ->where('option_type', 'pizza_flavor')
+                                            ->count();
 
-                foreach ($addOnsWithMappings as $addon) {
-                    $productMapping = $addon['product_mapping'] ?? null;
-                    $orderItemMapping = $addon['order_item_mapping'] ?? null;
-                    $product = $addon['product'] ?? null;
+                                        $this->info("   ✅ {$createdMappings} mappings criados via FlavorMappingService");
 
-                    // Verificar se é sabor de pizza
-                    $isFlavor = $productMapping && $productMapping->item_type === 'flavor';
-
-                    // Se não tem ProductMapping mas tem OrderItemMapping, pode ser sabor não classificado
-                    if (!$isFlavor && $orderItemMapping && (stripos($addon['name'], 'pizza') !== false || stripos($addon['name'], 'sabor') !== false)) {
-                        $this->line("   └ {$addon['name']} - ⚠️  Sabor não classificado (tem OrderItemMapping)");
-                        $isFlavor = true;
-                    }
-
-                    // Se não tem nenhum mapping (nem ProductMapping nem OrderItemMapping), pular
-                    if (!$productMapping && !$orderItemMapping) {
-                        $this->line("   └ {$addon['name']} - ⚠️  Sem classificação");
-                        continue;
-                    }
-
-                    $hasPizzaFlavor = $hasPizzaFlavor || $isFlavor;
-
-                    // Calcular como o frontend calcula (order-financial-card.tsx linha 1052-1070)
-                    // const addonCost = (unitCost ?? 0) * (mappingQuantity ?? 1) * addonQuantity;
-                    $currentCMV = $addon['unit_cost_override'] ?? 0;
-                    $mappingQuantity = $addon['mapping_quantity'] ?? 1.0;
-                    $addonQuantity = $addon['quantity'] ?? 1;
-
-                    // Subtotal ATUAL (com fração atual do OrderItemMapping)
-                    $currentSubtotal = $currentCMV * $mappingQuantity * $addonQuantity;
-
-                    // Calcular CMV e subtotal CORRETO
-                    if (!$productMapping || !$productMapping->internal_product_id || !$product) {
-                        // Se não tem produto associado:
-                        // - Para SABORES: CMV = 0 (precisa associar)
-                        // - Para OUTROS (bebidas, etc): manter CMV atual (só corrigir fração)
-                        $correctCMV = $isFlavor ? 0 : $currentCMV;
-                    } else {
-                        // Calcular CMV:
-                        // - SABORES: usar calculateCMV por tamanho (broto, média, grande, família)
-                        // - OUTROS: usar unit_cost direto (bebidas não têm tamanho)
-                        if ($isFlavor && $pizzaSize) {
-                            $correctCMV = $product->calculateCMV($pizzaSize);
-                        } else {
-                            $correctCMV = $product->unit_cost;
+                                        // Refresh do orderItem para recarregar os mappings
+                                        $orderItem = $orderItem->fresh(['mappings']);
+                                    } catch (\Exception $e) {
+                                        $this->error('   ❌ Erro ao criar mappings: '.$e->getMessage());
+                                    }
+                                } else {
+                                    $this->comment('   🔍 [DRY-RUN] FlavorMappingService seria executado');
+                                }
+                                $this->line('');
+                            }
                         }
-                    }
 
-                    // Aplicar fração APENAS para sabores de pizza
-                    // Outros add-ons (bebidas, complementos) são 100% completos
-                    // IMPORTANTE: Para sabores, a quantidade no OrderItemMapping deve ser addonQuantity / totalFlavors
-                    // Ex: 2x Portuguesa de 3 sabores = 2/3
-                    $correctQuantity = $isFlavor ? ($addonQuantity / $numFlavors) : 1.0;
-                    $correctSubtotal = $correctCMV * $correctQuantity;
+                        // COPIAR EXATAMENTE A LÓGICA DO OrdersController (linhas 133-180)
+                        $addOnsWithMappings = [];
+                        foreach ($orderItem->add_ons as $index => $addOn) {
+                            $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
+                            $addOnQuantity = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
+                            $addOnSku = 'addon_'.md5($addOnName);
 
-                    $currentTotal += $currentSubtotal;
-                    $correctTotal += $correctSubtotal;
+                            // Buscar ProductMapping do add-on
+                            $mapping = \App\Models\ProductMapping::where('external_item_id', $addOnSku)
+                                ->where('tenant_id', $orderItem->tenant_id)
+                                ->with('internalProduct:id,name,unit_cost,product_category')
+                                ->first();
 
-                    // Formatar frações para exibição (apenas para sabores)
-                    // Para correctQuantity, usar a fração real (ex: 2/3) quando quantidade > 1
-                    $currentFractionText = $this->formatFraction($mappingQuantity);
-                    $correctFractionText = $isFlavor && $addonQuantity > 1
-                        ? "{$addonQuantity}/{$numFlavors}"
-                        : $this->formatFraction($correctQuantity);
+                            // CRÍTICO: Buscar OrderItemMapping do add-on para obter unit_cost_override e quantity (fração)
+                            $orderItemMapping = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
+                                ->where('mapping_type', 'addon')
+                                ->where('external_reference', (string) $index)
+                                ->first();
 
-                    // Verificar se está incorreto:
-                    // - CMV errado
-                    // - Fração errada (para qualquer tipo de add-on)
-                    $isIncorrect = abs($currentCMV - $correctCMV) > 0.01 || abs($mappingQuantity - $correctQuantity) > 0.01;
+                            // Usar unit_cost_override do OrderItemMapping se existir, senão fallback para unit_cost do produto
+                            $unitCost = null;
+                            $mappingQuantity = null;
+                            if ($orderItemMapping && $orderItemMapping->unit_cost_override !== null) {
+                                $unitCost = (float) $orderItemMapping->unit_cost_override;
+                                $mappingQuantity = (float) $orderItemMapping->quantity; // Fração do sabor (ex: 0.25 para 1/4)
+                            } elseif ($mapping && $mapping->internalProduct) {
+                                $unitCost = (float) $mapping->internalProduct->unit_cost;
+                                $mappingQuantity = 1.0; // Sem fração
+                            }
 
-                    $productName = $product ? $product->name : $addon['name'];
+                            $addOnsWithMappings[] = [
+                                'name' => $addOnName,
+                                'quantity' => $addOnQuantity, // Quantidade do add-on (ex: 2 para "2x Don Rafaello")
+                                'unit_cost_override' => $unitCost, // CMV unitário
+                                'mapping_quantity' => $mappingQuantity, // Fração ATUAL do OrderItemMapping (para diagnóstico)
+                                'product' => $mapping?->internalProduct,
+                                'product_mapping' => $mapping, // Adicionar ProductMapping completo
+                                'order_item_mapping_id' => $orderItemMapping?->id,
+                                'order_item_mapping' => $orderItemMapping, // Adicionar OrderItemMapping completo
+                            ];
+                        }
 
-                    if ($isIncorrect) {
-                        $this->line("   ├ ⚠️  {$currentFractionText} {$productName}");
-                        $this->line('      OrderItemMapping ID: '.($addon['order_item_mapping_id'] ?? 'N/A'));
-                        $this->line('      ❌ ATUAL: R$ '.number_format($currentCMV, 2, ',', '.').' × '.$currentFractionText.' = R$ '.number_format($currentSubtotal, 2, ',', '.'));
-                        $this->line("      ✅ CORRETO ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.').' × '.$correctFractionText.' = R$ '.number_format($correctSubtotal, 2, ',', '.'));
-                        $hasIncorrectCost = true;
-                    } else {
-                        // Verificar se tem ProductMapping vinculado (classificado na Triagem)
-                        $hasClassification = $productMapping && $productMapping->internal_product_id !== null;
-                        $icon = $hasClassification ? '✅' : '🔗';
-                        $statusText = $hasClassification ? '' : ' (não classificado - vincular na Triagem)';
+                        $this->line('   🔍 Add-ons processados: '.count($addOnsWithMappings));
 
-                        $this->line("   ├ {$icon} {$correctFractionText} {$productName}{$statusText}");
-                        $this->line('      💰 R$ '.number_format($correctSubtotal, 2, ',', '.'));
-                    }
-                }
+                        // Processar add_ons_enriched como o frontend faz
+                        $hasIncorrectCost = false;
+                        $hasPizzaFlavor = false;
+                        $currentTotal = 0;
+                        $correctTotal = 0;
 
-                // Pular se não tem pizza
-                if (! $hasPizzaFlavor) {
-                    $this->comment('   ⏭️  Sem sabores de pizza - pulando');
+                        foreach ($addOnsWithMappings as $addon) {
+                            $productMapping = $addon['product_mapping'] ?? null;
+                            $orderItemMapping = $addon['order_item_mapping'] ?? null;
+                            $product = $addon['product'] ?? null;
 
-                    continue;
-                }
+                            // Verificar se é sabor de pizza
+                            $isFlavor = $productMapping && $productMapping->item_type === 'flavor';
 
-                $this->line('');
-                $this->line('   💰 Total ATUAL (sabores): R$ '.number_format($currentTotal, 2, ',', '.'));
-                $this->line('   ✅ Total CORRETO (sabores): R$ '.number_format($correctTotal, 2, ',', '.'));
+                            // Se não tem ProductMapping mas tem OrderItemMapping, pode ser sabor não classificado
+                            if (! $isFlavor && $orderItemMapping && (stripos($addon['name'], 'pizza') !== false || stripos($addon['name'], 'sabor') !== false)) {
+                                $this->line("   └ {$addon['name']} - ⚠️  Sabor não classificado (tem OrderItemMapping)");
+                                $isFlavor = true;
+                            }
 
-                $difference = abs($currentTotal - $correctTotal);
-                $this->line('   📏 Diferença: R$ '.number_format($difference, 2, ',', '.'));
+                            // Se não tem nenhum mapping (nem ProductMapping nem OrderItemMapping), pular
+                            if (! $productMapping && ! $orderItemMapping) {
+                                $this->line("   └ {$addon['name']} - ⚠️  Sem classificação");
 
-                // SEMPRE verificar e criar mappings para add-ons não-sabor vinculados (independente da correção de sabores)
-                $createdNonFlavorCount = $this->ensureNonFlavorMappings($orderItem, $pizzaSize, $dryRun);
+                                continue;
+                            }
 
-                if (! $hasIncorrectCost && $difference < $threshold) {
-                    if ($createdNonFlavorCount > 0) {
-                        $this->info("   ✅ OK (sabores) + {$createdNonFlavorCount} bebidas/complementos vinculados!");
-                    } else {
-                        $this->comment('   ✅ OK');
-                    }
-                    $alreadyCorrect++;
+                            $hasPizzaFlavor = $hasPizzaFlavor || $isFlavor;
 
-                    continue;
-                }
+                            // Calcular como o frontend calcula (order-financial-card.tsx linha 1052-1070)
+                            // const addonCost = (unitCost ?? 0) * (mappingQuantity ?? 1) * addonQuantity;
+                            $currentCMV = $addon['unit_cost_override'] ?? 0;
+                            $mappingQuantity = $addon['mapping_quantity'] ?? 1.0;
+                            $addonQuantity = $addon['quantity'] ?? 1;
 
-                $this->warn('   ⚠️  NECESSITA CORREÇÃO');
+                            // Subtotal ATUAL (com fração atual do OrderItemMapping)
+                            $currentSubtotal = $currentCMV * $mappingQuantity * $addonQuantity;
 
-                if (! $dryRun) {
-                    // Deletar APENAS mappings de sabores (option_type = 'pizza_flavor')
-                    // Preservar outros add-ons como bebidas, complementos, etc
-                    $deletedCount = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
-                        ->where('mapping_type', 'addon')
-                        ->where('option_type', 'pizza_flavor')
-                        ->delete();
+                            // Calcular CMV e subtotal CORRETO
+                            if (! $productMapping || ! $productMapping->internal_product_id || ! $product) {
+                                // Se não tem produto associado:
+                                // - Para SABORES: CMV = 0 (precisa associar)
+                                // - Para OUTROS (bebidas, etc): manter CMV atual (só corrigir fração)
+                                $correctCMV = $isFlavor ? 0 : $currentCMV;
+                            } else {
+                                // Calcular CMV:
+                                // - SABORES: usar calculateCMV por tamanho (broto, média, grande, família)
+                                // - OUTROS: usar unit_cost direto (bebidas não têm tamanho)
+                                if ($isFlavor && $pizzaSize) {
+                                    $correctCMV = $product->calculateCMV($pizzaSize);
+                                } else {
+                                    $correctCMV = $product->unit_cost;
+                                }
+                            }
 
-                    if ($deletedCount > 0) {
-                        $this->line("   🗑️  Deletados {$deletedCount} mappings de sabores antigos");
-                    }
+                            // Aplicar fração APENAS para sabores de pizza
+                            // Outros add-ons (bebidas, complementos) são 100% completos
+                            // IMPORTANTE: Para sabores, a quantidade no OrderItemMapping deve ser addonQuantity / totalFlavors
+                            // Ex: 2x Portuguesa de 3 sabores = 2/3
+                            $correctQuantity = $isFlavor ? ($addonQuantity / $numFlavors) : 1.0;
+                            $correctSubtotal = $correctCMV * $correctQuantity;
 
-                    // Recriar mappings para cada sabor E criar mappings para add-ons vinculados
-                    $remappedCount = 0;
-                    $skippedCount = 0;
-                    $skippedNames = [];
-                    $createdNonFlavorCount = 0;
+                            $currentTotal += $currentSubtotal;
+                            $correctTotal += $correctSubtotal;
 
-                    foreach ($orderItem->add_ons as $index => $addOn) {
-                        $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
+                            // Formatar frações para exibição (apenas para sabores)
+                            // Para correctQuantity, usar a fração real (ex: 2/3) quando quantidade > 1
+                            $currentFractionText = $this->formatFraction($mappingQuantity);
+                            $correctFractionText = $isFlavor && $addonQuantity > 1
+                                ? "{$addonQuantity}/{$numFlavors}"
+                                : $this->formatFraction($correctQuantity);
 
-                        // Gerar SKU do addon como a Triagem faz
-                        $addonSku = 'addon_'.md5($addOnName);
+                            // Verificar se está incorreto:
+                            // - CMV errado
+                            // - Fração errada (para qualquer tipo de add-on)
+                            $isIncorrect = abs($currentCMV - $correctCMV) > 0.01 || abs($mappingQuantity - $correctQuantity) > 0.01;
 
-                        // Buscar ProductMapping do add-on pelo SKU (qualquer tipo)
-                        $mapping = \App\Models\ProductMapping::where('tenant_id', $orderItem->tenant_id)
-                            ->where('external_item_id', $addonSku)
-                            ->first();
+                            $productName = $product ? $product->name : $addon['name'];
 
-                        if (!$mapping || !$mapping->internal_product_id) {
-                            $skippedCount++;
-                            $skippedNames[] = $addOnName;
+                            if ($isIncorrect) {
+                                $this->line("   ├ ⚠️  {$currentFractionText} {$productName}");
+                                $this->line('      OrderItemMapping ID: '.($addon['order_item_mapping_id'] ?? 'N/A'));
+                                $this->line('      ❌ ATUAL: R$ '.number_format($currentCMV, 2, ',', '.').' × '.$currentFractionText.' = R$ '.number_format($currentSubtotal, 2, ',', '.'));
+                                $this->line("      ✅ CORRETO ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.').' × '.$correctFractionText.' = R$ '.number_format($correctSubtotal, 2, ',', '.'));
+                                $hasIncorrectCost = true;
+                            } else {
+                                // Verificar se tem ProductMapping vinculado (classificado na Triagem)
+                                $hasClassification = $productMapping && $productMapping->internal_product_id !== null;
+                                $icon = $hasClassification ? '✅' : '🔗';
+                                $statusText = $hasClassification ? '' : ' (não classificado - vincular na Triagem)';
+
+                                $this->line("   ├ {$icon} {$correctFractionText} {$productName}{$statusText}");
+                                $this->line('      💰 R$ '.number_format($correctSubtotal, 2, ',', '.'));
+                            }
+                        }
+
+                        // Pular se não tem pizza
+                        if (! $hasPizzaFlavor) {
+                            $this->comment('   ⏭️  Sem sabores de pizza - pulando');
+
                             continue;
                         }
 
-                        // Verificar se já existe OrderItemMapping para este add-on
-                        $existingMapping = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
-                            ->where('external_reference', (string) $index)
-                            ->exists();
+                        $this->line('');
+                        $this->line('   💰 Total ATUAL (sabores): R$ '.number_format($currentTotal, 2, ',', '.'));
+                        $this->line('   ✅ Total CORRETO (sabores): R$ '.number_format($correctTotal, 2, ',', '.'));
 
-                        if ($existingMapping) {
-                            continue; // Já tem mapping, não precisa recriar
+                        $difference = abs($currentTotal - $correctTotal);
+                        $this->line('   📏 Diferença: R$ '.number_format($difference, 2, ',', '.'));
+
+                        // SEMPRE verificar e criar mappings para add-ons não-sabor vinculados (independente da correção de sabores)
+                        $createdNonFlavorCount = $this->ensureNonFlavorMappings($orderItem, $pizzaSize, $dryRun);
+
+                        if (! $hasIncorrectCost && $difference < $threshold) {
+                            if ($createdNonFlavorCount > 0) {
+                                $this->info("   ✅ OK (sabores) + {$createdNonFlavorCount} bebidas/complementos vinculados!");
+                            } else {
+                                $this->comment('   ✅ OK');
+                            }
+                            $alreadyCorrect++;
+
+                            continue;
                         }
 
-                        // Se for sabor, processar com frações
-                        if ($mapping->item_type === 'flavor') {
-                            $this->processFlavourMapping($mapping, $orderItem, $index, $addOn, $addOnName, $numFlavors, $pizzaSize, $remappedCount);
+                        $this->warn('   ⚠️  NECESSITA CORREÇÃO');
+
+                        if (! $dryRun) {
+                            // Deletar APENAS mappings de sabores (option_type = 'pizza_flavor')
+                            // Preservar outros add-ons como bebidas, complementos, etc
+                            $deletedCount = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
+                                ->where('mapping_type', 'addon')
+                                ->where('option_type', 'pizza_flavor')
+                                ->delete();
+
+                            if ($deletedCount > 0) {
+                                $this->line("   🗑️  Deletados {$deletedCount} mappings de sabores antigos");
+                            }
+
+                            // Recriar mappings para cada sabor E criar mappings para add-ons vinculados
+                            $remappedCount = 0;
+                            $skippedCount = 0;
+                            $skippedNames = [];
+                            $createdNonFlavorCount = 0;
+
+                            foreach ($orderItem->add_ons as $index => $addOn) {
+                                $addOnName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
+
+                                // Gerar SKU do addon como a Triagem faz
+                                $addonSku = 'addon_'.md5($addOnName);
+
+                                // Buscar ProductMapping do add-on pelo SKU (qualquer tipo)
+                                $mapping = \App\Models\ProductMapping::where('tenant_id', $orderItem->tenant_id)
+                                    ->where('external_item_id', $addonSku)
+                                    ->first();
+
+                                if (! $mapping || ! $mapping->internal_product_id) {
+                                    $skippedCount++;
+                                    $skippedNames[] = $addOnName;
+
+                                    continue;
+                                }
+
+                                // Verificar se já existe OrderItemMapping para este add-on
+                                $existingMapping = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
+                                    ->where('external_reference', (string) $index)
+                                    ->exists();
+
+                                if ($existingMapping) {
+                                    continue; // Já tem mapping, não precisa recriar
+                                }
+
+                                // Se for sabor, processar com frações
+                                if ($mapping->item_type === 'flavor') {
+                                    $this->processFlavourMapping($mapping, $orderItem, $index, $addOn, $addOnName, $numFlavors, $pizzaSize, $remappedCount);
+                                } else {
+                                    // Para add-ons não-sabor (bebidas, complementos), criar OrderItemMapping simples
+                                    $product = $mapping->internalProduct;
+                                    if (! $product) {
+                                        continue;
+                                    }
+
+                                    $addOnQuantity = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
+                                    $correctCMV = $pizzaSize && $product->product_category === 'sabor_pizza'
+                                        ? $product->calculateCMV($pizzaSize)
+                                        : $product->unit_cost;
+
+                                    \App\Models\OrderItemMapping::create([
+                                        'tenant_id' => $orderItem->tenant_id,
+                                        'order_item_id' => $orderItem->id,
+                                        'internal_product_id' => $product->id,
+                                        'quantity' => $addOnQuantity,
+                                        'mapping_type' => 'addon',
+                                        'option_type' => 'addon',
+                                        'auto_fraction' => false,
+                                        'external_reference' => (string) $index,
+                                        'external_name' => $addOnName,
+                                        'unit_cost_override' => $correctCMV,
+                                    ]);
+
+                                    $createdNonFlavorCount++;
+                                }
+                            }
+
+                            // Criar mappings para add-ons não-sabor vinculados (bebidas, complementos)
+                            $createdNonFlavorCount = $this->ensureNonFlavorMappings($orderItem, $pizzaSize, false);
+
+                            if ($remappedCount > 0) {
+                                $this->info("   ✅ Remapeados {$remappedCount} sabores com frações corretas!");
+                            }
+
+                            if ($createdNonFlavorCount > 0) {
+                                $this->info("   ✅ Criados {$createdNonFlavorCount} mappings para bebidas/complementos!");
+                            }
+
+                            if ($skippedCount > 0) {
+                                $this->warn("   ⚠️  {$skippedCount} sabores NÃO CLASSIFICADOS na Triagem (pulados):");
+                                foreach ($skippedNames as $name) {
+                                    $this->line("      - {$name}");
+                                }
+                                $this->comment('      💡 Classifique estes sabores em /triage para corrigir o CMV');
+                            }
+
+                            // Verificar resultado
+                            $orderItem->refresh();
+                            $newTotal = $orderItem->calculateTotalCost();
+                            $this->line('   🆕 Novo total: R$ '.number_format($newTotal, 2, ',', '.'));
                         } else {
-                            // Para add-ons não-sabor (bebidas, complementos), criar OrderItemMapping simples
-                            $product = $mapping->internalProduct;
-                            if (!$product) continue;
-
-                            $addOnQuantity = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
-                            $correctCMV = $pizzaSize && $product->product_category === 'sabor_pizza'
-                                ? $product->calculateCMV($pizzaSize)
-                                : $product->unit_cost;
-
-                            \App\Models\OrderItemMapping::create([
-                                'tenant_id' => $orderItem->tenant_id,
-                                'order_item_id' => $orderItem->id,
-                                'internal_product_id' => $product->id,
-                                'quantity' => $addOnQuantity,
-                                'mapping_type' => 'addon',
-                                'option_type' => 'addon',
-                                'auto_fraction' => false,
-                                'external_reference' => (string) $index,
-                                'external_name' => $addOnName,
-                                'unit_cost_override' => $correctCMV,
-                            ]);
-
-                            $createdNonFlavorCount++;
+                            $this->comment('   🔍 Seria recalculado (dry-run)');
                         }
+
+                        $totalDifference += $difference;
+                        $fixed++;
+
+                    } catch (\Exception $e) {
+                        $this->error("   ❌ Erro ao processar item #{$orderItem->id}: {$e->getMessage()}");
+                        $errors++;
                     }
 
-                    // Criar mappings para add-ons não-sabor vinculados (bebidas, complementos)
-                    $createdNonFlavorCount = $this->ensureNonFlavorMappings($orderItem, $pizzaSize, false);
+                    $processed++;
 
-                    if ($remappedCount > 0) {
-                        $this->info("   ✅ Remapeados {$remappedCount} sabores com frações corretas!");
+                    // Mostrar progresso a cada 50 items
+                    if ($processed % 50 === 0) {
+                        $this->info("🔄 Processados: {$processed}/{$totalItems}...");
                     }
-
-                    if ($createdNonFlavorCount > 0) {
-                        $this->info("   ✅ Criados {$createdNonFlavorCount} mappings para bebidas/complementos!");
-                    }
-
-                    if ($skippedCount > 0) {
-                        $this->warn("   ⚠️  {$skippedCount} sabores NÃO CLASSIFICADOS na Triagem (pulados):");
-                        foreach ($skippedNames as $name) {
-                            $this->line("      - {$name}");
-                        }
-                        $this->comment("      💡 Classifique estes sabores em /triage para corrigir o CMV");
-                    }
-
-                    // Verificar resultado
-                    $orderItem->refresh();
-                    $newTotal = $orderItem->calculateTotalCost();
-                    $this->line('   🆕 Novo total: R$ '.number_format($newTotal, 2, ',', '.'));
-                } else {
-                    $this->comment('   🔍 Seria recalculado (dry-run)');
                 }
-
-                $totalDifference += $difference;
-                $fixed++;
-
-            } catch (\Exception $e) {
-                $this->error("   ❌ Erro ao processar item #{$orderItem->id}: {$e->getMessage()}");
-                $errors++;
-            }
-
-            $processed++;
-
-            // Mostrar progresso a cada 50 items
-            if ($processed % 50 === 0) {
-                $this->info("🔄 Processados: {$processed}/{$totalItems}...");
-            }
-        }
-    });
+            });
 
         $this->line('');
         $this->info('═══════════════════════════════════════');
@@ -465,7 +522,9 @@ class FixIncorrectPizzaFractions extends Command
     protected function processFlavourMapping($mapping, $orderItem, $index, $addOn, $addOnName, $numFlavors, $pizzaSize, &$remappedCount): void
     {
         $product = $mapping->internalProduct;
-        if (!$product) return;
+        if (! $product) {
+            return;
+        }
 
         // Calcular CMV correto baseado no tamanho (mesma lógica do FlavorMappingService)
         $correctCMV = $pizzaSize ? $product->calculateCMV($pizzaSize) : $product->unit_cost;
@@ -504,7 +563,9 @@ class FixIncorrectPizzaFractions extends Command
 
         foreach ($orderItem->add_ons as $index => $addOn) {
             $addonName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
-            if (! $addonName) continue;
+            if (! $addonName) {
+                continue;
+            }
 
             $addonSku = 'addon_'.md5($addonName);
 
@@ -532,7 +593,9 @@ class FixIncorrectPizzaFractions extends Command
             // Criar OrderItemMapping para o add-on
             if (! $dryRun) {
                 $product = $mapping->internalProduct;
-                if (! $product) continue;
+                if (! $product) {
+                    continue;
+                }
 
                 $addOnQuantity = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
                 $correctCMV = $pizzaSize && $product->product_category === 'sabor_pizza'
@@ -564,11 +627,21 @@ class FixIncorrectPizzaFractions extends Command
      */
     protected function formatFraction(float $fraction): string
     {
-        if (abs($fraction - 0.5) < 0.01) return '1/2';
-        if (abs($fraction - 0.33) < 0.01 || abs($fraction - 1/3) < 0.01) return '1/3';
-        if (abs($fraction - 0.25) < 0.01) return '1/4';
-        if (abs($fraction - 0.66) < 0.01 || abs($fraction - 2/3) < 0.01) return '2/3';
-        if (abs($fraction - 0.75) < 0.01) return '3/4';
+        if (abs($fraction - 0.5) < 0.01) {
+            return '1/2';
+        }
+        if (abs($fraction - 0.33) < 0.01 || abs($fraction - 1 / 3) < 0.01) {
+            return '1/3';
+        }
+        if (abs($fraction - 0.25) < 0.01) {
+            return '1/4';
+        }
+        if (abs($fraction - 0.66) < 0.01 || abs($fraction - 2 / 3) < 0.01) {
+            return '2/3';
+        }
+        if (abs($fraction - 0.75) < 0.01) {
+            return '3/4';
+        }
 
         return number_format($fraction, 2);
     }
