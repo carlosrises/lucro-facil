@@ -76,6 +76,7 @@ class FixTakeatOrderTimezones extends Command
         $skipped = 0;
         $errors = 0;
         $debugCount = 0;
+        $incorrectFound = 0;
         $showDetails = $totalOrders <= 20 || $debug; // Mostrar detalhes se debug ativo
 
         // Configurar barra de progresso com formato melhorado
@@ -94,7 +95,7 @@ class FixTakeatOrderTimezones extends Command
         // Ordenar por placed_at DESC para pegar pedidos mais recentes primeiro
         $query->select(['id', 'code', 'placed_at', 'raw'])
             ->orderBy('placed_at', 'desc')
-            ->chunk(100, function ($orders) use (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar, $debug, &$debugCount) {
+            ->chunk(100, function ($orders) use (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar, $debug, &$debugCount, &$incorrectFound) {
                 foreach ($orders as $order) {
                     // Modo debug: mostrar apenas primeiros 50
                     if ($debug && $debugCount >= 50) {
@@ -155,6 +156,9 @@ class FixTakeatOrderTimezones extends Command
                             continue;
                         }
 
+                        // Pedido precisa ser corrigido
+                        $incorrectFound++;
+
                         if ($showDetails) {
                             $this->line('');
                             $this->info("📦 Pedido #{$order->id} - {$order->code}");
@@ -205,6 +209,7 @@ class FixTakeatOrderTimezones extends Command
         $this->info('═══════════════════════════════════════');
         $this->info("📊 Total analisado: {$totalOrders} pedidos");
         $this->info("✅ Já corretos: {$skipped}");
+        $this->info("🔍 Incorretos encontrados: {$incorrectFound}");
         $this->info('🔧 '.($isDryRun ? 'Seriam corrigidos' : 'Corrigidos').": {$fixed}");
 
         if ($errors > 0) {
