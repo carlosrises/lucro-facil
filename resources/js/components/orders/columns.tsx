@@ -133,6 +133,7 @@ export type Order = {
     status: string;
     provider: string;
     origin: string; // Canal/origem do pedido (ifood, 99food, takeat, etc)
+    store_id?: number | null;
     placed_at: string | null;
     subtotal?: number | 0;
     fee?: number | 0;

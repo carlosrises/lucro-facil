@@ -61,6 +61,11 @@ type OrdersPageProps = {
         margin_good_max: number;
         margin_poor: number;
     };
+    auth: {
+        user: {
+            tenant_id: number;
+        };
+    };
 };
 
 export default function Orders() {
@@ -81,6 +86,20 @@ export default function Orders() {
     // Estado local para pedidos (permite atualizações em tempo real sem reload)
     const [localOrders, setLocalOrders] = useState<Order[]>(orders.data);
 
+    // Estados locais para paginação e indicadores (atualizam com novos pedidos)
+    const [localPagination, setLocalPagination] = useState({
+        current_page: orders.current_page,
+        last_page: orders.last_page,
+        per_page: orders.per_page,
+        from: orders.from,
+        to: orders.to,
+        total: orders.total,
+        next_page_url: orders.next_page_url,
+        prev_page_url: orders.prev_page_url,
+    });
+
+    const [localIndicators, setLocalIndicators] = useState(indicators);
+
     // Ref para sempre ter acesso aos valores mais recentes dos filtros
     // Isso resolve o problema de closure stale no useCallback
     const filtersRef = useRef(filters);
@@ -94,11 +113,22 @@ export default function Orders() {
     // Isso garante que o skeleton apareça apenas em navegações/filtros
     useEffect(() => {
         setLocalOrders(orders.data);
-    }, [orders.data, filters]);
+        setLocalPagination({
+            current_page: orders.current_page,
+            last_page: orders.last_page,
+            per_page: orders.per_page,
+            from: orders.from,
+            to: orders.to,
+            total: orders.total,
+            next_page_url: orders.next_page_url,
+            prev_page_url: orders.prev_page_url,
+        });
+        setLocalIndicators(indicators);
+    }, [orders.data, orders.total, indicators, filters]);
 
     // Hook para sincronização bidirecional de status (Critérios 12-13)
     // Recarrega automaticamente a lista quando há mudanças externas
-    useOrderStatusListener((auth.user as any)?.tenant_id);
+    useOrderStatusListener(auth.user?.tenant_id);
 
     // Hook para atualizações em tempo real (novos pedidos + itens classificados)
     // Atualiza a lista silenciosamente sem skeleton/reload
@@ -109,6 +139,7 @@ export default function Orders() {
 
             // Validar se o pedido atende os filtros ativos antes de adicionar
             // IMPORTANTE: placed_at vem em UTC do banco
+            if (!order.placed_at) return; // Segurança: ignorar pedidos sem data
             const orderDateUTC = new Date(order.placed_at);
 
             // Converter para data em Brasília (America/Sao_Paulo)
@@ -166,19 +197,56 @@ export default function Orders() {
 
             // Pedido atende todos os filtros, adicionar/atualizar
             setLocalOrders((prev) => {
+                let newOrders;
                 if (isNew) {
                     // Novo pedido: adicionar no topo
-                    return [order, ...prev];
+                    newOrders = [order, ...prev];
                 } else {
                     // Atualização: substituir existente
-                    return prev.map((o) => (o.id === order.id ? order : o));
+                    newOrders = prev.map((o) =>
+                        o.id === order.id ? order : o,
+                    );
                 }
+
+                // Atualizar paginação apenas para novos pedidos
+                if (isNew) {
+                    setLocalPagination((prevPag) => ({
+                        ...prevPag,
+                        total: prevPag.total + 1,
+                        to: Math.min(prevPag.to + 1, prevPag.per_page),
+                    }));
+
+                    // Atualizar indicadores
+                    setLocalIndicators((prevInd) => {
+                        const orderNetRevenue = Number(order.net_revenue || 0);
+                        const orderCMV = Number(order.total_costs || 0);
+                        const orderSubtotal = Number(order.gross_total || 0);
+
+                        const newOrderCount = prevInd.orderCount + 1;
+                        const newSubtotal = prevInd.subtotal + orderSubtotal;
+                        const newCMV = prevInd.cmv + orderCMV;
+                        const newNetRevenue =
+                            prevInd.netRevenue + orderNetRevenue;
+                        const newAverageTicket = newSubtotal / newOrderCount;
+
+                        return {
+                            ...prevInd,
+                            orderCount: newOrderCount,
+                            subtotal: newSubtotal,
+                            cmv: newCMV,
+                            netRevenue: newNetRevenue,
+                            averageTicket: newAverageTicket,
+                        };
+                    });
+                }
+
+                return newOrders;
             });
         },
         [], // Sem dependências - usamos filtersRef para acessar valores atuais
     );
 
-    useRealtimeOrders((auth.user as any)?.tenant_id, handleOrderUpsert);
+    useRealtimeOrders(auth.user?.tenant_id, handleOrderUpsert);
 
     // Hook para verificar novos pedidos sincronizados (DESABILITADO - usando WebSocket)
     // const { hasNewOrders, newOrdersCount, refreshOrders } = useOrderPolling({
@@ -223,16 +291,7 @@ export default function Orders() {
                     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
                         <DataTable
                             data={localOrders}
-                            pagination={{
-                                current_page: orders.current_page,
-                                last_page: orders.last_page,
-                                per_page: orders.per_page,
-                                from: orders.from,
-                                to: orders.to,
-                                total: orders.total,
-                                next_page_url: orders.next_page_url,
-                                prev_page_url: orders.prev_page_url,
-                            }}
+                            pagination={localPagination}
                             filters={filters}
                             stores={stores}
                             providerOptions={providerOptions}
@@ -241,7 +300,7 @@ export default function Orders() {
                             noPaymentInfoCount={noPaymentInfoCount}
                             internalProducts={internalProducts}
                             marginSettings={marginSettings}
-                            indicators={indicators}
+                            indicators={localIndicators}
                         />
                     </div>
                 </div>
