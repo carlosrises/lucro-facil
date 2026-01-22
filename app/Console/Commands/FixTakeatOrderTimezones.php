@@ -30,7 +30,7 @@ class FixTakeatOrderTimezones extends Command
         }
 
         if ($debug) {
-            $this->warn('🐛 Modo DEBUG ativado - Mostrando detalhes dos primeiros 10 pedidos');
+            $this->warn('🐛 Modo DEBUG ativado - Mostrando detalhes dos primeiros 50 pedidos');
         }
 
         // Montar query base
@@ -60,6 +60,10 @@ class FixTakeatOrderTimezones extends Command
 
         $totalOrders = $query->count();
 
+        if ($debug) {
+            $this->warn('🐛 Modo DEBUG ativado - Mostrando detalhes dos primeiros 50 pedidos');
+        }
+
         $this->info("📦 Encontrados {$totalOrders} pedidos Takeat para analisar");
 
         if ($totalOrders === 0) {
@@ -87,11 +91,13 @@ class FixTakeatOrderTimezones extends Command
         }
 
         // Processar em lotes de 100 para não estourar memória
+        // Ordenar por placed_at DESC para pegar pedidos mais recentes primeiro
         $query->select(['id', 'code', 'placed_at', 'raw'])
+            ->orderBy('placed_at', 'desc')
             ->chunk(100, function ($orders) use (&$fixed, &$skipped, &$errors, $isDryRun, $showDetails, $bar, $debug, &$debugCount) {
                 foreach ($orders as $order) {
-                    // Modo debug: mostrar apenas primeiros 10
-                    if ($debug && $debugCount >= 10) {
+                    // Modo debug: mostrar apenas primeiros 50
+                    if ($debug && $debugCount >= 50) {
                         $skipped++;
                         if (! $showDetails) {
                             $bar->advance();
@@ -156,6 +162,7 @@ class FixTakeatOrderTimezones extends Command
                             $this->line("   ⏰ Data atual (banco UTC): {$currentDate->format('d/m/Y H:i:s')}");
                             $this->line("   📡 Data correta (UTC): {$correctDate->format('d/m/Y H:i:s')}");
                             $this->line("   ⚡ Diferença: {$diffInHours}h");
+                            $this->line("   🔍 CurrentRaw: {$currentDateRaw}");
                         }
 
                         if (! $isDryRun) {
