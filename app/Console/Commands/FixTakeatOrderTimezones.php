@@ -108,9 +108,10 @@ class FixTakeatOrderTimezones extends Command
                     // Modo debug: mostrar apenas primeiros 50
                     if ($debug && $debugCount >= 50) {
                         $skipped++;
-                        if (! $showDetails) {
-                            $bar->advance();
-                        $bar->advance();                    }
+                        $bar->advance();
+
+                        continue;
+                    }
 
                     try {
                         // Extrair start_time do raw
@@ -123,10 +124,10 @@ class FixTakeatOrderTimezones extends Command
                                 $this->warn("   ⚠️  Pedido #{$order->id}: sem start_time no raw, pulando");
                             }
                             $skipped++;
-                            if (! $showDetails) {
-                                $bar->advance();
-                            }
                             $bar->advance();
+                            if ($debug) {
+                                $debugCount++;
+                            }
 
                             continue;
                         }
@@ -149,12 +150,12 @@ class FixTakeatOrderTimezones extends Command
                                 $this->line("   ✅ Pedido #{$order->id} já está correto");
                             }
                             $skipped++;
-                            if (! $showDetails) {
-                                $bar->advance();
-                            }
+                            $bar->advance();
                             if ($debug) {
                                 $debugCount++;
-                            $bar->advance();ontinue;
+                            }
+
+                            continue;
                         }
 
                         // Pedido precisa ser corrigido
@@ -194,17 +195,17 @@ class FixTakeatOrderTimezones extends Command
                         $errors++;
                     }
 
-                    if (! $showDetails) {
-                        $bar->setMessage((string) $fixed);
-                        $bar->advance();
-                    }
-                }$bar->setMessage((string) $fixed);
+                    $bar->setMessage((string) $fixed);
                     $bar->advance();
                 }
             });
 
         $bar->finish();
-        $this->newLine();this->info("📊 Total analisado: {$totalOrders} pedidos");
+        $this->newLine();
+
+        $this->newLine();
+        $this->info('═══════════════════════════════════════');
+        $this->info("📊 Total analisado: {$totalOrders} pedidos");
         $this->info("✅ Já corretos: {$skipped}");
         $this->info("🔍 Incorretos encontrados: {$incorrectFound}");
         $this->info('🔧 '.($isDryRun ? 'Seriam corrigidos' : 'Corrigidos').": {$fixed}");
