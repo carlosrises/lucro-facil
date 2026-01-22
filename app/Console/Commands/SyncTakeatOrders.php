@@ -455,6 +455,8 @@ class SyncTakeatOrders extends Command
         $addOns = $orderItem->add_ons ?? [];
         logger()->info('🔍 Processando add-ons', ['count' => count($addOns)]);
 
+        $flavorMappings = []; // Coletar sabores para processar depois
+
         foreach ($addOns as $index => $addOn) {
             $addonName = $addOn['name'] ?? '';
             if (! $addonName) {
@@ -475,8 +477,20 @@ class SyncTakeatOrders extends Command
                 ->first();
 
             if ($addonMapping && $addonMapping->internal_product_id) {
-                // Para add-ons não-sabor (bebidas, complementos, etc), criar mapping normal
-                if ($addonMapping->item_type !== 'flavor') {
+                // Para sabores, coletar para processar com FlavorMappingService
+                if ($addonMapping->item_type === 'flavor') {
+                    $flavorMappings[] = [
+                        'mapping' => $addonMapping,
+                        'index' => $index,
+                        'name' => $addonName,
+                        'quantity' => $addOn['quantity'] ?? 1,
+                    ];
+                    logger()->info('🍕 Sabor detectado, será processado via FlavorMappingService', [
+                        'name' => $addonName,
+                        'product_id' => $addonMapping->internal_product_id,
+                    ]);
+                } else {
+                    // Para add-ons não-sabor (bebidas, complementos, etc), criar mapping normal
                     $addonQty = $addOn['quantity'] ?? 1;
 
                     // Buscar produto do addon para calcular CMV
@@ -499,14 +513,25 @@ class SyncTakeatOrders extends Command
             }
         }
 
-        // IMPORTANTE: Usar FlavorMappingService para processar sabores
-        // Isso garante que a mesma lógica da Triagem seja aplicada
-        // ⚠️ DESABILITADO durante sincronização para evitar timeout
-        // Motivo: mapFlavorToAllOccurrences processa TODOS os pedidos históricos
-        // causando lentidão extrema em produção. Sabores devem ser mapeados
-        // manualmente via Triagem ou via job assíncrono específico.
+        // Processar sabores usando FlavorMappingService
+        // Agora é seguro - recalculateAllFlavorsForOrderItem() só processa o OrderItem atual
+        if (! empty($flavorMappings)) {
+            logger()->info('🍕 Processando sabores via FlavorMappingService', [
+                'count' => count($flavorMappings),
+            ]);
 
-        logger()->info('⏭️ Auto-mapping de sabores desabilitado durante sincronização');
+            try {
+                $flavorService = app(FlavorMappingService::class);
+                $flavorService->recalculateAllFlavorsForOrderItem($orderItem);
+
+                logger()->info('✅ Sabores processados com sucesso via FlavorMappingService');
+            } catch (\Exception $e) {
+                logger()->error('❌ Erro ao processar sabores via FlavorMappingService', [
+                    'error' => $e->getMessage(),
+                    'order_item_id' => $orderItem->id,
+                ]);
+            }
+        }
     }
 
     /**
