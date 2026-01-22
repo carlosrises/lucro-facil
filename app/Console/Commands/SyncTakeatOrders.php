@@ -479,11 +479,15 @@ class SyncTakeatOrders extends Command
 
             // Se não existe ProductMapping, criar um pendente
             if (! $addonMapping) {
-                // Se não existe ProductMapping para este add-on, criar um sem produto vinculado
-                // Isso permite que o item apareça na Triagem para ser classificado manualmente
+                // Detectar automaticamente se é sabor baseado no contexto
+                $isPizza = $this->isPizzaItem($orderItem);
+                $detectedItemType = $isPizza ? 'flavor' : 'beverage';
+
                 logger()->info('📝 Criando ProductMapping pendente para add-on', [
                     'name' => $addonName,
                     'sku' => $addonSku,
+                    'detected_type' => $detectedItemType,
+                    'is_pizza' => $isPizza,
                 ]);
 
                 $addonMapping = ProductMapping::firstOrCreate(
@@ -493,7 +497,7 @@ class SyncTakeatOrders extends Command
                     ],
                     [
                         'external_item_name' => $addonName,
-                        'item_type' => 'beverage', // Assumir bebida por padrão, pode ser alterado na Triagem
+                        'item_type' => $detectedItemType, // Detecta automaticamente: flavor para pizzas, beverage para outros
                         'internal_product_id' => null,
                         'provider' => 'takeat',
                     ]
@@ -632,6 +636,37 @@ class SyncTakeatOrders extends Command
         }
 
         return null;
+    }
+
+    /**
+     * Detectar se um OrderItem é uma pizza baseado no nome
+     */
+    protected function isPizzaItem(\App\Models\OrderItem $orderItem): bool
+    {
+        $itemName = strtolower($orderItem->name);
+
+        // Palavras-chave que indicam pizza
+        $pizzaKeywords = [
+            'pizza',
+            'sabor',
+            'fatias',
+            'broto',
+            'brotinho',
+            'média',
+            'media',
+            'grande',
+            'família',
+            'familia',
+            'gigante',
+        ];
+
+        foreach ($pizzaKeywords as $keyword) {
+            if (str_contains($itemName, $keyword)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
