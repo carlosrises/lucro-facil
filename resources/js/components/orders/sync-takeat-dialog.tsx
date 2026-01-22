@@ -34,6 +34,7 @@ export function SyncTakeatDialog({
         new Date(),
     );
     const [isSyncing, setIsSyncing] = React.useState(false);
+    const [isCalendarOpen, setIsCalendarOpen] = React.useState(false);
 
     const handleSync = async () => {
         if (!selectedDate) {
@@ -108,7 +109,7 @@ export function SyncTakeatDialog({
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
                         <Label>Data</Label>
-                        <Popover>
+                        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                             <PopoverTrigger asChild>
                                 <Button
                                     variant="outline"
@@ -139,12 +140,16 @@ export function SyncTakeatDialog({
                                 <CalendarComponent
                                     mode="single"
                                     selected={selectedDate}
-                                    onSelect={setSelectedDate}
+                                    onSelect={(date) => {
+                                        setSelectedDate(date);
+                                        setIsCalendarOpen(false); // Fecha após selecionar
+                                    }}
                                     disabled={(date) =>
                                         date > new Date() ||
                                         date < new Date('1900-01-01')
                                     }
                                     locale={ptBR}
+                                    defaultMonth={selectedDate}
                                     initialFocus
                                 />
                             </PopoverContent>

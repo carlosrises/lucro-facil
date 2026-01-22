@@ -134,6 +134,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
                         onSelect={handleChange}
                         locale={ptBR}
                         numberOfMonths={2}
+                        defaultMonth={range?.from || new Date()}
                     />
                 </div>
             </PopoverContent>
