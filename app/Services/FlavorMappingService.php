@@ -188,18 +188,39 @@ class FlavorMappingService
 
             // Verificar se este add-on tem ProductMapping do tipo 'flavor'
             $addOnSku = 'addon_'.md5($addOnName);
+            
+            logger()->info('🔍 FlavorMappingService: Buscando ProductMapping para add-on', [
+                'index' => $index,
+                'name' => $addOnName,
+                'sku' => $addOnSku,
+            ]);
+            
             $productMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
                 ->where('external_item_id', $addOnSku)
                 ->where('item_type', 'flavor')
                 ->first();
 
             if ($productMapping && $productMapping->internal_product_id) {
+                logger()->info('✅ FlavorMappingService: ProductMapping encontrado', [
+                    'mapping_id' => $productMapping->id,
+                    'product_id' => $productMapping->internal_product_id,
+                    'item_type' => $productMapping->item_type,
+                ]);
+                
                 $classifiedFlavors[] = [
                     'index' => $index,
                     'name' => $addOnName,
                     'product_mapping' => $productMapping,
                     'quantity' => $addOn['quantity'] ?? $addOn['qty'] ?? 1,
                 ];
+            } else {
+                logger()->warning('⚠️ FlavorMappingService: ProductMapping NÃO encontrado ou sem produto', [
+                    'name' => $addOnName,
+                    'sku' => $addOnSku,
+                    'found' => $productMapping !== null,
+                    'has_product' => $productMapping?->internal_product_id !== null,
+                    'item_type' => $productMapping?->item_type,
+                ]);
             }
         }
 
