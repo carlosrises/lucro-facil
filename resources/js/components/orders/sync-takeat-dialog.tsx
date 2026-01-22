@@ -109,7 +109,10 @@ export function SyncTakeatDialog({
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
                         <Label>Data</Label>
-                        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                        <Popover
+                            open={isCalendarOpen}
+                            onOpenChange={setIsCalendarOpen}
+                        >
                             <PopoverTrigger asChild>
                                 <Button
                                     variant="outline"

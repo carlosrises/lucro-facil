@@ -94,11 +94,6 @@ export default function Orders() {
     // Isso garante que o skeleton apareça apenas em navegações/filtros
     useEffect(() => {
         setLocalOrders(orders.data);
-        console.log('[Orders] Filtros atualizados:', {
-            start_date: filters.start_date,
-            end_date: filters.end_date,
-            status: filters.status,
-        });
     }, [orders.data, filters]);
 
     // Hook para sincronização bidirecional de status (Critérios 12-13)
@@ -111,15 +106,6 @@ export default function Orders() {
         (order: Order, isNew: boolean) => {
             // Usar filtersRef para acessar sempre os valores mais recentes
             const currentFilters = filtersRef.current;
-
-            // DEBUG: Log dos valores dos filtros capturados pelo callback
-            console.log('🔍 [Realtime] Valores dos filtros no callback:', {
-                start_date: currentFilters.start_date,
-                end_date: currentFilters.end_date,
-                status: currentFilters.status,
-                store_id: currentFilters.store_id,
-                provider: currentFilters.provider,
-            });
 
             // Validar se o pedido atende os filtros ativos antes de adicionar
             // IMPORTANTE: placed_at vem em UTC do banco
@@ -139,47 +125,17 @@ export default function Orders() {
             // Converter para YYYY-MM-DD para comparação
             const orderDateOnly = `${orderDateBRParts[2]}-${orderDateBRParts[1]}-${orderDateBRParts[0]}`;
 
-            console.log('[Realtime] Verificando filtro de data', {
-                order_id: order.id,
-                order_code: order.code,
-                placed_at_utc: order.placed_at,
-                placed_at_utc_obj: orderDateUTC.toISOString(),
-                order_date_br: orderDateOnly,
-                filter_start: currentFilters.start_date,
-                filter_end: currentFilters.end_date,
-                will_pass:
-                    orderDateOnly >= currentFilters.start_date &&
-                    orderDateOnly <= currentFilters.end_date,
-            });
-
             // Verificar se o pedido está dentro do período filtrado
             if (
                 orderDateOnly < currentFilters.start_date ||
                 orderDateOnly > currentFilters.end_date
             ) {
-                console.warn(
-                    '[Realtime] ❌ Pedido fora do período filtrado, ignorando',
-                    {
-                        order_id: order.id,
-                        order_code: order.code,
-                        order_date_only: orderDateOnly,
-                        filter_start: currentFilters.start_date,
-                        filter_end: currentFilters.end_date,
-                    },
-                );
                 return; // Não adicionar pedido fora do filtro
             }
 
             // Verificar filtro de status
             if (currentFilters.status && currentFilters.status !== 'all') {
                 if (order.status !== currentFilters.status) {
-                    console.warn(
-                        '[Realtime] ❌ Pedido com status diferente do filtro, ignorando',
-                        {
-                            order_status: order.status,
-                            filter: currentFilters.status,
-                        },
-                    );
                     return;
                 }
             }
@@ -189,13 +145,6 @@ export default function Orders() {
                 currentFilters.store_id &&
                 order.store_id != currentFilters.store_id // Use != para coerção de tipo (10 == '10')
             ) {
-                console.warn(
-                    '[Realtime] ❌ Pedido de loja diferente do filtro, ignorando',
-                    {
-                        order_store_id: order.store_id,
-                        filter: currentFilters.store_id,
-                    },
-                );
                 return;
             }
 
@@ -208,54 +157,20 @@ export default function Orders() {
                         order.provider !== provider ||
                         order.origin !== origin
                     ) {
-                        console.warn(
-                            '[Realtime] ❌ Pedido com provider/origin diferente do filtro, ignorando',
-                            {
-                                order_provider: order.provider,
-                                order_origin: order.origin,
-                                filter: currentFilters.provider,
-                            },
-                        );
                         return;
                     }
                 } else if (order.provider !== currentFilters.provider) {
-                    console.warn(
-                        '[Realtime] ❌ Pedido com provider diferente do filtro, ignorando',
-                        {
-                            order_provider: order.provider,
-                            filter: currentFilters.provider,
-                        },
-                    );
                     return;
                 }
             }
 
             // Pedido atende todos os filtros, adicionar/atualizar
-            console.log(
-                '✅ [Realtime] Pedido passou em todos os filtros, adicionando/atualizando',
-                {
-                    order_id: order.id,
-                    order_code: order.code,
-                    isNew,
-                },
-            );
-
             setLocalOrders((prev) => {
                 if (isNew) {
                     // Novo pedido: adicionar no topo
-                    console.log(
-                        '✅ [Realtime] Adicionando novo pedido no topo da lista',
-                        {
-                            order_id: order.id,
-                            current_count: prev.length,
-                        },
-                    );
                     return [order, ...prev];
                 } else {
                     // Atualização: substituir existente
-                    console.log('✅ [Realtime] Atualizando pedido existente', {
-                        order_id: order.id,
-                    });
                     return prev.map((o) => (o.id === order.id ? order : o));
                 }
             });
