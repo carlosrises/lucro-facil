@@ -423,6 +423,7 @@ class SyncTakeatOrders extends Command
 
         if (! $productMapping || ! $productMapping->internal_product_id) {
             logger()->info('⏩ Sem mapeamento configurado', ['sku' => $orderItem->sku]);
+
             return; // Sem mapeamento configurado
         }
 
@@ -476,8 +477,6 @@ class SyncTakeatOrders extends Command
                 ->where('external_item_id', $addonSku)
                 ->first();
 
-            // Se não existe ProductMapping, criar um pendente
-            if (! $addonMapping) {
             // Se não existe ProductMapping, criar um pendente
             if (! $addonMapping) {
                 // Se não existe ProductMapping para este add-on, criar um sem produto vinculado
