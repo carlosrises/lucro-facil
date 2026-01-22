@@ -101,13 +101,15 @@ export default function Orders() {
 
             // Converter para data em Brasília (America/Sao_Paulo)
             // Usar toLocaleDateString que retorna apenas a data no formato do locale
-            const orderDateBRParts = orderDateUTC.toLocaleDateString('pt-BR', {
-                timeZone: 'America/Sao_Paulo',
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-            }).split('/'); // Retorna DD/MM/YYYY
-            
+            const orderDateBRParts = orderDateUTC
+                .toLocaleDateString('pt-BR', {
+                    timeZone: 'America/Sao_Paulo',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                })
+                .split('/'); // Retorna DD/MM/YYYY
+
             // Converter para YYYY-MM-DD para comparação
             const orderDateOnly = `${orderDateBRParts[2]}-${orderDateBRParts[1]}-${orderDateBRParts[0]}`;
 
@@ -119,7 +121,9 @@ export default function Orders() {
                 order_date_br: orderDateOnly,
                 filter_start: filters.start_date,
                 filter_end: filters.end_date,
-                will_pass: orderDateOnly >= filters.start_date && orderDateOnly <= filters.end_date,
+                will_pass:
+                    orderDateOnly >= filters.start_date &&
+                    orderDateOnly <= filters.end_date,
             });
 
             // Verificar se o pedido está dentro do período filtrado
