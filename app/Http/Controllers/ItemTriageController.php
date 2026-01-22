@@ -395,11 +395,11 @@ class ItemTriageController extends Controller
             ->limit(10)
             ->get();
 
-        \Log::info('Order IDs found:', [
-            'sku' => $sku,
-            'count' => $orderIdsWithDates->count(),
-            'orders' => $orderIdsWithDates->map(fn ($o) => ['id' => $o->id, 'placed_at' => $o->placed_at])->toArray(),
-        ]);
+        // \Log::info('Order IDs found:', [
+        //     'sku' => $sku,
+        //     'count' => $orderIdsWithDates->count(),
+        //     'orders' => $orderIdsWithDates->map(fn ($o) => ['id' => $o->id, 'placed_at' => $o->placed_at])->toArray(),
+        // ]);
 
         $orderIds = $orderIdsWithDates->pluck('id');
 

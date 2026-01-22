@@ -8,7 +8,6 @@ use App\Models\ProductMapping;
 use App\Models\Store;
 use App\Services\FlavorMappingService;
 use App\Services\OrderCostService;
-use App\Services\PizzaFractionService;
 use App\Services\TakeatClient;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -136,16 +135,43 @@ class SyncTakeatOrders extends Command
                 $filteredOrders = 0;
                 $savedOrders = 0;
 
-                foreach ($tableSessions as $session) {
-                    foreach ($session['bills'] ?? [] as $bill) {
-                        foreach ($bill['order_baskets'] ?? [] as $basket) {
+                logger()->info('📦 Iniciando processamento de sessões', [
+                    'store_id' => $store->id,
+                    'session_count' => $sessionCount,
+                ]);
+
+                foreach ($tableSessions as $sessionIndex => $session) {
+                    logger()->info('🔄 Processando sessão', [
+                        'session_index' => $sessionIndex + 1,
+                        'session_id' => $session['id'] ?? 'unknown',
+                        'bills_count' => count($session['bills'] ?? []),
+                    ]);
+
+                    foreach ($session['bills'] ?? [] as $billIndex => $bill) {
+                        logger()->info('📄 Processando bill', [
+                            'bill_index' => $billIndex + 1,
+                            'baskets_count' => count($bill['order_baskets'] ?? []),
+                        ]);
+
+                        foreach ($bill['order_baskets'] ?? [] as $basketIndex => $basket) {
                             $totalOrders++;
+                            $basketId = $basket['basket_id'] ?? $basket['id'] ?? 'unknown';
+
+                            logger()->info('🛒 Processando basket', [
+                                'basket_index' => $basketIndex + 1,
+                                'basket_id' => $basketId,
+                                'total_orders_so_far' => $totalOrders,
+                            ]);
 
                             $channel = $basket['channel'] ?? 'unknown';
 
                             // Filtrar por excluded_channels
                             if (in_array($channel, $excludedChannels)) {
                                 $this->line("  ⏩ Ignorando pedido do canal excluído: {$channel}");
+                                logger()->info('⏩ Pedido ignorado (canal excluído)', [
+                                    'basket_id' => $basketId,
+                                    'channel' => $channel,
+                                ]);
 
                                 continue;
                             }
@@ -154,19 +180,35 @@ class SyncTakeatOrders extends Command
 
                             if (! $dryRun) {
                                 try {
+                                    logger()->info('💾 Salvando pedido', ['basket_id' => $basketId]);
                                     $this->processOrderBasket($basket, $session, $store);
                                     $savedOrders++;
+                                    logger()->info('✅ Pedido salvo com sucesso', [
+                                        'basket_id' => $basketId,
+                                        'saved_count' => $savedOrders,
+                                    ]);
                                 } catch (\Throwable $e) {
                                     $this->error("  ❌ Erro ao salvar pedido: {$e->getMessage()}");
                                     logger()->error('Erro ao salvar pedido Takeat', [
-                                        'basket_id' => $basket['basket_id'] ?? null,
+                                        'basket_id' => $basketId,
                                         'error' => $e->getMessage(),
+                                        'trace' => $e->getTraceAsString(),
                                     ]);
                                 }
                             }
                         }
+
+                        logger()->info('✅ Bill processada', ['bill_index' => $billIndex + 1]);
                     }
+
+                    logger()->info('✅ Sessão processada', ['session_index' => $sessionIndex + 1]);
                 }
+
+                logger()->info('🎉 Todas as sessões processadas', [
+                    'store_id' => $store->id,
+                    'total_orders' => $totalOrders,
+                    'saved_orders' => $savedOrders,
+                ]);
 
                 $excluded = $totalOrders - $filteredOrders;
                 $this->info("  ✅ Total de pedidos: {$totalOrders}");
@@ -287,16 +329,16 @@ class SyncTakeatOrders extends Command
         );
 
         // Disparar evento de novo pedido se foi criado agora
-        if (!$existingOrder) {
-            \Log::info('🚀 [WebSocket] Disparando evento OrderCreated (Takeat)', [
-                'tenant_id' => $store->tenant_id,
-                'order_id' => $order->id,
-                'order_code' => $order->code,
-                'provider' => $order->provider,
-                'origin' => $order->origin,
-                'channel' => "orders.tenant.{$store->tenant_id}",
-                'broadcast_driver' => config('broadcasting.default'),
-            ]);
+        if (! $existingOrder) {
+            // \Log::info('🚀 [WebSocket] Disparando evento OrderCreated (Takeat)', [
+            //     'tenant_id' => $store->tenant_id,
+            //     'order_id' => $order->id,
+            //     'order_code' => $order->code,
+            //     'provider' => $order->provider,
+            //     'origin' => $order->origin,
+            //     'channel' => "orders.tenant.{$store->tenant_id}",
+            //     'broadcast_driver' => config('broadcasting.default'),
+            // ]);
             event(new \App\Events\OrderCreated($order));
         }
 
@@ -368,18 +410,32 @@ class SyncTakeatOrders extends Command
      */
     protected function autoApplyMappings(\App\Models\OrderItem $orderItem): void
     {
+        logger()->info('🔍 Iniciando auto-apply mappings', [
+            'order_item_id' => $orderItem->id,
+            'sku' => $orderItem->sku,
+            'name' => $orderItem->name,
+        ]);
+
         // Buscar ProductMapping pelo SKU
         $productMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
             ->where('external_item_id', $orderItem->sku)
             ->first();
 
         if (! $productMapping || ! $productMapping->internal_product_id) {
+            logger()->info('⏩ Sem mapeamento configurado', ['sku' => $orderItem->sku]);
             return; // Sem mapeamento configurado
         }
+
+        logger()->info('✅ Mapeamento principal encontrado', [
+            'mapping_id' => $productMapping->id,
+            'product_id' => $productMapping->internal_product_id,
+        ]);
 
         // Buscar o produto interno para calcular CMV correto
         $product = InternalProduct::find($productMapping->internal_product_id);
         $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
+
+        logger()->info('💰 CMV calculado', ['cmv' => $correctCMV]);
 
         // Criar OrderItemMapping principal
         OrderItemMapping::create([
@@ -393,14 +449,22 @@ class SyncTakeatOrders extends Command
             'unit_cost_override' => $correctCMV,
         ]);
 
+        logger()->info('✅ Mapping principal criado');
+
         // Auto-mapear complementos (add_ons) se houverem
         $addOns = $orderItem->add_ons ?? [];
+        logger()->info('🔍 Processando add-ons', ['count' => count($addOns)]);
 
         foreach ($addOns as $index => $addOn) {
             $addonName = $addOn['name'] ?? '';
-            if (!$addonName) {
+            if (! $addonName) {
                 continue;
             }
+
+            logger()->info('🔍 Processando add-on', [
+                'index' => $index,
+                'name' => $addonName,
+            ]);
 
             // Criar SKU único para o add-on baseado no nome (mesmo padrão da Triagem)
             $addonSku = 'addon_'.md5($addonName);
@@ -437,13 +501,15 @@ class SyncTakeatOrders extends Command
 
         // IMPORTANTE: Usar FlavorMappingService para processar sabores
         // Isso garante que a mesma lógica da Triagem seja aplicada
+        logger()->info('🍕 Verificando sabores para processar');
+
         $flavorService = app(FlavorMappingService::class);
 
         // O serviço vai buscar todos os add-ons classificados como 'flavor'
         // e criar os mappings com frações e CMV corretos automaticamente
         foreach ($addOns as $index => $addOn) {
             $addonName = $addOn['name'] ?? '';
-            if (!$addonName) {
+            if (! $addonName) {
                 continue;
             }
 
@@ -454,15 +520,23 @@ class SyncTakeatOrders extends Command
                 ->first();
 
             if ($addonMapping && $addonMapping->internal_product_id) {
+                logger()->info('🍕 Sabor encontrado, aplicando mapeamento', [
+                    'addon_name' => $addonName,
+                    'addon_sku' => $addonSku,
+                    'mapping_id' => $addonMapping->id,
+                ]);
+
                 // Usar o serviço para aplicar o mapeamento corretamente
                 // Ele vai calcular a fração baseado no total de sabores e aplicar o CMV correto
                 $flavorService->mapFlavorToAllOccurrences($addonMapping, $orderItem->tenant_id);
+
+                logger()->info('✅ Sabor mapeado com sucesso');
                 break; // Uma vez processado, todos os sabores já foram mapeados
             }
         }
+
+        logger()->info('✅ Auto-apply mappings concluído', ['order_item_id' => $orderItem->id]);
     }
-
-
 
     /**
      * Calcular CMV correto baseado no tamanho do produto
@@ -479,11 +553,11 @@ class SyncTakeatOrders extends Command
         $pizzaSize = $this->detectPizzaSize($product, $orderItem);
 
         if (! $pizzaSize) {
-            logger()->warning('⚠️ Takeat: Não foi possível detectar tamanho da pizza', [
-                'product_id' => $product->id,
-                'product_name' => $product->name,
-                'order_item_name' => $orderItem->name,
-            ]);
+            // logger()->warning('⚠️ Takeat: Não foi possível detectar tamanho da pizza', [
+            //     'product_id' => $product->id,
+            //     'product_name' => $product->name,
+            //     'order_item_name' => $orderItem->name,
+            // ]);
 
             return $product->unit_cost; // Fallback para unit_cost genérico
         }
