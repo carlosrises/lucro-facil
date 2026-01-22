@@ -100,6 +100,15 @@ export default function Orders() {
     // Atualiza a lista silenciosamente sem skeleton/reload
     const handleOrderUpsert = useCallback(
         (order: Order, isNew: boolean) => {
+            // DEBUG: Log dos valores dos filtros capturados pelo callback
+            console.log('🔍 [Realtime] Valores dos filtros no callback:', {
+                start_date: filters.start_date,
+                end_date: filters.end_date,
+                status: filters.status,
+                store_id: filters.store_id,
+                provider: filters.provider,
+            });
+
             // Validar se o pedido atende os filtros ativos antes de adicionar
             // IMPORTANTE: placed_at vem em UTC do banco
             const orderDateUTC = new Date(order.placed_at);
