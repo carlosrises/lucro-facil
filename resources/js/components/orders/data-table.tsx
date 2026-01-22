@@ -96,7 +96,11 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useOrderLazyLoad } from '@/hooks/use-order-lazy-load';
-import { calculateNetRevenue } from '@/lib/order-calculations';
+import {
+    calculateNetRevenue,
+    calculateOrderCMV,
+    isTakeatIfoodOrder,
+} from '@/lib/order-calculations';
 import { Link, router } from '@inertiajs/react';
 import {
     AlertCircle,
@@ -2252,6 +2256,7 @@ export function DataTable({
                                 // Colunas que devem mostrar totais
                                 const showTotal = [
                                     'total',
+                                    'subtotal',
                                     'cost',
                                     'tax',
                                     'total_costs',
@@ -2264,103 +2269,227 @@ export function DataTable({
                                     return <TableCell key={column.id} />;
                                 }
 
-                                // Calcular totais das linhas visíveis na tabela
+                                // Calcular totais de TODOS os pedidos filtrados (não apenas visíveis)
                                 let total = 0;
-                                const visibleRows = table.getRowModel().rows;
-                                const visibleOrders = visibleRows.map(
+                                const allFilteredRows =
+                                    table.getFilteredRowModel().rows;
+                                const allOrders = allFilteredRows.map(
                                     (row) => row.original,
                                 );
 
-                                // Verificar se estamos mostrando todas as linhas do período (sem paginação limitando)
-                                const showingAllRows =
-                                    visibleRows.length === pagination.total;
+                                // Verificar se temos indicadores (melhor usar quando disponível)
+                                const hasIndicators =
+                                    indicators &&
+                                    Object.keys(indicators).length > 0;
 
                                 if (
                                     column.id === 'net_total' &&
-                                    showingAllRows
+                                    hasIndicators
                                 ) {
-                                    // Total Líquido: usar indicators se estiver mostrando todas as linhas
+                                    // Total Líquido: usar indicators
                                     total = indicators.netRevenue;
-                                } else if (column.id === 'cost') {
-                                    // CMV: sempre calcular das linhas visíveis
-                                    total = visibleOrders.reduce(
-                                        (sum, order) => {
-                                            const items = order.items || [];
-                                            const isCancelled =
-                                                order.status === 'CANCELLED';
-                                            if (isCancelled) return sum;
+                                } else if (column.id === 'subtotal') {
+                                    // Subtotal: SEMPRE calcular do frontend (lógica complexa não replicada no backend)
+                                    total = allOrders.reduce((sum, order) => {
+                                        const isCancelled =
+                                            order.status === 'CANCELLED';
+                                        if (isCancelled) return sum;
 
-                                            const cmv = items.reduce(
-                                                (itemSum, item) => {
-                                                    return (
-                                                        itemSum +
-                                                        calculateItemCost(item)
-                                                    );
-                                                },
-                                                0,
-                                            );
-                                            return sum + cmv;
-                                        },
-                                        0,
-                                    );
-                                } else if (column.id === 'total') {
-                                    // Total do pedido: sempre calcular das linhas visíveis
-                                    total = visibleOrders.reduce(
-                                        (sum, order) => {
-                                            const isCancelled =
-                                                order.status === 'CANCELLED';
-                                            if (isCancelled) return sum;
+                                        const raw = order.raw;
+                                        const provider = order.provider;
 
-                                            const raw = order.raw;
-                                            let amount = 0;
+                                        let grossTotal =
+                                            parseFloat(
+                                                String(
+                                                    order.gross_total || '0',
+                                                ),
+                                            ) || 0;
 
-                                            // iFood: usar raw.total.orderAmount
-                                            if (raw?.total?.orderAmount) {
-                                                amount =
+                                        if (provider === 'takeat') {
+                                            if (
+                                                raw?.session
+                                                    ?.total_delivery_price
+                                            ) {
+                                                grossTotal =
                                                     parseFloat(
                                                         String(
-                                                            raw.total
-                                                                .orderAmount,
+                                                            raw.session
+                                                                .total_delivery_price,
+                                                        ),
+                                                    ) || 0;
+                                            } else if (
+                                                raw?.session?.total_price
+                                            ) {
+                                                grossTotal =
+                                                    parseFloat(
+                                                        String(
+                                                            raw.session
+                                                                .total_price,
                                                         ),
                                                     ) || 0;
                                             }
-                                            // Takeat: priorizar old_total_price (valor antes do desconto)
-                                            else if (
-                                                order.provider === 'takeat'
-                                            ) {
-                                                if (
-                                                    raw?.session
-                                                        ?.old_total_price
-                                                ) {
-                                                    amount =
-                                                        parseFloat(
-                                                            String(
-                                                                raw.session
-                                                                    .old_total_price,
-                                                            ),
-                                                        ) || 0;
-                                                } else if (
-                                                    raw?.session?.total_price
-                                                ) {
-                                                    amount =
-                                                        parseFloat(
-                                                            String(
-                                                                raw.session
-                                                                    .total_price,
-                                                            ),
-                                                        ) || 0;
-                                                } else {
-                                                    amount =
-                                                        parseFloat(
-                                                            String(
-                                                                order.gross_total ||
-                                                                    0,
-                                                            ),
-                                                        ) || 0;
-                                                }
+                                        }
+
+                                        const deliveryFee =
+                                            parseFloat(
+                                                String(
+                                                    order.delivery_fee || '0',
+                                                ),
+                                            ) || 0;
+
+                                        let totalSubsidy = 0;
+                                        if (provider === 'takeat') {
+                                            const payments =
+                                                raw?.session?.payments || [];
+                                            totalSubsidy = payments.reduce(
+                                                (
+                                                    subsidySum: number,
+                                                    payment: any,
+                                                ) => {
+                                                    const paymentName = (
+                                                        payment.payment_method
+                                                            ?.name || ''
+                                                    ).toLowerCase();
+                                                    const paymentKeyword = (
+                                                        payment.payment_method
+                                                            ?.keyword || ''
+                                                    ).toLowerCase();
+                                                    const isSubsidy =
+                                                        paymentName.includes(
+                                                            'subsid',
+                                                        ) ||
+                                                        paymentName.includes(
+                                                            'cupom',
+                                                        ) ||
+                                                        paymentKeyword.includes(
+                                                            'subsid',
+                                                        ) ||
+                                                        paymentKeyword.includes(
+                                                            'cupom',
+                                                        );
+
+                                                    return isSubsidy
+                                                        ? subsidySum +
+                                                              parseFloat(
+                                                                  payment.payment_value ||
+                                                                      '0',
+                                                              )
+                                                        : subsidySum;
+                                                },
+                                                0,
+                                            );
+                                        }
+
+                                        const totalCashback =
+                                            parseFloat(
+                                                String(
+                                                    order.cashback_total || '0',
+                                                ),
+                                            ) || 0;
+
+                                        let subtotal = grossTotal;
+                                        const usedTotalDeliveryPrice =
+                                            provider === 'takeat' &&
+                                            Boolean(
+                                                raw?.session
+                                                    ?.total_delivery_price,
+                                            );
+
+                                        const deliveryBy =
+                                            raw?.session?.delivery_by?.toUpperCase() ||
+                                            '';
+                                        const isMarketplaceDelivery = [
+                                            'IFOOD',
+                                            'MARKETPLACE',
+                                        ].includes(deliveryBy);
+                                        const skipDeliveryFeeInSubtotal =
+                                            isTakeatIfoodOrder(order) &&
+                                            isMarketplaceDelivery;
+
+                                        if (!usedTotalDeliveryPrice) {
+                                            subtotal += totalSubsidy;
+                                            if (!skipDeliveryFeeInSubtotal) {
+                                                subtotal += deliveryFee;
                                             }
-                                            // Fallback: usar gross_total do banco
-                                            else {
+                                        } else if (
+                                            skipDeliveryFeeInSubtotal &&
+                                            deliveryFee > 0
+                                        ) {
+                                            subtotal -= deliveryFee;
+                                        }
+
+                                        subtotal -= totalCashback;
+
+                                        const ifoodServiceFee =
+                                            isTakeatIfoodOrder(order)
+                                                ? 0.99
+                                                : 0;
+                                        if (ifoodServiceFee > 0) {
+                                            subtotal -= ifoodServiceFee;
+                                        }
+
+                                        return sum + subtotal;
+                                    }, 0);
+                                } else if (column.id === 'cost') {
+                                    // CMV: usar indicators se disponível, senão calcular de todos os pedidos filtrados
+                                    if (hasIndicators) {
+                                        total = indicators.cmv;
+                                    } else {
+                                        total = allOrders.reduce(
+                                            (sum, order) => {
+                                                const isCancelled =
+                                                    order.status ===
+                                                    'CANCELLED';
+                                                if (isCancelled) return sum;
+
+                                                const cmv = calculateOrderCMV(
+                                                    order.items || [],
+                                                );
+                                                return sum + cmv;
+                                            },
+                                            0,
+                                        );
+                                    }
+                                } else if (column.id === 'total') {
+                                    // Total do pedido: calcular de todos os pedidos filtrados
+                                    total = allOrders.reduce((sum, order) => {
+                                        const isCancelled =
+                                            order.status === 'CANCELLED';
+                                        if (isCancelled) return sum;
+
+                                        const raw = order.raw;
+                                        let amount = 0;
+
+                                        // iFood: usar raw.total.orderAmount
+                                        if (raw?.total?.orderAmount) {
+                                            amount =
+                                                parseFloat(
+                                                    String(
+                                                        raw.total.orderAmount,
+                                                    ),
+                                                ) || 0;
+                                        }
+                                        // Takeat: priorizar old_total_price (valor antes do desconto)
+                                        else if (order.provider === 'takeat') {
+                                            if (raw?.session?.old_total_price) {
+                                                amount =
+                                                    parseFloat(
+                                                        String(
+                                                            raw.session
+                                                                .old_total_price,
+                                                        ),
+                                                    ) || 0;
+                                            } else if (
+                                                raw?.session?.total_price
+                                            ) {
+                                                amount =
+                                                    parseFloat(
+                                                        String(
+                                                            raw.session
+                                                                .total_price,
+                                                        ),
+                                                    ) || 0;
+                                            } else {
                                                 amount =
                                                     parseFloat(
                                                         String(
@@ -2369,184 +2498,174 @@ export function DataTable({
                                                         ),
                                                     ) || 0;
                                             }
+                                        }
+                                        // Fallback: usar gross_total do banco
+                                        else {
+                                            amount =
+                                                parseFloat(
+                                                    String(
+                                                        order.gross_total || 0,
+                                                    ),
+                                                ) || 0;
+                                        }
 
-                                            return sum + amount;
-                                        },
-                                        0,
-                                    );
+                                        return sum + amount;
+                                    }, 0);
                                 } else if (column.id === 'net_total') {
-                                    // Total Líquido: calcular das linhas visíveis (quando não está mostrando todas)
-                                    total = visibleOrders.reduce(
-                                        (sum, order) => {
-                                            const isCancelled =
-                                                order.status === 'CANCELLED';
-                                            if (isCancelled) return sum;
+                                    // Total Líquido: calcular de todos os pedidos filtrados (quando não usa indicators)
+                                    total = allOrders.reduce((sum, order) => {
+                                        const isCancelled =
+                                            order.status === 'CANCELLED';
+                                        if (isCancelled) return sum;
 
-                                            const netRevenue =
-                                                calculateNetRevenue(order);
-                                            return sum + netRevenue;
-                                        },
-                                        0,
-                                    );
+                                        const netRevenue =
+                                            calculateNetRevenue(order);
+                                        return sum + netRevenue;
+                                    }, 0);
                                 } else {
-                                    // Para outras colunas (tax, total_costs, etc), calcular das linhas visíveis
+                                    // Para outras colunas (tax, total_costs, etc), calcular de todos os pedidos filtrados
 
-                                    total = visibleOrders.reduce(
-                                        (sum, order) => {
-                                            const items = order.items || [];
-                                            const isCancelled =
-                                                order.status === 'CANCELLED';
+                                    total = allOrders.reduce((sum, order) => {
+                                        const items = order.items || [];
+                                        const isCancelled =
+                                            order.status === 'CANCELLED';
 
-                                            // Não somar pedidos cancelados
-                                            if (isCancelled) return sum;
+                                        // Não somar pedidos cancelados
+                                        if (isCancelled) return sum;
 
-                                            if (column.id === 'tax') {
-                                                // Impostos (produtos + adicionais)
-                                                const productTax = items.reduce(
-                                                    (itemSum, item) => {
-                                                        if (
+                                        if (column.id === 'tax') {
+                                            // Impostos (produtos + adicionais)
+                                            const productTax = items.reduce(
+                                                (itemSum, item) => {
+                                                    if (
+                                                        item.internal_product
+                                                            ?.tax_category
+                                                            ?.total_tax_rate !==
+                                                            undefined &&
+                                                        item.internal_product
+                                                            ?.tax_category
+                                                            ?.total_tax_rate !==
+                                                            null
+                                                    ) {
+                                                        const quantity =
+                                                            item.qty ||
+                                                            item.quantity ||
+                                                            0;
+                                                        const unitPrice =
+                                                            item.unit_price ||
+                                                            item.price ||
+                                                            0;
+                                                        const itemTotal =
+                                                            quantity *
+                                                            unitPrice;
+                                                        const taxRate =
                                                             item
                                                                 .internal_product
-                                                                ?.tax_category
-                                                                ?.total_tax_rate !==
-                                                                undefined &&
-                                                            item
-                                                                .internal_product
-                                                                ?.tax_category
-                                                                ?.total_tax_rate !==
-                                                                null
-                                                        ) {
-                                                            const quantity =
-                                                                item.qty ||
-                                                                item.quantity ||
-                                                                0;
-                                                            const unitPrice =
-                                                                item.unit_price ||
-                                                                item.price ||
-                                                                0;
-                                                            const itemTotal =
-                                                                quantity *
-                                                                unitPrice;
-                                                            const taxRate =
-                                                                item
-                                                                    .internal_product
-                                                                    .tax_category
-                                                                    .total_tax_rate /
-                                                                100;
-                                                            return (
-                                                                itemSum +
-                                                                itemTotal *
-                                                                    taxRate
-                                                            );
-                                                        }
-                                                        return itemSum;
-                                                    },
+                                                                .tax_category
+                                                                .total_tax_rate /
+                                                            100;
+                                                        return (
+                                                            itemSum +
+                                                            itemTotal * taxRate
+                                                        );
+                                                    }
+                                                    return itemSum;
+                                                },
+                                                0,
+                                            );
+
+                                            const calculatedCosts =
+                                                order.calculated_costs;
+                                            const additionalTaxes =
+                                                calculatedCosts?.taxes || [];
+                                            const totalAdditionalTax =
+                                                additionalTaxes.reduce(
+                                                    (
+                                                        taxSum: number,
+                                                        tax: any,
+                                                    ) =>
+                                                        taxSum +
+                                                        (tax.calculated_value ||
+                                                            0),
                                                     0,
                                                 );
 
-                                                const calculatedCosts =
-                                                    order.calculated_costs;
-                                                const additionalTaxes =
-                                                    calculatedCosts?.taxes ||
-                                                    [];
-                                                const totalAdditionalTax =
-                                                    additionalTaxes.reduce(
-                                                        (
-                                                            taxSum: number,
-                                                            tax: any,
-                                                        ) =>
-                                                            taxSum +
-                                                            (tax.calculated_value ||
-                                                                0),
-                                                        0,
-                                                    );
+                                            return (
+                                                sum +
+                                                productTax +
+                                                totalAdditionalTax
+                                            );
+                                        }
 
+                                        if (column.id === 'total_costs') {
+                                            // Custos
+                                            const totalCosts =
+                                                order.total_costs;
+                                            if (
+                                                totalCosts !== null &&
+                                                totalCosts !== undefined
+                                            ) {
+                                                const value =
+                                                    typeof totalCosts ===
+                                                    'string'
+                                                        ? parseFloat(
+                                                              totalCosts,
+                                                          ) || 0
+                                                        : totalCosts;
                                                 return (
                                                     sum +
-                                                    productTax +
-                                                    totalAdditionalTax
+                                                    (isNaN(value) ? 0 : value)
                                                 );
                                             }
-
-                                            if (column.id === 'total_costs') {
-                                                // Custos
-                                                const totalCosts =
-                                                    order.total_costs;
-                                                if (
-                                                    totalCosts !== null &&
-                                                    totalCosts !== undefined
-                                                ) {
-                                                    const value =
-                                                        typeof totalCosts ===
-                                                        'string'
-                                                            ? parseFloat(
-                                                                  totalCosts,
-                                                              ) || 0
-                                                            : totalCosts;
-                                                    return (
-                                                        sum +
-                                                        (isNaN(value)
-                                                            ? 0
-                                                            : value)
-                                                    );
-                                                }
-                                                return sum;
-                                            }
-
-                                            if (
-                                                column.id ===
-                                                'total_commissions'
-                                            ) {
-                                                // Comissões
-                                                const totalCommissions =
-                                                    order.total_commissions;
-                                                if (
-                                                    totalCommissions !== null &&
-                                                    totalCommissions !==
-                                                        undefined
-                                                ) {
-                                                    const value =
-                                                        typeof totalCommissions ===
-                                                        'string'
-                                                            ? parseFloat(
-                                                                  totalCommissions,
-                                                              ) || 0
-                                                            : totalCommissions;
-                                                    return (
-                                                        sum +
-                                                        (isNaN(value)
-                                                            ? 0
-                                                            : value)
-                                                    );
-                                                }
-                                                return sum;
-                                            }
-
-                                            if (column.id === 'payment_fees') {
-                                                // Taxa Pgto
-                                                const calculatedCosts =
-                                                    order.calculated_costs;
-                                                const paymentMethodFees =
-                                                    calculatedCosts?.payment_methods ||
-                                                    [];
-                                                const totalPaymentFee =
-                                                    paymentMethodFees.reduce(
-                                                        (
-                                                            feeSum: number,
-                                                            fee: any,
-                                                        ) =>
-                                                            feeSum +
-                                                            (fee.calculated_value ||
-                                                                0),
-                                                        0,
-                                                    );
-                                                return sum + totalPaymentFee;
-                                            }
-
                                             return sum;
-                                        },
-                                        0,
-                                    );
+                                        }
+
+                                        if (column.id === 'total_commissions') {
+                                            // Comissões
+                                            const totalCommissions =
+                                                order.total_commissions;
+                                            if (
+                                                totalCommissions !== null &&
+                                                totalCommissions !== undefined
+                                            ) {
+                                                const value =
+                                                    typeof totalCommissions ===
+                                                    'string'
+                                                        ? parseFloat(
+                                                              totalCommissions,
+                                                          ) || 0
+                                                        : totalCommissions;
+                                                return (
+                                                    sum +
+                                                    (isNaN(value) ? 0 : value)
+                                                );
+                                            }
+                                            return sum;
+                                        }
+
+                                        if (column.id === 'payment_fees') {
+                                            // Taxa Pgto
+                                            const calculatedCosts =
+                                                order.calculated_costs;
+                                            const paymentMethodFees =
+                                                calculatedCosts?.payment_methods ||
+                                                [];
+                                            const totalPaymentFee =
+                                                paymentMethodFees.reduce(
+                                                    (
+                                                        feeSum: number,
+                                                        fee: any,
+                                                    ) =>
+                                                        feeSum +
+                                                        (fee.calculated_value ||
+                                                            0),
+                                                    0,
+                                                );
+                                            return sum + totalPaymentFee;
+                                        }
+
+                                        return sum;
+                                    }, 0);
                                 }
 
                                 // Alinhar õ direita se for coluna numérica
