@@ -240,8 +240,15 @@ class FixIncorrectPizzaFractions extends Command
                 $difference = abs($currentTotal - $correctTotal);
                 $this->line('   📏 Diferença: R$ '.number_format($difference, 2, ',', '.'));
 
+                // SEMPRE verificar e criar mappings para add-ons não-sabor vinculados (independente da correção de sabores)
+                $createdNonFlavorCount = $this->ensureNonFlavorMappings($orderItem, $pizzaSize, $dryRun);
+
                 if (! $hasIncorrectCost && $difference < $threshold) {
-                    $this->comment('   ✅ OK');
+                    if ($createdNonFlavorCount > 0) {
+                        $this->info("   ✅ OK (sabores) + {$createdNonFlavorCount} bebidas/complementos vinculados!");
+                    } else {
+                        $this->comment('   ✅ OK');
+                    }
                     $alreadyCorrect++;
 
                     continue;
@@ -323,6 +330,8 @@ class FixIncorrectPizzaFractions extends Command
                         }
                     }
 
+                    // Criar mappings para add-ons não-sabor vinculados (bebidas, complementos)
+                    $createdNonFlavorCount = $this->ensureNonFlavorMappings($orderItem, $pizzaSize, false);
 
                     if ($remappedCount > 0) {
                         $this->info("   ✅ Remapeados {$remappedCount} sabores com frações corretas!");
@@ -484,6 +493,70 @@ class FixIncorrectPizzaFractions extends Command
         ]);
 
         $remappedCount++;
+    }
+
+    /**
+     * Verificar e criar OrderItemMapping para add-ons não-sabor que têm ProductMapping vinculado
+     */
+    protected function ensureNonFlavorMappings($orderItem, $pizzaSize, $dryRun): int
+    {
+        $createdCount = 0;
+
+        foreach ($orderItem->add_ons as $index => $addOn) {
+            $addonName = is_array($addOn) ? ($addOn['name'] ?? '') : $addOn;
+            if (! $addonName) continue;
+
+            $addonSku = 'addon_'.md5($addonName);
+
+            // Buscar ProductMapping não-sabor
+            $mapping = \App\Models\ProductMapping::where('tenant_id', $orderItem->tenant_id)
+                ->where('external_item_id', $addonSku)
+                ->where('item_type', '!=', 'flavor')
+                ->first();
+
+            // Só processar se:
+            // 1. Tem ProductMapping com produto vinculado
+            // 2. NÃO tem OrderItemMapping ainda
+            if (! $mapping || ! $mapping->internal_product_id) {
+                continue;
+            }
+
+            $existingMapping = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
+                ->where('external_reference', (string) $index)
+                ->exists();
+
+            if ($existingMapping) {
+                continue;
+            }
+
+            // Criar OrderItemMapping para o add-on
+            if (! $dryRun) {
+                $product = $mapping->internalProduct;
+                if (! $product) continue;
+
+                $addOnQuantity = is_array($addOn) ? ($addOn['quantity'] ?? $addOn['qty'] ?? 1) : 1;
+                $correctCMV = $pizzaSize && $product->product_category === 'sabor_pizza'
+                    ? $product->calculateCMV($pizzaSize)
+                    : $product->unit_cost;
+
+                \App\Models\OrderItemMapping::create([
+                    'tenant_id' => $orderItem->tenant_id,
+                    'order_item_id' => $orderItem->id,
+                    'internal_product_id' => $product->id,
+                    'quantity' => $addOnQuantity,
+                    'mapping_type' => 'addon',
+                    'option_type' => 'addon',
+                    'auto_fraction' => false,
+                    'external_reference' => (string) $index,
+                    'external_name' => $addonName,
+                    'unit_cost_override' => $correctCMV,
+                ]);
+
+                $createdCount++;
+            }
+        }
+
+        return $createdCount;
     }
 
     /**
