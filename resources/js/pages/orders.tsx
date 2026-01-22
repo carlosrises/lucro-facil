@@ -96,30 +96,42 @@ export default function Orders() {
     const handleOrderUpsert = useCallback(
         (order: Order, isNew: boolean) => {
             // Validar se o pedido atende os filtros ativos antes de adicionar
-            // IMPORTANTE: placed_at vem em UTC, converter para Brasília (UTC-3)
+            // IMPORTANTE: placed_at vem em UTC do banco
             const orderDateUTC = new Date(order.placed_at);
 
-            // Converter para Brasília usando Intl para respeitar horário de verão
-            const orderDateBRString = orderDateUTC.toLocaleString('en-CA', {
+            // Converter para data em Brasília (America/Sao_Paulo)
+            // Usar toLocaleDateString que retorna apenas a data no formato do locale
+            const orderDateBRParts = orderDateUTC.toLocaleDateString('pt-BR', {
                 timeZone: 'America/Sao_Paulo',
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit',
-            });
+            }).split('/'); // Retorna DD/MM/YYYY
+            
+            // Converter para YYYY-MM-DD para comparação
+            const orderDateOnly = `${orderDateBRParts[2]}-${orderDateBRParts[1]}-${orderDateBRParts[0]}`;
 
-            // Extrair apenas a data no formato YYYY-MM-DD para comparação
-            const orderDateOnly = orderDateBRString.split(',')[0];
+            console.log('[Realtime] Verificando filtro de data', {
+                order_id: order.id,
+                order_code: order.code,
+                placed_at_utc: order.placed_at,
+                placed_at_utc_obj: orderDateUTC.toISOString(),
+                order_date_br: orderDateOnly,
+                filter_start: filters.start_date,
+                filter_end: filters.end_date,
+                will_pass: orderDateOnly >= filters.start_date && orderDateOnly <= filters.end_date,
+            });
 
             // Verificar se o pedido está dentro do período filtrado
             if (
                 orderDateOnly < filters.start_date ||
                 orderDateOnly > filters.end_date
             ) {
-                console.log(
-                    '[Realtime] Pedido fora do período filtrado, ignorando',
+                console.warn(
+                    '[Realtime] ❌ Pedido fora do período filtrado, ignorando',
                     {
-                        order_date_utc: order.placed_at,
-                        order_date_br: orderDateBRString,
+                        order_id: order.id,
+                        order_code: order.code,
                         order_date_only: orderDateOnly,
                         filter_start: filters.start_date,
                         filter_end: filters.end_date,
