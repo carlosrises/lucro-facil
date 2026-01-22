@@ -20,7 +20,7 @@ export function useOrderLazyLoad() {
         async (orderId: number) => {
             // Sempre carregar os detalhes mais recentes (não usar cache)
             // Evita mostrar dados desatualizados quando mappings são criados/atualizados
-            
+
             // Se já está carregando, aguardar a requisição em andamento
             if (loadingOrders.has(orderId)) {
                 return loadedOrders.get(orderId);
