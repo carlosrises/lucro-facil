@@ -191,7 +191,13 @@ export default function Orders() {
                 }
             });
         },
-        [filters],
+        [
+            filters.start_date,
+            filters.end_date,
+            filters.status,
+            filters.store_id,
+            filters.provider,
+        ],
     );
 
     useRealtimeOrders((auth.user as any)?.tenant_id, handleOrderUpsert);
