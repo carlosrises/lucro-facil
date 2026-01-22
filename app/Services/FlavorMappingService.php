@@ -204,8 +204,18 @@ class FlavorMappingService
         }
 
         if (empty($classifiedFlavors)) {
+            logger()->warning('⚠️ FlavorMappingService: Nenhum sabor classificado encontrado', [
+                'order_item_id' => $orderItem->id,
+                'add_ons_count' => count($addOns),
+            ]);
             return;
         }
+
+        logger()->info('✅ FlavorMappingService: Sabores classificados encontrados', [
+            'order_item_id' => $orderItem->id,
+            'classified_count' => count($classifiedFlavors),
+            'flavors' => array_column($classifiedFlavors, 'name'),
+        ]);
 
         // Somar as quantidades de todos os sabores (2x Portuguesa + 1x Calabresa = 3 sabores)
         $totalFlavorQuantity = array_sum(array_column($classifiedFlavors, 'quantity'));
@@ -231,12 +241,28 @@ class FlavorMappingService
 
             if ($existingMapping) {
                 // Atualizar mapping existente
+                logger()->info('🔄 Atualizando OrderItemMapping de sabor', [
+                    'mapping_id' => $existingMapping->id,
+                    'flavor' => $flavor['name'],
+                    'old_quantity' => $existingMapping->quantity,
+                    'new_quantity' => $flavorFraction,
+                    'cmv' => $correctCMV,
+                ]);
+
                 $existingMapping->update([
                     'quantity' => $flavorFraction,
                     'unit_cost_override' => $correctCMV,
                 ]);
             } else {
                 // Criar novo mapping
+                logger()->info('✨ Criando OrderItemMapping de sabor', [
+                    'flavor' => $flavor['name'],
+                    'product_id' => $flavor['product_mapping']->internal_product_id,
+                    'quantity' => $flavorFraction,
+                    'fraction' => "{$flavor['quantity']}/{$totalFlavorQuantity}",
+                    'cmv' => $correctCMV,
+                ]);
+
                 OrderItemMapping::create([
                     'tenant_id' => $orderItem->tenant_id,
                     'order_item_id' => $orderItem->id,
