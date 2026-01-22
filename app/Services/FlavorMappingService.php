@@ -171,7 +171,7 @@ class FlavorMappingService
      * Recalcular frações de TODOS os sabores de um order_item
      * Cria mappings para sabores classificados que ainda não têm, e atualiza frações de todos
      */
-    protected function recalculateAllFlavorsForOrderItem(OrderItem $orderItem): void
+    public function recalculateAllFlavorsForOrderItem(OrderItem $orderItem): void
     {        // Buscar todos os add-ons que são sabores (têm ProductMapping tipo 'flavor')
         $addOns = $orderItem->add_ons;
         if (! is_array($addOns) || empty($addOns)) {
@@ -188,13 +188,13 @@ class FlavorMappingService
 
             // Verificar se este add-on tem ProductMapping do tipo 'flavor'
             $addOnSku = 'addon_'.md5($addOnName);
-            
+
             logger()->info('🔍 FlavorMappingService: Buscando ProductMapping para add-on', [
                 'index' => $index,
                 'name' => $addOnName,
                 'sku' => $addOnSku,
             ]);
-            
+
             $productMapping = ProductMapping::where('tenant_id', $orderItem->tenant_id)
                 ->where('external_item_id', $addOnSku)
                 ->where('item_type', 'flavor')
@@ -206,7 +206,7 @@ class FlavorMappingService
                     'product_id' => $productMapping->internal_product_id,
                     'item_type' => $productMapping->item_type,
                 ]);
-                
+
                 $classifiedFlavors[] = [
                     'index' => $index,
                     'name' => $addOnName,

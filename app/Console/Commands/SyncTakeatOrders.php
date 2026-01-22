@@ -559,6 +559,9 @@ class SyncTakeatOrders extends Command
             ]);
 
             try {
+                // Refresh do OrderItem para garantir que os add_ons estão atualizados
+                $orderItem = $orderItem->fresh();
+
                 $flavorService = app(FlavorMappingService::class);
                 $flavorService->recalculateAllFlavorsForOrderItem($orderItem);
 
