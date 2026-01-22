@@ -478,6 +478,7 @@ class SyncTakeatOrders extends Command
                 ->first();
 
             // Se não existe ProductMapping, criar um pendente
+            // O vínculo será feito manualmente na Triagem
             if (! $addonMapping) {
                 // Detectar automaticamente se é sabor baseado no contexto
                 $isPizza = $this->isPizzaItem($orderItem);
@@ -497,8 +498,8 @@ class SyncTakeatOrders extends Command
                     ],
                     [
                         'external_item_name' => $addonName,
-                        'item_type' => $detectedItemType, // Detecta automaticamente: flavor para pizzas, beverage para outros
-                        'internal_product_id' => null,
+                        'item_type' => $detectedItemType,
+                        'internal_product_id' => null, // Pendente - será vinculado na Triagem
                         'provider' => 'takeat',
                     ]
                 );
