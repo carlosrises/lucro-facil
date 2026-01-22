@@ -511,6 +511,26 @@ class SyncTakeatOrders extends Command
                         'cmv' => $addonCMV,
                     ]);
                 }
+            } elseif (! $addonMapping) {
+                // Se não existe ProductMapping para este add-on, criar um sem produto vinculado
+                // Isso permite que o item apareça na Triagem para ser classificado manualmente
+                logger()->info('📝 Criando ProductMapping pendente para add-on', [
+                    'name' => $addonName,
+                    'sku' => $addonSku,
+                ]);
+
+                ProductMapping::firstOrCreate(
+                    [
+                        'tenant_id' => $orderItem->tenant_id,
+                        'external_item_id' => $addonSku,
+                    ],
+                    [
+                        'external_item_name' => $addonName,
+                        'item_type' => 'beverage', // Assumir bebida por padrão, pode ser alterado na Triagem
+                        'internal_product_id' => null,
+                        'provider' => 'takeat',
+                    ]
+                );
             }
         }
 
