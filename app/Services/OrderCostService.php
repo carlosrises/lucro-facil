@@ -128,19 +128,6 @@ class OrderCostService
             }
         }
 
-        if ($this->isTakeatIfoodOrder($order)) {
-            $ifoodFixedFee = 0.99;
-            $commissions[] = [
-                'id' => null,
-                'name' => 'Taxa fixa iFood (Takeat)',
-                'type' => 'fixed',
-                'value' => $ifoodFixedFee,
-                'calculated_value' => $ifoodFixedFee,
-                'category' => 'commission',
-            ];
-            $totalCommissions += $ifoodFixedFee;
-        }
-
         $netRevenue = $baseValue - $totalCosts - $totalCommissions - $totalTaxes - $totalPaymentMethods;
 
         return [
