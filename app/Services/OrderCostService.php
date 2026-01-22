@@ -244,6 +244,7 @@ class OrderCostService
                         'category' => $tax->category,
                         'payment_method' => $method,
                         'payment_value' => $paymentValue,
+                        'payment_type' => $tax->payment_type ?? null, // online/offline/null
                         'is_linked' => true, // Marcar que é vínculo estruturado
                     ];
                 }
@@ -287,6 +288,7 @@ class OrderCostService
                 'calculated_value' => round($calculatedValue, 2),
                 'category' => $tax->category,
                 'payment_method' => $paymentMethod,
+                'payment_type' => $tax->payment_type ?? null, // online/offline/null
                 'is_linked' => false, // Matching por características
             ];
         }
