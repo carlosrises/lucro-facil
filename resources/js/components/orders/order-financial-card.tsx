@@ -339,24 +339,24 @@ export function OrderFinancialCard({
             order?.provider === 'takeat' &&
             Boolean(order?.raw?.session?.total_delivery_price);
 
-        // Verificar se deve excluir taxa de entrega do subtotal
-        // Só excluir se for iFood via Takeat E a entrega for pelo marketplace (IFOOD/MARKETPLACE)
+        // Verificar se a entrega foi feita pelo marketplace
+        // Quando for pelo marketplace, a taxa de entrega já está em calculated_costs como custo
         const deliveryBy =
             order?.raw?.session?.delivery_by?.toUpperCase() || '';
         const isMarketplaceDelivery = ['IFOOD', 'MARKETPLACE'].includes(
             deliveryBy,
         );
-        const skipDeliveryFeeInSubtotal =
-            isTakeatIfoodOrder(order) && isMarketplaceDelivery;
 
         // Se NÃO usou total_delivery_price, precisa somar subsídio e (quando aplicável) delivery
         if (!usedTotalDeliveryPrice) {
             subtotal += totalSubsidy;
-            if (!skipDeliveryFeeInSubtotal) {
+            // Só somar deliveryFee ao subtotal se a entrega for pela LOJA (não marketplace)
+            // Quando é marketplace, a taxa já está em calculated_costs como custo
+            if (!isMarketplaceDelivery && deliveryFee > 0) {
                 subtotal += deliveryFee;
             }
-        } else if (skipDeliveryFeeInSubtotal && deliveryFee > 0) {
-            // total_delivery_price inclui delivery; remover para pedidos iFood via Takeat
+        } else if (isMarketplaceDelivery && deliveryFee > 0) {
+            // total_delivery_price inclui delivery; remover se for entrega marketplace
             subtotal -= deliveryFee;
         }
 
@@ -452,11 +452,12 @@ export function OrderFinancialCard({
             0,
         );
 
-        // Receita líquida marketplace = Subtotal - Comissão Marketplace - Custo Entrega Marketplace - Taxa Pagamento Online
+        // Receita líquida marketplace = Subtotal - Comissão Marketplace - Custo Entrega Marketplace (se aplicável) - Taxa Pagamento Online
+        // Só descontar marketplaceDeliveryCosts se a entrega foi pelo marketplace
         const marketplaceNetRevenue =
             subtotal -
             marketplaceCommissions -
-            marketplaceDeliveryCosts -
+            (isMarketplaceDelivery ? marketplaceDeliveryCosts : 0) -
             totalOnlinePaymentFee;
 
         // Líquido = Subtotal - CMV - Impostos - Custos - Comissão - Taxas de Pagamento
