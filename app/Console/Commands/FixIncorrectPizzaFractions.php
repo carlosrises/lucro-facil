@@ -216,7 +216,12 @@ class FixIncorrectPizzaFractions extends Command
                         $this->line("      ✅ CORRETO ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.').' × '.$correctFractionText.' = R$ '.number_format($correctSubtotal, 2, ',', '.'));
                         $hasIncorrectCost = true;
                     } else {
-                        $this->line("   ├ ✅ {$correctFractionText} {$productName}");
+                        // Verificar se tem ProductMapping vinculado (classificado na Triagem)
+                        $hasClassification = $productMapping && $productMapping->internal_product_id !== null;
+                        $icon = $hasClassification ? '✅' : '🔗';
+                        $statusText = $hasClassification ? '' : ' (não classificado - vincular na Triagem)';
+
+                        $this->line("   ├ {$icon} {$correctFractionText} {$productName}{$statusText}");
                         $this->line('      💰 R$ '.number_format($correctSubtotal, 2, ',', '.'));
                     }
                 }
