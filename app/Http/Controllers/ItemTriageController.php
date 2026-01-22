@@ -71,6 +71,51 @@ class ItemTriageController extends Controller
     {
         $tenantId = $request->user()->tenant_id;
 
+        // ========================================
+        // CALCULAR ESTATÍSTICAS (cards) ANTES DE FILTROS
+        // Para garantir que cards não mudem ao filtrar
+        // ========================================
+
+        // Total de items principais (SKUs únicos)
+        $totalMainItems = OrderItem::where('tenant_id', $tenantId)
+            ->whereNotNull('sku')
+            ->distinct('sku')
+            ->count('sku');
+
+        // Total de add_ons únicos (acumular de todos os chunks)
+        $allUniqueAddOns = collect();
+        OrderItem::where('tenant_id', $tenantId)
+            ->whereNotNull('add_ons')
+            ->whereRaw('JSON_LENGTH(add_ons) > 0')
+            ->select('add_ons')
+            ->chunk(500, function ($items) use (&$allUniqueAddOns) {
+                foreach ($items as $item) {
+                    if (is_array($item->add_ons)) {
+                        foreach ($item->add_ons as $addOn) {
+                            if (!empty($addOn['name'])) {
+                                $allUniqueAddOns->push($addOn['name']);
+                            }
+                        }
+                    }
+                }
+            });
+        $totalAddOnsCount = $allUniqueAddOns->unique()->count();
+
+        // Total classificados (items + add_ons com ProductMapping)
+        $totalClassified = ProductMapping::where('tenant_id', $tenantId)
+            ->distinct('external_item_id')
+            ->count('external_item_id');
+
+        // Classificados sem produto vinculado
+        $classifiedWithoutProduct = ProductMapping::where('tenant_id', $tenantId)
+            ->whereNull('internal_product_id')
+            ->distinct('external_item_id')
+            ->count('external_item_id');
+
+        // ========================================
+        // BUSCAR ITEMS PARA A LISTA (com filtros)
+        // ========================================
+
         // Buscar items únicos agrupados por SKU
         $itemsQuery = OrderItem::where('order_items.tenant_id', $tenantId)
             ->selectRaw('
@@ -121,13 +166,7 @@ class ItemTriageController extends Controller
         $items = $itemsQuery
             ->orderByDesc('orders_count')
             ->get()
-            ->map(function ($item) use ($tenantId) {
-                // Buscar mapping existente
-                $mapping = ProductMapping::where('tenant_id', $tenantId)
-                    ->where('external_item_id', $item->sku)
-                    ->with('internalProduct:id,name,unit_cost')
-                    ->first();
-
+            ->map(function ($item) {
                 return [
                     'sku' => $item->sku,
                     'name' => $item->name,
@@ -135,77 +174,88 @@ class ItemTriageController extends Controller
                     'unit_price' => (float) $item->unit_price,
                     'last_seen_at' => $item->last_seen_at,
                     'is_addon' => false,
-                    'mapping' => $mapping ? [
-                        'id' => $mapping->id,
-                        'item_type' => $mapping->item_type,
-                        'internal_product_id' => $mapping->internal_product_id,
-                        'internal_product_name' => $mapping->internalProduct?->name,
-                        'internal_product_cost' => $mapping->internalProduct?->unit_cost,
-                    ] : null,
                 ];
             });
 
         // Buscar também os add_ons (complementos/sabores/adicionais)
-        $addOnsQuery = OrderItem::where('order_items.tenant_id', $tenantId)
+        // OTIMIZADO: Processar em chunks para evitar memory exhausted
+        // e usar uma única query agregada ao invés de processar linha por linha
+        $addOnsGrouped = collect();
+
+        OrderItem::where('order_items.tenant_id', $tenantId)
             ->whereNotNull('add_ons')
             ->whereRaw('JSON_LENGTH(add_ons) > 0')
-            ->select('id', 'order_id', 'add_ons')
-            ->get();
-
-        $addOnsCollection = collect();
-
-        foreach ($addOnsQuery as $orderItem) {
-            $addOns = $orderItem->add_ons;
-            if (is_array($addOns) && count($addOns) > 0) {
-                foreach ($addOns as $index => $addOn) {
-                    $addOnName = $addOn['name'] ?? '';
-                    if (! $addOnName) {
-                        continue;
+            ->select('id', 'add_ons')
+            ->orderByDesc('id')
+            ->chunk(500, function ($orderItems) use (&$addOnsGrouped) {
+                foreach ($orderItems as $orderItem) {
+                    $addOns = $orderItem->add_ons;
+                    if (is_array($addOns) && count($addOns) > 0) {
+                        foreach ($addOns as $addOn) {
+                            $addOnName = $addOn['name'] ?? '';
+                            if ($addOnName) {
+                                $addOnSku = 'addon_'.md5($addOnName);
+                                $addOnsGrouped->push([
+                                    'sku' => $addOnSku,
+                                    'name' => $addOnName,
+                                ]);
+                            }
+                        }
                     }
-
-                    // Criar um "SKU" único para o add_on baseado no nome
-                    $addOnSku = 'addon_'.md5($addOnName);
-
-                    $addOnsCollection->push([
-                        'sku' => $addOnSku,
-                        'name' => $addOnName,
-                        'is_addon' => true,
-                    ]);
                 }
-            }
-        }
+            });
 
-        // Agrupar add_ons por nome e contar
-        $addOnsGrouped = $addOnsCollection->groupBy('name')->map(function ($group) use ($tenantId) {
+        // Agrupar add_ons e contar
+        $addOnsGrouped = $addOnsGrouped->groupBy('name')->map(function ($group) {
             $firstItem = $group->first();
-            $addOnSku = $firstItem['sku'];
-
-            // Buscar mapping existente para o add_on
-            $mapping = ProductMapping::where('tenant_id', $tenantId)
-                ->where('external_item_id', $addOnSku)
-                ->with('internalProduct:id,name,unit_cost')
-                ->first();
-
             return [
-                'sku' => $addOnSku,
+                'sku' => $firstItem['sku'],
                 'name' => $firstItem['name'],
                 'orders_count' => $group->count(),
                 'unit_price' => 0,
                 'last_seen_at' => now(),
                 'is_addon' => true,
-                'mapping' => $mapping ? [
-                    'id' => $mapping->id,
-                    'item_type' => $mapping->item_type,
-                    'internal_product_id' => $mapping->internal_product_id,
-                    'internal_product_name' => $mapping->internalProduct?->name,
-                    'internal_product_cost' => $mapping->internalProduct?->unit_cost,
-                ] : null,
             ];
         })->values();
+
+        // OTIMIZAÇÃO: Buscar TODOS os mappings de uma vez (evitar N+1)
+        $allSkus = $items->pluck('sku')->concat($addOnsGrouped->pluck('sku'))->unique();
+        $mappings = ProductMapping::where('tenant_id', $tenantId)
+            ->whereIn('external_item_id', $allSkus)
+            ->with('internalProduct:id,name,unit_cost')
+            ->get()
+            ->keyBy('external_item_id');
+
+        // Adicionar mappings aos items principais
+        $items = $items->map(function ($item) use ($mappings) {
+            $mapping = $mappings->get($item['sku']);
+            $item['mapping'] = $mapping ? [
+                'id' => $mapping->id,
+                'item_type' => $mapping->item_type,
+                'internal_product_id' => $mapping->internal_product_id,
+                'internal_product_name' => $mapping->internalProduct?->name,
+                'internal_product_cost' => $mapping->internalProduct?->unit_cost,
+            ] : null;
+            return $item;
+        });
+
+        // Adicionar mappings aos add_ons
+        $addOnsGrouped = $addOnsGrouped->map(function ($item) use ($mappings) {
+            $mapping = $mappings->get($item['sku']);
+            $item['mapping'] = $mapping ? [
+                'id' => $mapping->id,
+                'item_type' => $mapping->item_type,
+                'internal_product_id' => $mapping->internal_product_id,
+                'internal_product_name' => $mapping->internalProduct?->name,
+                'internal_product_cost' => $mapping->internalProduct?->unit_cost,
+            ] : null;
+            return $item;
+        });
 
         // Combinar items principais com add_ons
         $allItems = $items->concat($addOnsGrouped);
 
+        // APLICAR FILTROS DO USUÁRIO (não afeta os cards que foram calculados no início)
         // Aplicar filtro de busca nos add_ons também
         if ($request->filled('search')) {
             $search = strtolower($request->get('search'));
@@ -215,34 +265,76 @@ class ItemTriageController extends Controller
             });
         }
 
-        // Aplicar filtros de classificação nos add_ons também
+        // Aplicar filtros de classificação e vínculo
+        // LÓGICA: Se status "pending" (não classificados) + link status → UNIÃO (OR)
+        //         Se status "classified" + link status → INTERSEÇÃO (AND)
         if ($status === 'pending') {
-            $allItems = $allItems->filter(fn ($item) => $item['mapping'] === null);
+            if ($linkStatus === 'linked' || $linkStatus === 'unlinked' || $linkStatus === 'no_product') {
+                // UNIÃO: Não classificados OU (Classificados com/sem produto vinculado)
+                $allItems = $allItems->filter(function ($item) use ($linkStatus) {
+                    // Sem mapping (não classificado)
+                    if ($item['mapping'] === null) {
+                        return true;
+                    }
+
+                    // OU com mapping e critério de vínculo
+                    if ($linkStatus === 'linked') {
+                        return ($item['mapping']['internal_product_id'] ?? null) !== null;
+                    } else {
+                        // unlinked ou no_product
+                        return ($item['mapping']['internal_product_id'] ?? null) === null;
+                    }
+                });
+            } else {
+                // Apenas não classificados (sem filtro de vínculo)
+                $allItems = $allItems->filter(fn ($item) => $item['mapping'] === null);
+            }
         } elseif ($status === 'classified') {
+            // Classificados - aplicar filtro de vínculo (INTERSEÇÃO/AND)
             $allItems = $allItems->filter(fn ($item) => $item['mapping'] !== null);
+
+            if ($linkStatus === 'linked') {
+                $allItems = $allItems->filter(fn ($item) =>
+                    ($item['mapping']['internal_product_id'] ?? null) !== null
+                );
+            } elseif ($linkStatus === 'unlinked' || $linkStatus === 'no_product') {
+                $allItems = $allItems->filter(fn ($item) =>
+                    ($item['mapping']['internal_product_id'] ?? null) === null
+                );
+            }
+        } else {
+            // Nenhum status específico
+            if ($linkStatus === 'linked' || $linkStatus === 'unlinked' || $linkStatus === 'no_product') {
+                // Forçar apenas classificados quando link status está ativo
+                $allItems = $allItems->filter(fn ($item) => $item['mapping'] !== null);
+
+                if ($linkStatus === 'linked') {
+                    $allItems = $allItems->filter(fn ($item) =>
+                        ($item['mapping']['internal_product_id'] ?? null) !== null
+                    );
+                } else {
+                    // unlinked ou no_product
+                    $allItems = $allItems->filter(fn ($item) =>
+                        ($item['mapping']['internal_product_id'] ?? null) === null
+                    );
+                }
+            }
         }
 
-        if ($request->filled('item_type')) {
-            $itemType = $request->get('item_type');
+        // Filtrar por tipo de item (Sabor, Bebida, etc)
+        // Só aplicar se o valor não estiver vazio
+        $itemType = $request->get('item_type', '');
+        if ($itemType !== '' && $itemType !== null) {
             $allItems = $allItems->filter(function ($item) use ($itemType) {
-                // Só filtra se o item tiver mapping (foi classificado)
+                // Se o item não tiver mapping (não classificado), manter na lista
+                // O filtro de tipo só se aplica aos classificados
                 if ($item['mapping'] === null) {
-                    return false;
+                    return true; // Manter não classificados na lista
                 }
 
+                // Para classificados, filtrar pelo tipo
                 return ($item['mapping']['item_type'] ?? null) === $itemType;
             });
-        }
-
-        if ($linkStatus === 'linked') {
-            $allItems = $allItems->filter(fn ($item) => ($item['mapping']['internal_product_id'] ?? null) !== null);
-        } elseif ($linkStatus === 'unlinked') {
-            $allItems = $allItems->filter(fn ($item) => ($item['mapping']['internal_product_id'] ?? null) === null);
-        } elseif ($linkStatus === 'no_product') {
-            // Classificados mas sem produto interno vinculado
-            $allItems = $allItems->filter(fn ($item) => $item['mapping'] !== null &&
-                ($item['mapping']['internal_product_id'] ?? null) === null
-            );
         }
 
         // Ordenar por número de pedidos
@@ -254,38 +346,11 @@ class ItemTriageController extends Controller
             ->orderBy('name')
             ->get();
 
-        // Estatísticas (incluindo add-ons)
-        $totalMainItems = OrderItem::where('tenant_id', $tenantId)
-            ->distinct('sku')
-            ->count('sku');
-
-        // Contar add-ons únicos
-        $allAddOns = OrderItem::where('tenant_id', $tenantId)
-            ->whereNotNull('add_ons')
-            ->whereRaw('JSON_LENGTH(add_ons) > 0')
-            ->get()
-            ->pluck('add_ons')
-            ->flatten(1)
-            ->pluck('name')
-            ->unique()
-            ->count();
-
-        // Contar itens únicos classificados (distinct por external_item_id)
-        // Um item pode ter múltiplos mappings (main + flavor), mas deve contar como 1 item classificado
-        $totalClassifiedMappings = ProductMapping::where('tenant_id', $tenantId)
-            ->distinct('external_item_id')
-            ->count('external_item_id');
-
-        // Itens classificados mas sem produto interno vinculado (também distinct)
-        $classifiedWithoutProduct = ProductMapping::where('tenant_id', $tenantId)
-            ->whereNull('internal_product_id')
-            ->distinct('external_item_id')
-            ->count('external_item_id');
-
+        // Montar stats com os valores calculados NO INÍCIO (antes de qualquer filtro)
         $stats = [
-            'total_items' => $totalMainItems + $allAddOns,
-            'pending_items' => ($totalMainItems + $allAddOns) - $totalClassifiedMappings,
-            'classified_items' => $totalClassifiedMappings,
+            'total_items' => $totalMainItems + $totalAddOnsCount,
+            'pending_items' => ($totalMainItems + $totalAddOnsCount) - $totalClassified,
+            'classified_items' => $totalClassified,
             'classified_without_product' => $classifiedWithoutProduct,
         ];
 
