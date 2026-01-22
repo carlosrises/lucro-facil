@@ -251,8 +251,10 @@ class SyncTakeatOrders extends Command
         // Status baseado no order_status e completed_at
         $status = $this->mapTakeatStatus($basket['order_status'] ?? null, $session['status'] ?? null);
 
-        // Data do pedido (Takeat retorna em UTC, manter em UTC para o banco)
-        $placedAt = \Carbon\Carbon::parse($basket['start_time'] ?? $session['start_time'], 'UTC');
+        // Data do pedido - Takeat retorna start_time já em BRT (America/Sao_Paulo)
+        // Precisamos converter para UTC antes de salvar no banco
+        $placedAt = \Carbon\Carbon::parse($basket['start_time'] ?? $session['start_time'], 'America/Sao_Paulo')
+            ->setTimezone('UTC');
 
         // Criar ou atualizar Order
         $existingOrder = \App\Models\Order::where('tenant_id', $store->tenant_id)

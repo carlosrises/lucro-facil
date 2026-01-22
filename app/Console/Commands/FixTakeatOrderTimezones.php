@@ -96,8 +96,10 @@ class FixTakeatOrderTimezones extends Command
                             continue;
                         }
 
-                        // Parse do start_time original (está em UTC na API do Takeat)
-                        $correctDate = Carbon::parse($rawStartTime, 'UTC');
+                        // Parse do start_time original - Takeat retorna em BRT (America/Sao_Paulo)
+                        // Converter para UTC antes de salvar no banco
+                        $correctDate = Carbon::parse($rawStartTime, 'America/Sao_Paulo')
+                            ->setTimezone('UTC');
 
                         // IMPORTANTE: Pegar o valor RAW do banco (em UTC) para comparação correta
                         // Se pegarmos $order->placed_at, Laravel converte para timezone da app
