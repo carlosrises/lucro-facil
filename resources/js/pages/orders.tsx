@@ -8,7 +8,7 @@ import { useOrderStatusListener } from '@/hooks/use-order-status-listener';
 import { useRealtimeOrders } from '@/hooks/use-realtime-orders';
 import { type BreadcrumbItem } from '@/types';
 import { RefreshCw } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -81,6 +81,15 @@ export default function Orders() {
     // Estado local para pedidos (permite atualizações em tempo real sem reload)
     const [localOrders, setLocalOrders] = useState<Order[]>(orders.data);
 
+    // Ref para sempre ter acesso aos valores mais recentes dos filtros
+    // Isso resolve o problema de closure stale no useCallback
+    const filtersRef = useRef(filters);
+
+    // Atualizar o ref quando os filtros mudarem
+    useEffect(() => {
+        filtersRef.current = filters;
+    }, [filters]);
+
     // Sincronizar estado local quando os dados da página mudarem (filtros, navegação)
     // Isso garante que o skeleton apareça apenas em navegações/filtros
     useEffect(() => {
@@ -100,13 +109,16 @@ export default function Orders() {
     // Atualiza a lista silenciosamente sem skeleton/reload
     const handleOrderUpsert = useCallback(
         (order: Order, isNew: boolean) => {
+            // Usar filtersRef para acessar sempre os valores mais recentes
+            const currentFilters = filtersRef.current;
+
             // DEBUG: Log dos valores dos filtros capturados pelo callback
             console.log('🔍 [Realtime] Valores dos filtros no callback:', {
-                start_date: filters.start_date,
-                end_date: filters.end_date,
-                status: filters.status,
-                store_id: filters.store_id,
-                provider: filters.provider,
+                start_date: currentFilters.start_date,
+                end_date: currentFilters.end_date,
+                status: currentFilters.status,
+                store_id: currentFilters.store_id,
+                provider: currentFilters.provider,
             });
 
             // Validar se o pedido atende os filtros ativos antes de adicionar
@@ -133,17 +145,17 @@ export default function Orders() {
                 placed_at_utc: order.placed_at,
                 placed_at_utc_obj: orderDateUTC.toISOString(),
                 order_date_br: orderDateOnly,
-                filter_start: filters.start_date,
-                filter_end: filters.end_date,
+                filter_start: currentFilters.start_date,
+                filter_end: currentFilters.end_date,
                 will_pass:
-                    orderDateOnly >= filters.start_date &&
-                    orderDateOnly <= filters.end_date,
+                    orderDateOnly >= currentFilters.start_date &&
+                    orderDateOnly <= currentFilters.end_date,
             });
 
             // Verificar se o pedido está dentro do período filtrado
             if (
-                orderDateOnly < filters.start_date ||
-                orderDateOnly > filters.end_date
+                orderDateOnly < currentFilters.start_date ||
+                orderDateOnly > currentFilters.end_date
             ) {
                 console.warn(
                     '[Realtime] ❌ Pedido fora do período filtrado, ignorando',
@@ -151,40 +163,47 @@ export default function Orders() {
                         order_id: order.id,
                         order_code: order.code,
                         order_date_only: orderDateOnly,
-                        filter_start: filters.start_date,
-                        filter_end: filters.end_date,
+                        filter_start: currentFilters.start_date,
+                        filter_end: currentFilters.end_date,
                     },
                 );
                 return; // Não adicionar pedido fora do filtro
             }
 
             // Verificar filtro de status
-            if (filters.status && filters.status !== 'all') {
-                if (order.status !== filters.status) {
+            if (currentFilters.status && currentFilters.status !== 'all') {
+                if (order.status !== currentFilters.status) {
                     console.warn(
                         '[Realtime] ❌ Pedido com status diferente do filtro, ignorando',
-                        { order_status: order.status, filter: filters.status },
+                        {
+                            order_status: order.status,
+                            filter: currentFilters.status,
+                        },
                     );
                     return;
                 }
             }
 
             // Verificar filtro de loja
-            if (filters.store_id && order.store_id !== filters.store_id) {
+            if (
+                currentFilters.store_id &&
+                order.store_id !== currentFilters.store_id
+            ) {
                 console.warn(
                     '[Realtime] ❌ Pedido de loja diferente do filtro, ignorando',
                     {
                         order_store_id: order.store_id,
-                        filter: filters.store_id,
+                        filter: currentFilters.store_id,
                     },
                 );
                 return;
             }
 
             // Verificar filtro de provider
-            if (filters.provider) {
-                if (filters.provider.includes(':')) {
-                    const [provider, origin] = filters.provider.split(':');
+            if (currentFilters.provider) {
+                if (currentFilters.provider.includes(':')) {
+                    const [provider, origin] =
+                        currentFilters.provider.split(':');
                     if (
                         order.provider !== provider ||
                         order.origin !== origin
@@ -194,17 +213,17 @@ export default function Orders() {
                             {
                                 order_provider: order.provider,
                                 order_origin: order.origin,
-                                filter: filters.provider,
+                                filter: currentFilters.provider,
                             },
                         );
                         return;
                     }
-                } else if (order.provider !== filters.provider) {
+                } else if (order.provider !== currentFilters.provider) {
                     console.warn(
                         '[Realtime] ❌ Pedido com provider diferente do filtro, ignorando',
                         {
                             order_provider: order.provider,
-                            filter: filters.provider,
+                            filter: currentFilters.provider,
                         },
                     );
                     return;
@@ -241,13 +260,7 @@ export default function Orders() {
                 }
             });
         },
-        [
-            filters.start_date,
-            filters.end_date,
-            filters.status,
-            filters.store_id,
-            filters.provider,
-        ],
+        [], // Sem dependências - usamos filtersRef para acessar valores atuais
     );
 
     useRealtimeOrders((auth.user as any)?.tenant_id, handleOrderUpsert);
