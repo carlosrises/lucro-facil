@@ -141,6 +141,7 @@ interface SummaryData {
     cmvPercent: number;
     orderCosts: number; // Despesas Operacionais
     orderCostsPercent: number;
+    orderCostsBreakdown: BreakdownItem[];
     taxes: number;
     taxesPercent: number;
     taxesBreakdown: BreakdownItem[];
@@ -152,8 +153,10 @@ interface SummaryData {
     // Movimentações Financeiras
     extraIncome: number;
     extraIncomePercent: number;
+    extraIncomeBreakdown: BreakdownItem[];
     extraExpenses: number;
     extraExpensesPercent: number;
+    extraExpensesBreakdown: BreakdownItem[];
 
     // Resultado Final
     netProfit: number;
@@ -674,6 +677,16 @@ export default function FinancialSummary() {
                                                 (entrega, embalagens, etc)
                                             </CardDescription>
                                         </CardHeader>
+                                        <CardContent className="px-6 pt-0 pb-6">
+                                            <BreakdownToggle
+                                                label="Detalhar custos variáveis"
+                                                items={
+                                                    (data as any)
+                                                        .orderCostsBreakdown ||
+                                                    []
+                                                }
+                                            />
+                                        </CardContent>
                                     </Card>
 
                                     {/* 9. (-) IMPOSTOS */}
@@ -808,6 +821,18 @@ export default function FinancialSummary() {
                                                 operacionais
                                             </CardDescription>
                                         </CardHeader>
+                                        {(data.extraExpensesBreakdown?.length ??
+                                            0) > 0 && (
+                                            <CardContent className="px-6 pt-0 pb-6">
+                                                <BreakdownToggle
+                                                    label="Detalhar despesas operacionais"
+                                                    items={
+                                                        data.extraExpensesBreakdown ||
+                                                        []
+                                                    }
+                                                />
+                                            </CardContent>
+                                        )}
                                     </Card>
 
                                     {/* 12. (+) RECEITAS OPERACIONAIS */}
@@ -852,6 +877,18 @@ export default function FinancialSummary() {
                                                 operacionais
                                             </CardDescription>
                                         </CardHeader>
+                                        {(data.extraIncomeBreakdown?.length ??
+                                            0) > 0 && (
+                                            <CardContent className="px-6 pt-0 pb-6">
+                                                <BreakdownToggle
+                                                    label="Detalhar receitas operacionais"
+                                                    items={
+                                                        data.extraIncomeBreakdown ||
+                                                        []
+                                                    }
+                                                />
+                                            </CardContent>
+                                        )}
                                     </Card>
 
                                     {/* 13. (=) LUCRO LÍQUIDO FINAL */}
