@@ -118,21 +118,41 @@ class FinancialSummaryController extends Controller
         $financeStart = $startDateLocal->copy();
         $financeEnd = $endDateLocal->copy();
 
-        $extraIncome = (float) FinanceEntry::where('tenant_id', $tenantId)
-            ->withoutTemplates()
-            ->whereBetween('occurred_on', [$financeStart, $financeEnd])
-            ->whereHas('category', function ($q) {
-                $q->where('type', 'income');
-            })
-            ->sum('amount');
-
-        $extraExpenses = (float) FinanceEntry::where('tenant_id', $tenantId)
+        // Coletar despesas operacionais com breakdown por categoria
+        $extraExpensesAggregation = [];
+        $extraExpensesEntries = FinanceEntry::where('tenant_id', $tenantId)
             ->withoutTemplates()
             ->whereBetween('occurred_on', [$financeStart, $financeEnd])
             ->whereHas('category', function ($q) {
                 $q->where('type', 'expense');
             })
-            ->sum('amount');
+            ->with('category')
+            ->get();
+
+        foreach ($extraExpensesEntries as $entry) {
+            $categoryName = $entry->category->name ?? 'Sem categoria';
+            $this->accumulateValue($extraExpensesAggregation, $categoryName, (float) $entry->amount);
+        }
+
+        $extraExpenses = (float) $extraExpensesEntries->sum('amount');
+
+        // Coletar receitas operacionais com breakdown por categoria
+        $extraIncomeAggregation = [];
+        $extraIncomeEntries = FinanceEntry::where('tenant_id', $tenantId)
+            ->withoutTemplates()
+            ->whereBetween('occurred_on', [$financeStart, $financeEnd])
+            ->whereHas('category', function ($q) {
+                $q->where('type', 'income');
+            })
+            ->with('category')
+            ->get();
+
+        foreach ($extraIncomeEntries as $entry) {
+            $categoryName = $entry->category->name ?? 'Sem categoria';
+            $this->accumulateValue($extraIncomeAggregation, $categoryName, (float) $entry->amount);
+        }
+
+        $extraIncome = (float) $extraIncomeEntries->sum('amount');
 
         $revenueAfterDeductions = $grossRevenue - $totalPaymentFees - $totalCommissions - $totalDiscounts;
         $revenueAfterDeductionsPercent = $grossRevenue > 0 ? ($revenueAfterDeductions / $grossRevenue) * 100 : 0;
@@ -159,6 +179,7 @@ class FinancialSummaryController extends Controller
         $subsidiesAggregation = [];
         $additionalTaxesAggregation = [];
         $revenueAggregation = [];
+        $orderCostsAggregation = [];
         [$marketplaceStoreMap, $storeMarketplaceMap] = $this->buildRevenueCrossTables(
             $tenantId,
             $startDateUtc,
@@ -183,13 +204,13 @@ class FinancialSummaryController extends Controller
             &$commissionsAggregation,
             &$discountsAggregation,
             &$subsidiesAggregation,
-            &$additionalTaxesAggregation
+            &$additionalTaxesAggregation,
+            &$orderCostsAggregation
         ) {
             foreach ($orders as $order) {
                 $label = $this->formatMarketplaceLabel($order->provider, $order->origin);
 
                 $this->accumulateValue($revenueAggregation, $label, (float) ($order->gross_total ?? 0));
-                $this->accumulateValue($commissionsAggregation, $label, (float) ($order->total_commissions ?? 0));
 
                 $raw = $this->normalizeArray($order->raw);
                 $subsidy = $this->extractSubsidyValue($raw);
@@ -199,6 +220,28 @@ class FinancialSummaryController extends Controller
                 $this->accumulateValue($discountsAggregation, $label, $discountValue);
 
                 $calculatedCosts = $this->normalizeArray($order->calculated_costs);
+
+                // Acumular custos variáveis (apenas costs, sem commissions que têm card próprio)
+                foreach (($calculatedCosts['costs'] ?? []) as $cost) {
+                    if (! is_array($cost)) {
+                        continue;
+                    }
+
+                    $costLabel = $cost['name'] ?? 'Custo não identificado';
+                    $costValue = (float) ($cost['calculated_value'] ?? 0);
+                    $this->accumulateValue($orderCostsAggregation, $costLabel, $costValue);
+                }
+
+                // Acumular comissões por tipo de taxa (nome)
+                foreach (($calculatedCosts['commissions'] ?? []) as $commission) {
+                    if (! is_array($commission)) {
+                        continue;
+                    }
+
+                    $commissionLabel = $commission['name'] ?? 'Comissão não identificada';
+                    $commissionValue = (float) ($commission['calculated_value'] ?? 0);
+                    $this->accumulateValue($commissionsAggregation, $commissionLabel, $commissionValue);
+                }
 
                 foreach (($calculatedCosts['payment_methods'] ?? []) as $payment) {
                     if (! is_array($payment)) {
@@ -259,6 +302,9 @@ class FinancialSummaryController extends Controller
             : $additionalTaxesAggregation;
 
         $taxesBreakdown = $this->formatBreakdownResponse($taxItems, $totalTaxes);
+        $orderCostsBreakdown = $this->formatBreakdownResponse($orderCostsAggregation, $totalCosts);
+        $extraExpensesBreakdown = $this->formatBreakdownResponse($extraExpensesAggregation, $extraExpenses);
+        $extraIncomeBreakdown = $this->formatBreakdownResponse($extraIncomeAggregation, $extraIncome);
 
         return Inertia::render('financial/summary', [
             'data' => [
@@ -283,6 +329,7 @@ class FinancialSummaryController extends Controller
                 'cmvPercent' => $cmvPercent,
                 'orderCosts' => $totalCosts,
                 'orderCostsPercent' => $orderCostsPercent,
+                'orderCostsBreakdown' => $orderCostsBreakdown,
                 'taxes' => $totalTaxes,
                 'taxesPercent' => $taxesPercent,
                 'taxesBreakdown' => $taxesBreakdown,
@@ -290,8 +337,10 @@ class FinancialSummaryController extends Controller
                 'contributionMarginPercent' => $contributionMarginPercent,
                 'extraIncome' => $extraIncome,
                 'extraIncomePercent' => $extraIncomePercent,
+                'extraIncomeBreakdown' => $extraIncomeBreakdown,
                 'extraExpenses' => $extraExpenses,
                 'extraExpensesPercent' => $extraExpensesPercent,
+                'extraExpensesBreakdown' => $extraExpensesBreakdown,
                 'netProfit' => $netProfit,
                 'netProfitPercent' => $netProfitPercent,
             ],
