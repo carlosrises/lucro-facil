@@ -162,6 +162,17 @@ export function OrderFinancialCard({
         occurrences?: number;
     } | null>(null);
 
+    // Função para recarregar dados do pedido
+    const handleReloadOrder = () => {
+        if (order?.id) {
+            router.reload({
+                only: ['order'],
+                preserveScroll: true,
+                preserveState: true,
+            });
+        }
+    };
+
     // Função helper para calcular todos os valores financeiros
     const calculateFinancials = () => {
         // Para Takeat:
@@ -1196,8 +1207,12 @@ export function OrderFinancialCard({
                                                                         const productMapping =
                                                                             addOn.product_mapping;
 
-                                                                        // Verificar se tem associação (do ProductMapping ou do OrderItemMapping)
-                                                                        const hasMapping =
+                                                                        // Verificar se está classificado (tem ProductMapping)
+                                                                        const isClassified =
+                                                                            !!productMapping;
+
+                                                                        // Verificar se tem associação de produto (do ProductMapping ou do OrderItemMapping)
+                                                                        const hasProductMapping =
                                                                             !!productMapping?.internal_product ||
                                                                             !!addOn
                                                                                 .mapping
@@ -1298,7 +1313,7 @@ export function OrderFinancialCard({
                                                                         // Calcular custo
                                                                         let addonCost = 0;
                                                                         if (
-                                                                            hasMapping &&
+                                                                            hasProductMapping &&
                                                                             internalProduct
                                                                         ) {
                                                                             // Prioridade 1: unit_cost_override do OrderItemMapping (se existir)
@@ -1456,7 +1471,7 @@ export function OrderFinancialCard({
 
                                                                         // Tooltip com produto vinculado
                                                                         const addonTooltip =
-                                                                            hasMapping &&
+                                                                            hasProductMapping &&
                                                                             internalProduct
                                                                                 ? `Vinculado a: ${internalProduct.name}`
                                                                                 : null;
@@ -1529,7 +1544,7 @@ export function OrderFinancialCard({
                                                                                             }
                                                                                         </span>
                                                                                     )}
-                                                                                    {hasMapping ? (
+                                                                                    {hasProductMapping ? (
                                                                                         <Check className="h-3 w-3 shrink-0 text-green-600" />
                                                                                     ) : (
                                                                                         <Button
@@ -2118,6 +2133,8 @@ export function OrderFinancialCard({
                     onOpenChange={setIsQuickLinkDialogOpen}
                     item={selectedItemToLink}
                     internalProducts={internalProducts}
+                    orderId={order?.id}
+                    onSuccess={handleReloadOrder}
                 />
             </>
         );

@@ -79,10 +79,8 @@ function calculateItemCost(item: any): number {
 import { DateRangePicker } from '@/components/date-range-picker';
 import { columns, Order } from '@/components/orders/columns';
 import { OrderIndicators } from '@/components/orders/indicators';
-import { ItemMappingsDialog } from '@/components/orders/item-mappings-dialog';
 import { OrderExpandedDetails } from '@/components/orders/order-expanded-details';
 import { OrderFinancialCard } from '@/components/orders/order-financial-card';
-import { QuickAssociateDialog } from '@/components/orders/quick-associate-dialog';
 import { SyncTakeatDialog } from '@/components/orders/sync-takeat-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -454,15 +452,6 @@ export function DataTable({
         [loadOrderDetails],
     );
 
-    const [associateDialogOpen, setAssociateDialogOpen] = React.useState(false);
-    const [itemMappingsDialogOpen, setItemMappingsDialogOpen] =
-        React.useState(false);
-    const [selectedItem, setSelectedItem] = React.useState<any | null>(null);
-    const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(
-        null,
-    );
-    const selectedOrderIdRef = React.useRef<number | null>(null);
-
     // Estados para sincronização Takeat
     const [syncDialogOpen, setSyncDialogOpen] = React.useState(false);
     const [isSyncingToday, setIsSyncingToday] = React.useState(false);
@@ -481,23 +470,6 @@ export function DataTable({
             unsubscribeFinish();
         };
     }, []);
-
-    // Atualizar selectedOrder quando os dados mudarem
-    React.useEffect(() => {
-        if (selectedOrderIdRef.current && data) {
-            const updatedOrder = data.find(
-                (o) => o.id === selectedOrderIdRef.current,
-            );
-            if (updatedOrder) {
-                setSelectedOrder(updatedOrder);
-            }
-        }
-    }, [data]);
-
-    // Atualizar ref quando selectedOrder muda
-    React.useEffect(() => {
-        selectedOrderIdRef.current = selectedOrder?.id || null;
-    }, [selectedOrder]);
 
     // Adicionar botão de associar na coluna de ações
     const columnsWithAssociate = React.useMemo(() => {
@@ -3127,31 +3099,6 @@ export function DataTable({
                     </div>
                 </div>
             </div>
-
-            {/* Modal de Associação Rápida */}
-            {selectedOrder && (
-                <QuickAssociateDialog
-                    open={associateDialogOpen}
-                    onOpenChange={setAssociateDialogOpen}
-                    orderCode={selectedOrder.code}
-                    items={selectedOrder.items || []}
-                    internalProducts={internalProducts}
-                    provider={selectedOrder.provider}
-                    onOpenDetailedMappings={(item) => {
-                        setSelectedItem(item);
-                        setItemMappingsDialogOpen(true);
-                    }}
-                />
-            )}
-
-            {/* Modal de Associações Detalhadas do Item */}
-            <ItemMappingsDialog
-                open={itemMappingsDialogOpen}
-                onOpenChange={setItemMappingsDialogOpen}
-                item={selectedItem}
-                internalProducts={internalProducts}
-                provider={selectedOrder?.provider || 'ifood'}
-            />
 
             {/* Dialog de Sincronização Takeat */}
             <SyncTakeatDialog
