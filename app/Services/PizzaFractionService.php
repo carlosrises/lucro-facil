@@ -27,13 +27,11 @@ class PizzaFractionService
     {
         $mappings = $orderItem->mappings()->get();
 
-        // Contar sabores de pizza com auto_fraction ativado
-        $pizzaFlavors = $mappings->where('option_type', OrderItemMapping::OPTION_TYPE_PIZZA_FLAVOR)
-            ->where('auto_fraction', true);
+        // Contar sabores CLASSIFICADOS (com ProductMapping tipo 'flavor') nos add_ons
+        // NÃO apenas os que já têm OrderItemMapping
+        $flavorCount = $this->countClassifiedFlavors($orderItem);
 
-        $flavorCount = $pizzaFlavors->count();
-
-        // Se não houver sabores ou só 0, não faz nada
+        // Se não houver sabores classificados, não faz nada
         if ($flavorCount <= 0) {
             return [
                 'updated' => 0,
@@ -41,6 +39,10 @@ class PizzaFractionService
                 'fraction' => 0,
             ];
         }
+
+        // Buscar apenas os sabores que TÊM OrderItemMapping (para atualizar)
+        $pizzaFlavors = $mappings->where('option_type', OrderItemMapping::OPTION_TYPE_PIZZA_FLAVOR)
+            ->where('auto_fraction', true);
 
         // Sempre dividir pela quantidade real de sabores escolhidos
         // NÃO usar max_flavors, pois uma pizza de 4 sabores pode ter apenas 2 escolhidos
@@ -204,6 +206,44 @@ class PizzaFractionService
 
             return $mapping;
         })->toArray();
+    }
+
+    /**
+     * Contar sabores CLASSIFICADOS (com ProductMapping tipo 'flavor') nos add_ons
+     * Conta mesmo os que não têm produto vinculado, pois estão classificados como sabor
+     */
+    private function countClassifiedFlavors(OrderItem $orderItem): int
+    {
+        $addOns = $orderItem->add_ons;
+        if (!is_array($addOns) || empty($addOns)) {
+            return 0;
+        }
+
+        $classifiedFlavorsCount = 0;
+
+        foreach ($addOns as $addOn) {
+            $addOnName = $addOn['name'] ?? '';
+            if (!$addOnName) {
+                continue;
+            }
+
+            // Gerar SKU do add-on
+            $addOnSku = 'addon_' . md5($addOnName);
+
+            // Buscar ProductMapping do tipo 'flavor' (mesmo sem produto vinculado)
+            $productMapping = \App\Models\ProductMapping::where('tenant_id', $orderItem->tenant_id)
+                ->where('external_item_id', $addOnSku)
+                ->where('item_type', 'flavor')
+                ->first();
+
+            if ($productMapping) {
+                // Contar a quantidade deste add-on (ex: 2x Portuguesa)
+                $quantity = $addOn['quantity'] ?? $addOn['qty'] ?? 1;
+                $classifiedFlavorsCount += $quantity;
+            }
+        }
+
+        return $classifiedFlavorsCount;
     }
 
     /**
