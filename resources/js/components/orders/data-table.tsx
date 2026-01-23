@@ -430,7 +430,7 @@ export function DataTable({
 
                 if (details) {
                     // Mesclar apenas os detalhes (items completos, mappings, sale)
-                    // Mantém os campos calculados que já vieram do backend
+                    // IMPORTANTE: Preservar TODOS os campos calculados do backend original
                     setEnrichedData((prev) =>
                         prev.map((order) =>
                             order.id === orderId
@@ -438,7 +438,14 @@ export function DataTable({
                                       ...order,
                                       items: details.items,
                                       sale: details.sale,
-                                      // Manter calculated_costs, total_costs, etc. do backend original
+                                      // Explicitamente preservar campos calculados
+                                      calculated_costs: order.calculated_costs,
+                                      total_costs: order.total_costs,
+                                      total_commissions:
+                                          order.total_commissions,
+                                      net_revenue: order.net_revenue,
+                                      costs_calculated_at:
+                                          order.costs_calculated_at,
                                   }
                                 : order,
                         ),
@@ -2339,6 +2346,70 @@ export function DataTable({
                                                                             internalProducts={
                                                                                 internalProducts
                                                                             }
+                                                                            onReloadOrder={(
+                                                                                orderId,
+                                                                            ) => {
+                                                                                // Buscar dados atualizados do pedido
+                                                                                fetch(
+                                                                                    `/api/orders/${orderId}`,
+                                                                                    {
+                                                                                        headers:
+                                                                                            {
+                                                                                                Accept: 'application/json',
+                                                                                            },
+                                                                                    },
+                                                                                )
+                                                                                    .then(
+                                                                                        (
+                                                                                            res,
+                                                                                        ) =>
+                                                                                            res.json(),
+                                                                                    )
+                                                                                    .then(
+                                                                                        (
+                                                                                            updatedOrder,
+                                                                                        ) => {
+                                                                                            // Substituir com todos os dados atualizados do backend
+                                                                                            setLocalOrders(
+                                                                                                (
+                                                                                                    prev,
+                                                                                                ) =>
+                                                                                                    prev.map(
+                                                                                                        (
+                                                                                                            o,
+                                                                                                        ) =>
+                                                                                                            o.id ===
+                                                                                                            orderId
+                                                                                                                ? updatedOrder
+                                                                                                                : o,
+                                                                                                    ),
+                                                                                            );
+                                                                                            setEnrichedData(
+                                                                                                (
+                                                                                                    prev,
+                                                                                                ) =>
+                                                                                                    prev.map(
+                                                                                                        (
+                                                                                                            o,
+                                                                                                        ) =>
+                                                                                                            o.id ===
+                                                                                                            orderId
+                                                                                                                ? updatedOrder
+                                                                                                                : o,
+                                                                                                    ),
+                                                                                            );
+                                                                                        },
+                                                                                    )
+                                                                                    .catch(
+                                                                                        (
+                                                                                            err,
+                                                                                        ) =>
+                                                                                            console.error(
+                                                                                                'Erro ao recarregar pedido:',
+                                                                                                err,
+                                                                                            ),
+                                                                                    );
+                                                                            }}
                                                                         />
                                                                     </div>
                                                                 </div>
