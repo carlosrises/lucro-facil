@@ -270,10 +270,30 @@ class FixIncorrectPizzaFractions extends Command
                                 $this->line("      ✅ CORRETO ({$pizzaSize}): R$ ".number_format($correctCMV, 2, ',', '.').' × '.$correctFractionText.' = R$ '.number_format($correctSubtotal, 2, ',', '.'));
                                 $hasIncorrectCost = true;
                             } else {
-                                // Verificar se tem ProductMapping vinculado (classificado na Triagem)
-                                $hasClassification = $productMapping && $productMapping->internal_product_id !== null;
-                                $icon = $hasClassification ? '✅' : '🔗';
-                                $statusText = $hasClassification ? '' : ' (não classificado - vincular na Triagem)';
+                                // Verificar status de classificação
+                                $hasProduct = $productMapping && $productMapping->internal_product_id !== null;
+                                $hasClassification = $productMapping !== null;
+
+                                if ($hasProduct) {
+                                    // Tem produto vinculado
+                                    $icon = '✅';
+                                    $statusText = '';
+                                } elseif ($hasClassification) {
+                                    // Classificado mas sem produto
+                                    $itemTypeLabels = [
+                                        'flavor' => 'Sabor',
+                                        'drink' => 'Bebida',
+                                        'optional' => 'Opcional',
+                                        'side' => 'Acompanhamento',
+                                    ];
+                                    $typeLabel = $itemTypeLabels[$productMapping->item_type] ?? $productMapping->item_type;
+                                    $icon = '🏷️';
+                                    $statusText = " (classificado como {$typeLabel} - associar produto na Triagem)";
+                                } else {
+                                    // Não classificado
+                                    $icon = '🔗';
+                                    $statusText = ' (não classificado - vincular na Triagem)';
+                                }
 
                                 $this->line("   ├ {$icon} {$correctFractionText} {$productName}{$statusText}");
                                 $this->line('      💰 R$ '.number_format($correctSubtotal, 2, ',', '.'));
