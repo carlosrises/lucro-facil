@@ -1366,39 +1366,10 @@ export function OrderFinancialCard({
                                                                         // Se for sabor, calcular fração baseado em TODOS os sabores classificados (mesmo sem produto)
                                                                         let individualFraction = 1;
 
-                                                                        // Verificar DIRETAMENTE se é flavor pelo ProductMapping (linha 1368)
+                                                                        // Verificar DIRETAMENTE se é flavor pelo ProductMapping
                                                                         const isFlavor =
                                                                             productMapping?.item_type ===
                                                                             'flavor';
-
-                                                                        // DEBUG TEMPORÁRIO - Remover após identificar problema
-                                                                        if (
-                                                                            item.id ===
-                                                                                59081 &&
-                                                                            addOn.name.includes(
-                                                                                'Brócolis',
-                                                                            )
-                                                                        ) {
-                                                                            console.log(
-                                                                                '🔍 DEBUG BRÓCOLIS:',
-                                                                                {
-                                                                                    addOnName:
-                                                                                        addOn.name,
-                                                                                    has_product_mapping:
-                                                                                        !!addOn.product_mapping,
-                                                                                    product_mapping_item_type:
-                                                                                        addOn
-                                                                                            .product_mapping
-                                                                                            ?.item_type,
-                                                                                    productMapping_item_type:
-                                                                                        productMapping?.item_type,
-                                                                                    isFlavor:
-                                                                                        isFlavor,
-                                                                                    enrichedAddOns_count:
-                                                                                        enrichedAddOns.length,
-                                                                                },
-                                                                            );
-                                                                        }
 
                                                                         if (
                                                                             isFlavor
@@ -1429,28 +1400,6 @@ export function OrderFinancialCard({
                                                                             const addonQuantity =
                                                                                 addOn.quantity ||
                                                                                 1;
-
-                                                                            // DEBUG TEMPORÁRIO - Remover após identificar problema
-                                                                            if (
-                                                                                item.id ===
-                                                                                    59081 &&
-                                                                                addOn.name.includes(
-                                                                                    'Brócolis',
-                                                                                )
-                                                                            ) {
-                                                                                console.log(
-                                                                                    '🧮 DEBUG CÁLCULO BRÓCOLIS:',
-                                                                                    {
-                                                                                        flavorCount:
-                                                                                            flavorCount,
-                                                                                        addonQuantity:
-                                                                                            addonQuantity,
-                                                                                        individualFraction_será:
-                                                                                            addonQuantity /
-                                                                                            flavorCount,
-                                                                                    },
-                                                                                );
-                                                                            }
 
                                                                             if (
                                                                                 flavorCount >
@@ -1568,27 +1517,6 @@ export function OrderFinancialCard({
                                                                             } else {
                                                                                 fractionText = `${(individualFraction * 100).toFixed(0)}%`;
                                                                             }
-                                                                        }
-
-                                                                        // DEBUG TEMPORÁRIO - Remover após identificar problema
-                                                                        if (
-                                                                            item.id ===
-                                                                                59081 &&
-                                                                            addOn.name.includes(
-                                                                                'Brócolis',
-                                                                            )
-                                                                        ) {
-                                                                            console.log(
-                                                                                '✅ DEBUG FINAL BRÓCOLIS:',
-                                                                                {
-                                                                                    individualFraction:
-                                                                                        individualFraction,
-                                                                                    fractionText:
-                                                                                        fractionText,
-                                                                                    will_render_badge:
-                                                                                        !!fractionText,
-                                                                                },
-                                                                            );
                                                                         }
 
                                                                         // Tooltip com produto vinculado
