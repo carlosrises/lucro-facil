@@ -805,6 +805,12 @@ class ItemTriageController extends Controller
                                         'quantity' => $addOnQty,
                                     ]);
                                     $updatedCount++;
+
+                                    // Se for sabor (flavor), recalcular frações do item pai
+                                    if ($mapping->item_type === 'flavor') {
+                                        $pizzaFractionService = new \App\Services\PizzaFractionService;
+                                        $pizzaFractionService->recalculateFractions($orderItem);
+                                    }
                                 } else {
                                     \Log::debug('   ➕ Criando novo mapping');
                                     // Criar novo mapping
@@ -820,6 +826,12 @@ class ItemTriageController extends Controller
                                         'external_name' => $addOnName,
                                     ]);
                                     $mappedCount++;
+
+                                    // Se for sabor (flavor), recalcular frações do item pai
+                                    if ($mapping->item_type === 'flavor') {
+                                        $pizzaFractionService = new \App\Services\PizzaFractionService;
+                                        $pizzaFractionService->recalculateFractions($orderItem);
+                                    }
                                 }
                             } else if ($existingMapping) {
                                 // CUIDADO: Só deletar se o mapping é do tipo 'addon', NÃO deletar sabores!
@@ -887,6 +899,12 @@ class ItemTriageController extends Controller
                 'auto_fraction' => false,
                 'unit_cost_override' => $correctCMV,
             ]);
+
+            // Se for parent_product (pizza completa), recalcular sabores existentes
+            if ($mapping->item_type === 'parent_product' && $product) {
+                $pizzaFractionService = new \App\Services\PizzaFractionService;
+                $pizzaFractionService->recalculateFractions($orderItem);
+            }
         }
     }
 
