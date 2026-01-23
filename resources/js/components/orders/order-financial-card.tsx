@@ -1270,6 +1270,25 @@ export function OrderFinancialCard({
                                                                                     ?.option_type,
                                                                             );
 
+                                                                        // DEBUG GERAL: Log para TODOS os add-ons (antes de verificar tipo)
+                                                                        console.log(
+                                                                            `[DEBUG ADDON] Item ${item.id} - "${addOn.name}"`,
+                                                                            {
+                                                                                productMapping:
+                                                                                    productMapping,
+                                                                                pm_item_type:
+                                                                                    productMapping?.item_type,
+                                                                                mapping_option_type:
+                                                                                    addOn
+                                                                                        .mapping
+                                                                                        ?.option_type,
+                                                                                resolvedItemType:
+                                                                                    resolvedItemType,
+                                                                                hasProductMapping:
+                                                                                    hasProductMapping,
+                                                                            },
+                                                                        );
+
                                                                         // Determinar ícone baseado na classificação
                                                                         const getAddonIcon =
                                                                             () => {
