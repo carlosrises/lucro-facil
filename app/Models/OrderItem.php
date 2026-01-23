@@ -19,6 +19,7 @@ class OrderItem extends Model
 
     protected $appends = [
         'total_cost', // Adicionar custo calculado aos atributos serializados
+        'add_ons_product_mappings', // ProductMappings dos add-ons para classificação
     ];
 
     public function order(): BelongsTo
@@ -88,7 +89,9 @@ class OrderItem extends Model
             $classifiedFlavors = [];
             foreach ($this->add_ons as $index => $addOn) {
                 $addOnName = $addOn['name'] ?? '';
-                if (!$addOnName) continue;
+                if (! $addOnName) {
+                    continue;
+                }
 
                 $addOnSku = 'addon_'.md5($addOnName);
                 $productMapping = ProductMapping::where('tenant_id', $this->tenant_id)
@@ -161,5 +164,36 @@ class OrderItem extends Model
     public function getTotalCostAttribute(): float
     {
         return $this->calculateTotalCost();
+    }
+
+    /**
+     * Accessor para retornar os ProductMappings de cada add-on
+     * Retorna array indexado por posição do add-on
+     */
+    public function getAddOnsProductMappingsAttribute(): array
+    {
+        if (! $this->add_ons || ! is_array($this->add_ons)) {
+            return [];
+        }
+
+        $mappings = [];
+        foreach ($this->add_ons as $index => $addOn) {
+            $addOnName = $addOn['name'] ?? '';
+            if (! $addOnName) {
+                $mappings[$index] = null;
+
+                continue;
+            }
+
+            $addOnSku = 'addon_'.md5($addOnName);
+            $productMapping = ProductMapping::where('tenant_id', $this->tenant_id)
+                ->where('external_item_id', $addOnSku)
+                ->with('internalProduct:id,name,unit_cost')
+                ->first();
+
+            $mappings[$index] = $productMapping;
+        }
+
+        return $mappings;
     }
 }
