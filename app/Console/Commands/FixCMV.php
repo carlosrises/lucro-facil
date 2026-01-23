@@ -6,15 +6,15 @@ use App\Models\OrderItem;
 use App\Services\PizzaFractionService;
 use Illuminate\Console\Command;
 
-class FixIncorrectPizzaFractions extends Command
+class FixCMV extends Command
 {
-    protected $signature = 'orders:fix-incorrect-fractions
+    protected $signature = 'orders:fix-cmv
                             {--order_id= : ID específico do pedido}
                             {--tenant_id= : ID do tenant}
                             {--threshold=5 : Diferença mínima em reais para considerar incorreto}
                             {--dry-run : Simula sem salvar no banco}';
 
-    protected $description = 'Identifica e corrige pedidos com frações de pizza incorretas (reassocia sabores)';
+    protected $description = 'Corrige CMV de pedidos: frações de pizza, add-ons, sabores por tamanho e recalcula custos totais';
 
     public function handle()
     {
@@ -52,6 +52,7 @@ class FixIncorrectPizzaFractions extends Command
         $errors = 0;
         $totalDifference = 0;
         $processed = 0;
+        $affectedOrderIds = collect();
 
         $pizzaService = app(PizzaFractionService::class);
 
@@ -67,6 +68,7 @@ class FixIncorrectPizzaFractions extends Command
                 &$errors,
                 &$totalDifference,
                 &$processed,
+                &$affectedOrderIds,
                 $totalItems,
                 $threshold,
                 $dryRun
@@ -436,6 +438,7 @@ class FixIncorrectPizzaFractions extends Command
 
                         $totalDifference += $difference;
                         $fixed++;
+                        $affectedOrderIds->push($orderItem->order_id);
 
                     } catch (\Exception $e) {
                         $this->error("   ❌ Erro ao processar item #{$orderItem->id}: {$e->getMessage()}");
@@ -450,6 +453,36 @@ class FixIncorrectPizzaFractions extends Command
                     }
                 }
             });
+
+        // Recalcular custos dos pedidos afetados
+        if (!$dryRun && $affectedOrderIds->isNotEmpty()) {
+            $uniqueOrderIds = $affectedOrderIds->unique();
+            $this->line('');
+            $this->info("🔄 Recalculando custos de {$uniqueOrderIds->count()} pedidos...");
+
+            $costService = app(\App\Services\OrderCostService::class);
+            foreach ($uniqueOrderIds as $orderId) {
+                $order = \App\Models\Order::find($orderId);
+                if ($order) {
+                    try {
+                        $result = $costService->calculateOrderCosts($order);
+                        $order->update([
+                            'calculated_costs' => $result,
+                            'total_costs' => $result['total_costs'] ?? 0,
+                            'total_commissions' => $result['total_commissions'] ?? 0,
+                            'net_revenue' => $result['net_revenue'] ?? 0,
+                            'costs_calculated_at' => now(),
+                        ]);
+                    } catch (\Exception $e) {
+                        logger()->error('Erro ao recalcular custos do pedido', [
+                            'order_id' => $orderId,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+            }
+            $this->info('✅ Custos recalculados!');
+        }
 
         $this->line('');
         $this->info('═══════════════════════════════════════');
