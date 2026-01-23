@@ -976,6 +976,31 @@ export function OrderFinancialCard({
                                                 )
                                                     ? item.add_ons
                                                     : [];
+
+                                                // DEBUG: Log dos add_ons_product_mappings
+                                                if (
+                                                    item.id === 24729 ||
+                                                    order.id === 24729
+                                                ) {
+                                                    console.log(
+                                                        '[DEBUG] Order:',
+                                                        order.id,
+                                                    );
+                                                    console.log(
+                                                        '[DEBUG] Item:',
+                                                        item.id,
+                                                        item.name,
+                                                    );
+                                                    console.log(
+                                                        '[DEBUG] add_ons:',
+                                                        item.add_ons,
+                                                    );
+                                                    console.log(
+                                                        '[DEBUG] add_ons_product_mappings:',
+                                                        item.add_ons_product_mappings,
+                                                    );
+                                                }
+
                                                 const enrichedAddOns = rawAddOns
                                                     .map(
                                                         (
