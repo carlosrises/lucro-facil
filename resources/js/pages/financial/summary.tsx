@@ -213,22 +213,34 @@ export default function FinancialSummary() {
                     <div className="@container/main flex flex-1 flex-col gap-2">
                         <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
                             <div className="flex w-full flex-col gap-6 px-6 lg:px-8">
-                                {/* Filtro de Mês e Botão PDF */}
-                                <div className="no-print flex items-center justify-between gap-4">
-                                    <MonthYearPicker
-                                        value={filters.month}
-                                        onChange={handleMonthChange}
-                                        placeholder="Selecione o mês"
-                                        className="w-[240px]"
-                                    />
-                                    <Button
-                                        onClick={handleExportPDF}
-                                        variant="outline"
-                                        className="gap-2"
-                                    >
-                                        <Download className="h-4 w-4" />
-                                        Salvar em PDF
-                                    </Button>
+                                {/* Header */}
+                                <div className="no-print flex flex-col gap-4">
+                                    <div className="flex flex-col gap-1">
+                                        <h1 className="text-2xl font-bold">
+                                            Resumo (DRE)
+                                        </h1>
+                                        <p className="text-muted-foreground">
+                                            Demonstrativo de Resultado do
+                                            Exercício mensal
+                                        </p>
+                                    </div>
+                                    {/* Filtro de Mês e Botão PDF */}
+                                    <div className="flex items-center justify-between gap-4">
+                                        <MonthYearPicker
+                                            value={filters.month}
+                                            onChange={handleMonthChange}
+                                            placeholder="Selecione o mês"
+                                            className="w-[240px]"
+                                        />
+                                        <Button
+                                            onClick={handleExportPDF}
+                                            variant="outline"
+                                            className="gap-2"
+                                        >
+                                            <Download className="h-4 w-4" />
+                                            Salvar em PDF
+                                        </Button>
+                                    </div>
                                 </div>
 
                                 {/* Container dos Cards com largura máxima */}
