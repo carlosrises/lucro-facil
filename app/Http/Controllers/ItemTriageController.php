@@ -904,7 +904,7 @@ class ItemTriageController extends Controller
             if ($mapping->item_type === 'parent_product' && $product) {
                 // Primeiro, criar OrderItemMappings para sabores que já têm ProductMapping
                 $this->createFlavorMappingsForOrderItem($orderItem, $tenantId);
-                
+
                 // Depois, recalcular frações de todos os sabores
                 $pizzaFractionService = new \App\Services\PizzaFractionService;
                 $pizzaFractionService->recalculateFractions($orderItem);
@@ -1013,6 +1013,10 @@ class ItemTriageController extends Controller
 
             // Se vinculou um produto pai (parent_product), recalcular frações dos sabores
             if ($mapping->item_type === 'parent_product' && $mapping->internal_product_id) {
+                // Primeiro, criar OrderItemMappings para sabores que já têm ProductMapping
+                $this->createFlavorMappingsForOrderItem($orderItem, $tenantId);
+
+                // Depois, recalcular frações de todos os sabores
                 $pizzaFractionService = new \App\Services\PizzaFractionService;
                 $pizzaFractionService->recalculateFractions($orderItem);
             }
