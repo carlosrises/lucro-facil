@@ -58,6 +58,7 @@ class FixPizzaFromAddOns extends Command
         $fixed = 0;
         $skipped = 0;
         $errors = 0;
+        $affectedOrderIds = collect();
 
         $pizzaService = app(PizzaFractionService::class);
 
@@ -154,15 +155,47 @@ class FixPizzaFromAddOns extends Command
                     $this->line('   🆕 Novo total: R$ '.number_format($newTotal, 2, ',', '.'));
 
                     $fixed++;
+                    $affectedOrderIds->push($orderItem->order_id);
                 } else {
                     $this->comment('   🔍 Seria recalculado (dry-run)');
                     $fixed++;
+                    $affectedOrderIds->push($orderItem->order_id);
                 }
 
             } catch (\Exception $e) {
                 $this->error("   ❌ Erro ao processar item #{$orderItem->id}: {$e->getMessage()}");
                 $errors++;
             }
+        }
+
+        // Recalcular custos dos pedidos afetados
+        if (!$dryRun && $affectedOrderIds->isNotEmpty()) {
+            $uniqueOrderIds = $affectedOrderIds->unique();
+            $this->line('');
+            $this->info("🔄 Recalculando custos de {$uniqueOrderIds->count()} pedidos...");
+
+            $costService = app(\App\Services\OrderCostService::class);
+            foreach ($uniqueOrderIds as $orderId) {
+                $order = \App\Models\Order::find($orderId);
+                if ($order) {
+                    try {
+                        $result = $costService->calculateOrderCosts($order);
+                        $order->update([
+                            'calculated_costs' => $result,
+                            'total_costs' => $result['total_costs'] ?? 0,
+                            'total_commissions' => $result['total_commissions'] ?? 0,
+                            'net_revenue' => $result['net_revenue'] ?? 0,
+                            'costs_calculated_at' => now(),
+                        ]);
+                    } catch (\Exception $e) {
+                        logger()->error('Erro ao recalcular custos do pedido', [
+                            'order_id' => $orderId,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+            }
+            $this->info('✅ Custos recalculados!');
         }
 
         $this->line('');
