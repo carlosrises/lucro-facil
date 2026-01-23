@@ -1361,23 +1361,78 @@ export function OrderFinancialCard({
                                                                             | string
                                                                             | null =
                                                                             null;
-                                                                        const mappingQuantity =
-                                                                            addOn
-                                                                                .mapping
-                                                                                ?.quantity ||
-                                                                            1;
-                                                                        const addonQuantity =
-                                                                            addOn.quantity ||
-                                                                            1;
 
-                                                                        // Se tem quantidade > 1 (ex: 2x), calcular a fração individual
-                                                                        // Ex: mappingQuantity=1.0 (2/2) e addonQuantity=2 → fração individual = 1/2
-                                                                        const individualFraction =
-                                                                            addonQuantity >
-                                                                            1
-                                                                                ? mappingQuantity /
-                                                                                  addonQuantity
-                                                                                : mappingQuantity;
+                                                                        // Se for sabor, calcular fração baseado em TODOS os sabores classificados (mesmo sem produto)
+                                                                        let individualFraction = 1;
+
+                                                                        if (
+                                                                            resolvedItemType ===
+                                                                            'flavor'
+                                                                        ) {
+                                                                            // Contar quantos add-ons são sabores (classificados como 'flavor')
+                                                                            const flavorCount =
+                                                                                enrichedAddOns
+                                                                                    .filter(
+                                                                                        (
+                                                                                            a,
+                                                                                        ) => {
+                                                                                            const pm =
+                                                                                                a.product_mapping;
+                                                                                            const oit =
+                                                                                                resolveItemType(
+                                                                                                    pm?.item_type,
+                                                                                                    a
+                                                                                                        .mapping
+                                                                                                        ?.option_type,
+                                                                                                );
+                                                                                            return (
+                                                                                                oit ===
+                                                                                                'flavor'
+                                                                                            );
+                                                                                        },
+                                                                                    )
+                                                                                    .reduce(
+                                                                                        (
+                                                                                            sum,
+                                                                                            a,
+                                                                                        ) =>
+                                                                                            sum +
+                                                                                            (a.quantity ||
+                                                                                                1),
+                                                                                        0,
+                                                                                    );
+
+                                                                            const addonQuantity =
+                                                                                addOn.quantity ||
+                                                                                1;
+
+                                                                            if (
+                                                                                flavorCount >
+                                                                                0
+                                                                            ) {
+                                                                                individualFraction =
+                                                                                    addonQuantity /
+                                                                                    flavorCount;
+                                                                            }
+                                                                        } else {
+                                                                            // Para outros tipos, usar a quantity do mapping se existir
+                                                                            const mappingQuantity =
+                                                                                addOn
+                                                                                    .mapping
+                                                                                    ?.quantity ||
+                                                                                1;
+                                                                            const addonQuantity =
+                                                                                addOn.quantity ||
+                                                                                1;
+
+                                                                            // Se tem quantidade > 1 (ex: 2x), calcular a fração individual
+                                                                            individualFraction =
+                                                                                addonQuantity >
+                                                                                1
+                                                                                    ? mappingQuantity /
+                                                                                      addonQuantity
+                                                                                    : mappingQuantity;
+                                                                        }
 
                                                                         if (
                                                                             individualFraction <
