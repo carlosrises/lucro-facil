@@ -585,14 +585,16 @@ export const columns: ColumnDef<Order>[] = [
             }
 
             return (
-                <span
-                    className={`${isCancelled ? 'text-muted-foreground line-through' : ''}`}
-                >
-                    {new Intl.NumberFormat('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                    }).format(subtotal)}
-                </span>
+                <div className="text-right">
+                    <span
+                        className={`${isCancelled ? 'text-muted-foreground line-through' : ''}`}
+                    >
+                        {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                        }).format(subtotal)}
+                    </span>
+                </div>
             );
         },
     },
@@ -684,7 +686,7 @@ export const columns: ColumnDef<Order>[] = [
                 subtotal > 0 ? (totalCost / subtotal) * 100 : 0;
 
             return totalCost > 0 ? (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-end gap-2">
                     <span
                         className={`text-sm ${
                             isCancelled
