@@ -8,6 +8,24 @@ use Inertia\Inertia;
 
 class TaxCategoriesController extends Controller
 {
+    public function apiList(Request $request)
+    {
+        $taxCategories = TaxCategory::where('tenant_id', tenant_id())
+            ->where('active', true)
+            ->orderBy('name')
+            ->get()
+            ->map(function ($category) {
+                return [
+                    'id' => $category->id,
+                    'name' => $category->name,
+                    'tax_calculation_type' => $category->tax_calculation_type,
+                    'total_tax_rate' => $category->total_tax_rate,
+                ];
+            });
+
+        return response()->json($taxCategories);
+    }
+
     public function index(Request $request)
     {
         $query = TaxCategory::query()

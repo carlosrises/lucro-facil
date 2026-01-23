@@ -14,7 +14,7 @@ use App\Http\Controllers\OrdersController;
 use App\Http\Controllers\ProductMappingController;
 use App\Http\Controllers\ProductsController;
 use App\Http\Controllers\RecalculationStatusController;
-use App\Http\Controllers\SalesController;
+// use App\Http\Controllers\SalesController;
 use App\Http\Controllers\StoresController;
 use App\Http\Controllers\TakeatSyncController;
 use App\Http\Controllers\TaxCategoriesController;
@@ -52,8 +52,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('orders/{id}/dispute/{disputeId}/accept', [OrdersController::class, 'acceptDispute'])->name('orders.acceptDispute');
     Route::post('orders/{id}/dispute/{disputeId}/reject', [OrdersController::class, 'rejectDispute'])->name('orders.rejectDispute');
 
-    Route::get('sales', [SalesController::class, 'index'])->name('sales.index');
-
     // Stores routes
     Route::get('stores', [StoresController::class, 'index'])->name('stores.index');
     Route::get('stores/{id}', [StoresController::class, 'show'])->name('stores.show');
@@ -88,6 +86,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Ingredients
     Route::get('ingredients', [IngredientsController::class, 'index'])->name('ingredients.index');
+    Route::get('api/ingredients', [IngredientsController::class, 'apiList'])->name('ingredients.apiList');
     Route::post('ingredients', [IngredientsController::class, 'store'])->name('ingredients.store');
     Route::put('ingredients/{ingredient}', [IngredientsController::class, 'update'])->name('ingredients.update');
     Route::patch('ingredients/{ingredient}/toggle', [IngredientsController::class, 'toggle'])->name('ingredients.toggle');
@@ -95,6 +94,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Products
     Route::get('products', [ProductsController::class, 'index'])->name('products.index');
+    Route::get('api/products', [ProductsController::class, 'apiList'])->name('products.apiList');
     Route::post('products', [ProductsController::class, 'store'])->name('products.store');
     Route::get('products/{product}/data', [ProductsController::class, 'getData'])->name('products.getData');
     Route::get('products/{product}', [ProductsController::class, 'show'])->name('products.show');
@@ -115,6 +115,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Product Mappings
     Route::get('product-mappings', [ProductMappingController::class, 'index'])->name('product-mappings.index');
+    Route::get('api/product-mappings/{sku}', [ProductMappingController::class, 'getBySku'])->where('sku', '.*')->name('product-mappings.getBySku');
     Route::post('product-mappings', [ProductMappingController::class, 'store'])->name('product-mappings.store');
     Route::delete('product-mappings/{productMapping}', [ProductMappingController::class, 'destroy'])->name('product-mappings.destroy');
     Route::delete('product-mappings/sku/{sku}', [ProductMappingController::class, 'destroyBySku'])->name('product-mappings.destroyBySku');
@@ -130,6 +131,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Tax Categories
     Route::get('tax-categories', [TaxCategoriesController::class, 'index'])->name('tax-categories.index');
+    Route::get('api/tax-categories', [TaxCategoriesController::class, 'apiList'])->name('tax-categories.apiList');
     Route::post('tax-categories', [TaxCategoriesController::class, 'store'])->name('tax-categories.store');
     Route::put('tax-categories/{taxCategory}', [TaxCategoriesController::class, 'update'])->name('tax-categories.update');
     Route::delete('tax-categories/{taxCategory}', [TaxCategoriesController::class, 'destroy'])->name('tax-categories.destroy');

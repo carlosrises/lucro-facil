@@ -13,6 +13,17 @@ use Inertia\Inertia;
 
 class ProductsController extends Controller
 {
+    public function apiList(Request $request)
+    {
+        $products = InternalProduct::query()
+            ->where('tenant_id', tenant_id())
+            ->where('active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'type', 'unit', 'unit_cost', 'sale_price']);
+
+        return response()->json($products);
+    }
+
     public function index(Request $request)
     {
         $query = InternalProduct::query()
@@ -51,7 +62,15 @@ class ProductsController extends Controller
             ->where('active', true)
             ->where('is_ingredient', true)
             ->orderBy('name')
-            ->get(['id', 'name', 'unit', 'unit_cost as unit_price']);
+            ->get(['id', 'name', 'unit', 'unit_cost'])
+            ->map(function ($product) {
+                return [
+                    'id' => 'product_' . $product->id,
+                    'name' => $product->name . ' (Produto)',
+                    'unit' => $product->unit,
+                    'unit_price' => $product->unit_cost,
+                ];
+            });
 
         // Combinar ingredientes e produtos como insumos
         $ingredients = $rawIngredients->concat($productsAsIngredients);
@@ -125,7 +144,7 @@ class ProductsController extends Controller
             'size' => ['nullable', 'string', 'in:broto,media,grande,familia'],
             'unit' => ['required', 'in:unit,kg,g,l,ml,hour'],
             'unit_cost' => ['required', 'numeric', 'min:0'],
-            'sale_price' => ['required', 'numeric', 'min:0'],
+            'sale_price' => ['nullable', 'numeric', 'min:0'],
             'tax_category_id' => ['nullable', 'exists:tax_categories,id'],
             'active' => ['boolean'],
             'is_ingredient' => ['boolean'],
@@ -162,7 +181,7 @@ class ProductsController extends Controller
                 'size' => $validated['size'] ?? null,
                 'unit' => $validated['unit'],
                 'unit_cost' => $validated['unit_cost'],
-                'sale_price' => $validated['sale_price'],
+                'sale_price' => $validated['sale_price'] ?? 0,
                 'tax_category_id' => $validated['tax_category_id'] ?? null,
                 'active' => $validated['active'] ?? true,
                 'is_ingredient' => $validated['is_ingredient'] ?? false,
@@ -188,9 +207,28 @@ class ProductsController extends Controller
 
             DB::commit();
 
-            return redirect()->back()->with('success', 'Produto criado com sucesso!');
+            // Se for requisição JSON/AJAX, retornar JSON
+            if (request()->wantsJson() || request()->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Produto criado com sucesso!',
+                    'product' => $product->fresh(['costs'])
+                ]);
+            }
+
+            return back()->with([
+                'success' => 'Produto criado com sucesso!',
+                'product' => $product->fresh(['costs'])
+            ]);
         } catch (\Exception $e) {
             DB::rollBack();
+
+            if (request()->wantsJson() || request()->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Erro ao criar produto: '.$e->getMessage()
+                ], 500);
+            }
 
             return redirect()->back()->withErrors(['error' => 'Erro ao criar produto: '.$e->getMessage()]);
         }
@@ -297,7 +335,7 @@ class ProductsController extends Controller
             'size' => ['nullable', 'string', 'in:broto,media,grande,familia'],
             'unit' => ['required', 'in:unit,kg,g,l,ml,hour'],
             'unit_cost' => ['required', 'numeric', 'min:0'],
-            'sale_price' => ['required', 'numeric', 'min:0'],
+            'sale_price' => ['nullable', 'numeric', 'min:0'],
             'tax_category_id' => ['nullable', 'exists:tax_categories,id'],
             'active' => ['boolean'],
             'is_ingredient' => ['boolean'],
@@ -338,7 +376,7 @@ class ProductsController extends Controller
                 'size' => $validated['size'] ?? null,
                 'unit' => $validated['unit'],
                 'unit_cost' => $validated['unit_cost'], // Sempre salva o valor manual
-                'sale_price' => $validated['sale_price'],
+                'sale_price' => $validated['sale_price'] ?? 0,
                 'tax_category_id' => $validated['tax_category_id'] ?? null,
                 'active' => $validated['active'] ?? true,
                 'is_ingredient' => $validated['is_ingredient'] ?? false,
@@ -430,9 +468,26 @@ class ProductsController extends Controller
                 $message .= ' Recalculando custos dos pedidos existentes em segundo plano...';
             }
 
-            return redirect()->back()->with('success', $message);
+            // Se for requisição JSON/AJAX, retornar JSON
+            if (request()->wantsJson() || request()->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $message,
+                    'product' => $product->fresh(['costs'])
+                ]);
+            }
+
+            return back()->with('success', $message);
         } catch (\Exception $e) {
             DB::rollBack();
+
+            if (request()->wantsJson() || request()->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Erro ao atualizar produto: '.$e->getMessage()
+                ], 500);
+            }
+
             throw $e;
         }
     }

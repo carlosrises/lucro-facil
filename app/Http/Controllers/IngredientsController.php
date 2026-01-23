@@ -4,12 +4,42 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\Ingredient;
+use App\Models\InternalProduct;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class IngredientsController extends Controller
 {
+    public function apiList(Request $request)
+    {
+        // Buscar ingredientes ativos
+        $rawIngredients = Ingredient::where('tenant_id', tenant_id())
+            ->where('active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'unit', 'unit_price']);
+
+        // Buscar produtos internos que podem ser usados como insumos
+        $productsAsIngredients = InternalProduct::where('tenant_id', tenant_id())
+            ->where('active', true)
+            ->where('is_ingredient', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'unit', 'unit_cost'])
+            ->map(function($product) {
+                return [
+                    'id' => 'product_' . $product->id, // Prefixar para evitar conflito
+                    'name' => $product->name . ' (Produto)',
+                    'unit' => $product->unit,
+                    'unit_price' => $product->unit_cost,
+                ];
+            });
+
+        // Combinar ingredientes e produtos como insumos
+        $ingredients = $rawIngredients->concat($productsAsIngredients);
+
+        return response()->json($ingredients);
+    }
+
     public function index(Request $request)
     {
         $query = Ingredient::query()

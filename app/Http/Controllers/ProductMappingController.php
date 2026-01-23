@@ -78,6 +78,28 @@ class ProductMappingController extends Controller
         ]);
     }
 
+    public function getBySku(Request $request, string $sku)
+    {
+        $tenantId = $request->user()->tenant_id;
+
+        $mapping = ProductMapping::where('tenant_id', $tenantId)
+            ->where('external_item_id', $sku)
+            ->with('internalProduct:id,name,unit_cost')
+            ->first();
+
+        if (!$mapping) {
+            return response()->json(null, 404);
+        }
+
+        return response()->json([
+            'id' => $mapping->id,
+            'item_type' => $mapping->item_type,
+            'internal_product_id' => $mapping->internal_product_id,
+            'internal_product_name' => $mapping->internalProduct?->name,
+            'internal_product_cost' => $mapping->internalProduct?->unit_cost,
+        ]);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
