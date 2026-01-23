@@ -373,18 +373,22 @@ class ItemTriageController extends Controller
 
         // Verificar se é um add-on (sku começa com "addon_")
         if (str_starts_with($sku, 'addon_')) {
-            // Buscar pedidos que contêm este add-on no campo JSON
-            // Precisamos decodificar o SKU para obter o nome original do add-on
-            // Como geramos o SKU com md5, precisamos buscar pelo nome nos JSONs
+            \Log::info('[getItemDetails] Buscando add-on com SKU: ' . $sku);
+            $orderIds = collect();
 
-            // Buscar todos os order_items com add_ons
+            // 1. Buscar em order_items.sku (itens já classificados/vinculados)
+            $orderIdsFromItems = OrderItem::where('order_items.tenant_id', $tenantId)
+                ->where('order_items.sku', $sku)
+                ->pluck('order_id');
+
+            \Log::info('[getItemDetails] Order IDs de items.sku: ' . $orderIdsFromItems->count());
+            $orderIds = $orderIds->merge($orderIdsFromItems);
+
+            // 2. Buscar em add_ons JSON (itens ainda não classificados)
             $orderItemsWithAddOn = OrderItem::where('order_items.tenant_id', $tenantId)
                 ->whereNotNull('add_ons')
                 ->whereRaw('JSON_LENGTH(add_ons) > 0')
                 ->get();
-
-            $matchingOrders = collect();
-            $orderIds = collect();
 
             foreach ($orderItemsWithAddOn as $orderItem) {
                 $addOns = $orderItem->add_ons;
@@ -400,6 +404,10 @@ class ItemTriageController extends Controller
                 }
             }
 
+            \Log::info('[getItemDetails] Order IDs de add_ons JSON: ' . ($orderIds->count() - $orderIdsFromItems->count()));
+            \Log::info('[getItemDetails] Total de ocorrências: ' . $orderIds->count());
+            \Log::info('[getItemDetails] Total de pedidos únicos: ' . $orderIds->unique()->count());
+
             // Buscar IDs dos 10 pedidos mais recentes
             $recentOrderIds = Order::whereIn('id', $orderIds->unique())
                 ->where('tenant_id', $tenantId)
@@ -407,6 +415,8 @@ class ItemTriageController extends Controller
                 ->limit(10)
                 ->pluck('id');
 
+            // Retornar tanto ocorrências quanto pedidos únicos
+            $totalOccurrences = $orderIds->count();
             $totalOrders = $orderIds->unique()->count();
 
             $recentOrders = Order::whereIn('id', $recentOrderIds)
@@ -437,8 +447,15 @@ class ItemTriageController extends Controller
                 ->sortByDesc('placed_at')
                 ->values();
 
+            \Log::info('[getItemDetails] Resposta final', [
+                'recent_orders_count' => $recentOrders->count(),
+                'total_occurrences' => $totalOccurrences,
+                'total_orders' => $totalOrders,
+            ]);
+
             return response()->json([
                 'recent_orders' => $recentOrders,
+                'total_occurrences' => $totalOccurrences,
                 'total_orders' => $totalOrders,
             ]);
         }
@@ -598,13 +615,13 @@ class ItemTriageController extends Controller
                 ]);
 
                 if (str_starts_with($sku, 'addon_')) {
+                    // CRITICAL: Deletar apenas os mappings do add-on ESPECÍFICO (por external_name)
+                    // Não usar whereHas que pega todos os order_items com esse add-on no JSON
                     $deletedCount = \App\Models\OrderItemMapping::whereHas('orderItem', function ($q) use ($tenantId) {
                         $q->where('tenant_id', $tenantId);
                     })
                         ->where('mapping_type', 'addon')
-                        ->whereHas('orderItem', function ($q) use ($name) {
-                            $q->whereRaw("JSON_CONTAINS(add_ons, JSON_OBJECT('name', ?)) = 1", [$name]);
-                        })
+                        ->where('external_name', $name) // FILTRAR pelo nome exato do add-on
                         ->delete();
                 } else {
                     $deletedCount = \App\Models\OrderItemMapping::whereHas('orderItem', function ($q) use ($tenantId, $sku) {
@@ -623,6 +640,19 @@ class ItemTriageController extends Controller
                 \Log::info('✅ Produto desassociado', [
                     'deleted_mappings' => $deletedCount ?? 0,
                 ]);
+
+                // Mesmo sem produto, processar pedidos históricos para aplicar a classificação
+                // Isso garante que o item apareça nos pedidos (sem CMV)
+                if (str_starts_with($sku, 'addon_')) {
+                    $this->applyMappingToHistoricalOrders($mapping, $tenantId);
+                }
+
+                $this->broadcastItemTriaged($mapping, [
+                    'sku' => $sku,
+                    'name' => $name,
+                    'item_type' => $itemType,
+                    'internal_product_id' => null,
+                ], $tenantId, 'classified');
 
                 return [
                     'sku' => $sku,
@@ -662,7 +692,12 @@ class ItemTriageController extends Controller
                 'internal_product_id' => $internalProductId,
             ], $tenantId, $internalProductId ? 'mapped' : 'classified');
 
-            $this->recalculateOrdersWithItem($mapping, $tenantId);
+            // Se for add-on, usar método específico para add-ons
+            if (str_starts_with($sku, 'addon_')) {
+                $this->applyMappingToHistoricalOrders($mapping, $tenantId);
+            } else {
+                $this->recalculateOrdersWithItem($mapping, $tenantId);
+            }
 
             return [
                 'sku' => $sku,
@@ -719,6 +754,107 @@ class ItemTriageController extends Controller
 
     private function applyMappingToHistoricalOrders(ProductMapping $mapping, int $tenantId): void
     {
+        // Se for add-on (SKU começa com addon_), buscar no campo JSON add_ons
+        if (str_starts_with($mapping->external_item_id, 'addon_')) {
+            \Log::info('🔍 Aplicando mapping de add-on histórico', [
+                'sku' => $mapping->external_item_id,
+                'name' => $mapping->external_item_name,
+                'type' => $mapping->item_type,
+                'has_product' => $mapping->internal_product_id ? 'sim' : 'não',
+            ]);
+
+            // Buscar todos os order_items que contêm este add-on no JSON
+            $orderItems = OrderItem::where('tenant_id', $tenantId)
+                ->whereNotNull('add_ons')
+                ->whereRaw('JSON_LENGTH(add_ons) > 0')
+                ->get();
+
+            $mappedCount = 0;
+            $updatedCount = 0;
+            $deletedCount = 0;
+
+            foreach ($orderItems as $orderItem) {
+                $addOns = $orderItem->add_ons;
+                if (is_array($addOns)) {
+                    foreach ($addOns as $index => $addOn) {
+                        $addOnName = $addOn['name'] ?? '';
+                        if ($addOnName === $mapping->external_item_name) {
+                            \Log::debug('🔍 Processando add-on', [
+                                'order_item_id' => $orderItem->id,
+                                'add_on_index' => $index,
+                                'add_on_name' => $addOnName,
+                                'mapping_has_product' => $mapping->internal_product_id ? 'sim' : 'não',
+                            ]);
+
+                            // Buscar mapping existente para ESTE add-on específico
+                            $existingMapping = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
+                                ->where('mapping_type', 'addon')
+                                ->where('external_reference', (string) $index)
+                                ->where('external_name', $addOnName)
+                                ->first();
+
+                            // Se há produto vinculado, criar/atualizar OrderItemMapping
+                            if ($mapping->internal_product_id) {
+                                $addOnQty = $addOn['quantity'] ?? 1;
+
+                                if ($existingMapping) {
+                                    \Log::debug('   ✏️ Atualizando mapping existente', ['mapping_id' => $existingMapping->id]);
+                                    // Atualizar mapping existente
+                                    $existingMapping->update([
+                                        'internal_product_id' => $mapping->internal_product_id,
+                                        'quantity' => $addOnQty,
+                                    ]);
+                                    $updatedCount++;
+                                } else {
+                                    \Log::debug('   ➕ Criando novo mapping');
+                                    // Criar novo mapping
+                                    \App\Models\OrderItemMapping::create([
+                                        'tenant_id' => $tenantId,
+                                        'order_item_id' => $orderItem->id,
+                                        'internal_product_id' => $mapping->internal_product_id,
+                                        'quantity' => $addOnQty,
+                                        'mapping_type' => 'addon',
+                                        'option_type' => 'addon',
+                                        'auto_fraction' => false,
+                                        'external_reference' => (string) $index,
+                                        'external_name' => $addOnName,
+                                    ]);
+                                    $mappedCount++;
+                                }
+                            } else if ($existingMapping) {
+                                // CUIDADO: Só deletar se o mapping é do tipo 'addon', NÃO deletar sabores!
+                                if ($existingMapping->mapping_type === 'addon') {
+                                    \Log::debug('   🗑️ Deletando mapping addon (sem produto)', ['mapping_id' => $existingMapping->id]);
+                                    // Se NÃO há produto vinculado mas existe mapping, deletar
+                                    // (usuário removeu a associação do produto)
+                                    $existingMapping->delete();
+                                    $deletedCount++;
+                                } else {
+                                    \Log::warning('   ⚠️ Mapping encontrado NÃO é addon, mantendo', [
+                                        'mapping_id' => $existingMapping->id,
+                                        'mapping_type' => $existingMapping->mapping_type,
+                                    ]);
+                                }
+                            } else {
+                                \Log::debug('   ⏭️ Sem produto e sem mapping - nada a fazer');
+                            }
+                            // Se não há produto E não há mapping existente, não faz nada
+                            // (usuário apenas classificou sem vincular produto)
+                        }
+                    }
+                }
+            }
+
+            \Log::info('✅ Add-on aplicado a pedidos históricos', [
+                'created' => $mappedCount,
+                'updated' => $updatedCount,
+                'deleted' => $deletedCount,
+            ]);
+
+            return;
+        }
+
+        // Para itens principais (não add-ons), buscar por SKU normal
         $orderItems = OrderItem::where('tenant_id', $tenantId)
             ->where('sku', $mapping->external_item_id)
             ->whereDoesntHave('mappings', function ($q) {
@@ -775,25 +911,13 @@ class ItemTriageController extends Controller
 
         // Atualizar OrderItemMappings existentes com o novo internal_product_id
         foreach ($orderItems as $orderItem) {
-            // Buscar mappings do tipo 'main' para este order_item
-            $itemMappings = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
+            // DELETAR todos os mappings do tipo 'main' existentes para este order_item
+            \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
                 ->where('mapping_type', 'main')
-                ->get();
+                ->delete();
 
-            if ($itemMappings->isNotEmpty()) {
-                // Atualizar mappings existentes
-                foreach ($itemMappings as $itemMapping) {
-                    // Calcular CMV correto baseado no tamanho
-                    $product = InternalProduct::find($mapping->internal_product_id);
-                    $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
-
-                    $itemMapping->update([
-                        'internal_product_id' => $mapping->internal_product_id,
-                        'unit_cost_override' => $correctCMV, // CMV calculado por tamanho
-                    ]);
-                }
-            } elseif ($mapping->internal_product_id) {
-                // Criar novo mapping se não existir e há produto vinculado
+            // RECRIAR mapping com o produto correto
+            if ($mapping->internal_product_id) {
                 // Calcular CMV correto baseado no tamanho
                 $product = InternalProduct::find($mapping->internal_product_id);
                 $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
@@ -810,7 +934,7 @@ class ItemTriageController extends Controller
                 ]);
             }
 
-            // NOVO: Se vinculou um produto pai (parent_product), recalcular frações dos sabores
+            // Se vinculou um produto pai (parent_product), recalcular frações dos sabores
             if ($mapping->item_type === 'parent_product' && $mapping->internal_product_id) {
                 $pizzaFractionService = new \App\Services\PizzaFractionService;
                 $pizzaFractionService->recalculateFractions($orderItem);
