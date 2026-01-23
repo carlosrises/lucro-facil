@@ -552,6 +552,12 @@ class ItemTriageController extends Controller
         }
 
         if (empty($itemsPayload)) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Nenhum item selecionado para classificação.',
+                ], 400);
+            }
             return back()->withErrors([
                 'items' => 'Nenhum item selecionado para classificação.',
             ]);
@@ -573,7 +579,15 @@ class ItemTriageController extends Controller
         $isDetaching = $validated['internal_product_id'] === null;
 
         if ($processedCount === 1 && isset($results[0]['message'])) {
-            return back()->with('success', $results[0]['message']);
+            $message = $results[0]['message'];
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $message,
+                    'mapped_count' => $results[0]['mapped_count'] ?? 0,
+                ]);
+            }
+            return back()->with('success', $message);
         }
 
         $summaryMessage = $processedCount > 1
@@ -587,6 +601,15 @@ class ItemTriageController extends Controller
 
         if ($processedCount > 1 && $flavorOccurrences > 0) {
             $summaryMessage .= " {$flavorOccurrences} ocorrências ajustadas.";
+        }
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => $summaryMessage,
+                'processed_count' => $processedCount,
+                'mapped_count' => $flavorOccurrences,
+            ]);
         }
 
         return back()->with('success', $summaryMessage);
