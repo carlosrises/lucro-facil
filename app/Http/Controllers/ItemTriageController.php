@@ -552,12 +552,6 @@ class ItemTriageController extends Controller
         }
 
         if (empty($itemsPayload)) {
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Nenhum item selecionado para classificação.',
-                ], 400);
-            }
             return back()->withErrors([
                 'items' => 'Nenhum item selecionado para classificação.',
             ]);
@@ -580,13 +574,6 @@ class ItemTriageController extends Controller
 
         if ($processedCount === 1 && isset($results[0]['message'])) {
             $message = $results[0]['message'];
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => $message,
-                    'mapped_count' => $results[0]['mapped_count'] ?? 0,
-                ]);
-            }
             return back()->with('success', $message);
         }
 
@@ -613,6 +600,53 @@ class ItemTriageController extends Controller
         }
 
         return back()->with('success', $summaryMessage);
+    }
+
+    /**
+     * API endpoint para classificação via AJAX (QuickLinkDialog)
+     */
+    public function classifyApi(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'sku' => 'required|string',
+                'name' => 'required|string',
+                'item_type' => 'required|in:flavor,beverage,complement,parent_product,optional,combo,side,dessert',
+                'internal_product_id' => 'nullable|exists:internal_products,id',
+            ]);
+
+            $tenantId = $request->user()->tenant_id;
+
+            $result = $this->processItemClassification(
+                tenantId: $tenantId,
+                sku: $validated['sku'],
+                name: $validated['name'],
+                itemType: $validated['item_type'],
+                internalProductId: $validated['internal_product_id']
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => $result['message'] ?? 'Item classificado com sucesso!',
+                'mapped_count' => $result['mapped_count'] ?? 0,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Dados inválidos',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Erro no classifyApi', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao classificar item: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
@@ -886,6 +920,12 @@ class ItemTriageController extends Controller
                 'deleted' => $deletedCount,
             ]);
 
+            // Recalcular custos dos pedidos afetados
+            if ($mappedCount > 0 || $updatedCount > 0 || $deletedCount > 0) {
+                $affectedOrderIds = $orderItems->pluck('order_id')->unique();
+                $this->recalculateAffectedOrders($affectedOrderIds);
+            }
+
             return;
         }
 
@@ -932,6 +972,12 @@ class ItemTriageController extends Controller
                 $pizzaFractionService = new \App\Services\PizzaFractionService;
                 $pizzaFractionService->recalculateFractions($orderItem);
             }
+        }
+
+        // Recalcular custos dos pedidos afetados
+        if ($orderItems->isNotEmpty()) {
+            $affectedOrderIds = $orderItems->pluck('order_id')->unique();
+            $this->recalculateAffectedOrders($affectedOrderIds);
         }
     }
 
@@ -1042,6 +1088,31 @@ class ItemTriageController extends Controller
                 // Depois, recalcular frações de todos os sabores
                 $pizzaFractionService = new \App\Services\PizzaFractionService;
                 $pizzaFractionService->recalculateFractions($orderItem);
+            }
+        }
+
+        // Coletar IDs únicos de pedidos que precisam ser recalculados
+        $orderIds = $orderItems->pluck('order_id')->unique();
+        $this->recalculateAffectedOrders($orderIds);
+    }
+
+    /**
+     * Recalcular custos dos pedidos afetados
+     */
+    private function recalculateAffectedOrders($orderIds): void
+    {
+        $costService = app(\App\Services\OrderCostService::class);
+        foreach ($orderIds as $orderId) {
+            $order = Order::find($orderId);
+            if ($order) {
+                $result = $costService->calculateOrderCosts($order);
+                $order->update([
+                    'calculated_costs' => $result,
+                    'total_costs' => $result['total_costs'] ?? 0,
+                    'total_commissions' => $result['total_commissions'] ?? 0,
+                    'net_revenue' => $result['net_revenue'] ?? 0,
+                    'costs_calculated_at' => now(),
+                ]);
             }
         }
     }
