@@ -1366,7 +1366,7 @@ export function OrderFinancialCard({
                                                                         // Se for sabor, calcular fração baseado em TODOS os sabores classificados (mesmo sem produto)
                                                                         let individualFraction = 1;
 
-                                                                        // Verificar DIRETAMENTE se é flavor pelo ProductMapping (não depende de resolvedItemType)
+                                                                        // Verificar DIRETAMENTE se é flavor pelo ProductMapping (linha 1368)
                                                                         const isFlavor =
                                                                             productMapping?.item_type ===
                                                                             'flavor';
