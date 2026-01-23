@@ -135,12 +135,14 @@ type OrderFinancialCardProps = {
         raw?: unknown;
     };
     order?: Order;
+    onReloadOrder?: (orderId: number) => void;
 };
 
 export function OrderFinancialCard({
     sale,
     order,
     internalProducts = [],
+    onReloadOrder,
 }: OrderFinancialCardProps) {
     // Estado para controlar o dialog de criação de taxa
     const [isCreateFeeDialogOpen, setIsCreateFeeDialogOpen] = useState(false);
@@ -164,12 +166,8 @@ export function OrderFinancialCard({
 
     // Função para recarregar dados do pedido
     const handleReloadOrder = () => {
-        if (order?.id) {
-            router.reload({
-                only: ['order'],
-                preserveScroll: true,
-                preserveState: true,
-            });
+        if (order?.id && onReloadOrder) {
+            onReloadOrder(order.id);
         }
     };
 

@@ -364,7 +364,7 @@ export function QuickLinkDialog({
                 internal_product_id: selectedProduct,
             };
 
-            const response = await fetch('/item-triage/classify', {
+            const response = await fetch('/api/item-triage/classify', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -400,7 +400,7 @@ export function QuickLinkDialog({
             const result = await response.json();
             console.log('[QuickLinkDialog] Response JSON:', result);
 
-            if (!response.ok) {
+            if (!response.ok || !result.success) {
                 toast.error(result.message || 'Erro ao vincular item');
                 setIsSubmitting(false);
                 isOperatingRef.current = false;
