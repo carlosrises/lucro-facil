@@ -158,9 +158,13 @@ class FlavorMappingService
                 ]);
 
                 $mappedCount++;
+            }
 
-                // NOVO: Recalcular frações de todos os sabores deste order_item
-                $this->recalculateAllFlavorsForOrderItem($orderItem);
+            // Recalcular frações de todos os sabores deste order_item usando PizzaFractionService
+            // que garante cálculos corretos baseados no tamanho do produto pai
+            if ($mappedCount > 0) {
+                $pizzaFractionService = new \App\Services\PizzaFractionService;
+                $pizzaFractionService->recalculateFractions($orderItem);
             }
         }
 
