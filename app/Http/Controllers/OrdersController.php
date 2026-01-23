@@ -22,8 +22,7 @@ class OrdersController extends Controller
                 'delivery_fee', 'tip', 'net_total', 'raw', 'tenant_id',
                 'calculated_costs', 'total_costs', 'total_commissions', 'net_revenue', 'costs_calculated_at',
             ])
-            // Carregar items + mappings necessários para cálculo de CMV nas colunas
-            // Relacionamentos profundos (add_ons detalhados, sale) são carregados ao expandir
+            // Carregar items + mappings (sale carregado apenas ao expandir, por lazy loading)
             ->with([
                 'items:id,order_id,sku,name,qty,unit_price,total,add_ons,tenant_id',
                 'items.mappings:id,order_item_id,internal_product_id,unit_cost_override,quantity,mapping_type,external_reference',
@@ -76,10 +75,10 @@ class OrdersController extends Controller
                     $query->whereRaw("JSON_LENGTH(JSON_EXTRACT(calculated_costs, '$.payment_methods')) = 0 OR JSON_EXTRACT(calculated_costs, '$.payment_methods') IS NULL");
                 })
                 // Excluir pedidos Takeat sem pagamento (não têm como ter taxa)
-                ->where(function ($query) {
-                    $query->where('provider', '!=', 'takeat')
-                        ->orWhereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) > 0");
-                });
+                    ->where(function ($query) {
+                        $query->where('provider', '!=', 'takeat')
+                            ->orWhereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) > 0");
+                    });
             })
             ->when($request->input('no_payment_info'), function ($q) {
                 // Filtrar pedidos Takeat sem informação de pagamento
@@ -725,7 +724,7 @@ class OrdersController extends Controller
             $validated['cost_commission_id']
         );
 
-        if (!$success) {
+        if (! $success) {
             return redirect()->back()->with('error', 'Erro: Taxa não encontrada ou não pertence a este tenant.');
         }
 
@@ -885,9 +884,9 @@ class OrdersController extends Controller
             $isTakeatIfood = $provider === 'takeat' && $order->origin === 'ifood';
             $skipDeliveryFeeInSubtotal = $isTakeatIfood && $isMarketplaceDelivery;
 
-            if (!$usedTotalDeliveryPrice) {
+            if (! $usedTotalDeliveryPrice) {
                 $orderSubtotal += $totalSubsidy;
-                if (!$skipDeliveryFeeInSubtotal) {
+                if (! $skipDeliveryFeeInSubtotal) {
                     $orderSubtotal += $deliveryFee;
                 }
             } elseif ($skipDeliveryFeeInSubtotal && $deliveryFee > 0) {
