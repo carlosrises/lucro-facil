@@ -235,6 +235,24 @@ class SyncOrdersJob implements ShouldQueue
                             // Auto-aplicar mapeamento se existir ProductMapping para este SKU
                             $this->autoApplyMappings($orderItem);
                         }
+
+                        // Recalcular custos do pedido após criar/atualizar itens
+                        try {
+                            $costService = app(\App\Services\OrderCostService::class);
+                            $result = $costService->calculateOrderCosts($order->fresh());
+                            $order->update([
+                                'calculated_costs' => $result,
+                                'total_costs' => $result['total_costs'] ?? 0,
+                                'total_commissions' => $result['total_commissions'] ?? 0,
+                                'net_revenue' => $result['net_revenue'] ?? 0,
+                                'costs_calculated_at' => now(),
+                            ]);
+                        } catch (Throwable $costError) {
+                            logger()->error('Erro ao calcular custos do pedido iFood', [
+                                'order_id' => $order->id,
+                                'error' => $costError->getMessage(),
+                            ]);
+                        }
                     } catch (Throwable $e) {
                         logger()->error('Erro ao processar pedido iFood', [
                             'tenant_id' => $this->tenantId,
