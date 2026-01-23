@@ -977,26 +977,41 @@ export function OrderFinancialCard({
                                                     ? item.add_ons
                                                     : [];
 
-                                                // DEBUG: Log dos add_ons_product_mappings
+                                                // DEBUG: Log SEMPRE para ver todos os pedidos
+                                                console.log(
+                                                    '[DEBUG] Processando item:',
+                                                    {
+                                                        orderId: order.id,
+                                                        itemId: item.id,
+                                                        itemName: item.name,
+                                                        hasAddOns:
+                                                            rawAddOns.length >
+                                                            0,
+                                                        addOnsCount:
+                                                            rawAddOns.length,
+                                                    },
+                                                );
+
+                                                // DEBUG específico para pedido 24729
                                                 if (
                                                     item.id === 24729 ||
                                                     order.id === 24729
                                                 ) {
                                                     console.log(
-                                                        '[DEBUG] Order:',
+                                                        '[DEBUG 24729] Order:',
                                                         order.id,
                                                     );
                                                     console.log(
-                                                        '[DEBUG] Item:',
+                                                        '[DEBUG 24729] Item:',
                                                         item.id,
                                                         item.name,
                                                     );
                                                     console.log(
-                                                        '[DEBUG] add_ons:',
+                                                        '[DEBUG 24729] add_ons:',
                                                         item.add_ons,
                                                     );
                                                     console.log(
-                                                        '[DEBUG] add_ons_product_mappings:',
+                                                        '[DEBUG 24729] add_ons_product_mappings:',
                                                         item.add_ons_product_mappings,
                                                     );
                                                 }
@@ -1394,7 +1409,65 @@ export function OrderFinancialCard({
                                                                             resolvedItemType ===
                                                                             'flavor'
                                                                         ) {
+                                                                            // DEBUG: Log detalhado do cálculo de fração
+                                                                            console.log(
+                                                                                `[FRACTION DEBUG] Item ${item.id} - Sabor "${addOn.name}"`,
+                                                                            );
+                                                                            console.log(
+                                                                                '  enrichedAddOns:',
+                                                                                enrichedAddOns.map(
+                                                                                    (
+                                                                                        a,
+                                                                                    ) => ({
+                                                                                        name: a.name,
+                                                                                        has_product_mapping:
+                                                                                            !!a.product_mapping,
+                                                                                        item_type:
+                                                                                            a
+                                                                                                .product_mapping
+                                                                                                ?.item_type,
+                                                                                        quantity:
+                                                                                            a.quantity,
+                                                                                    }),
+                                                                                ),
+                                                                            );
+
                                                                             // Contar quantos add-ons são sabores (classificados como 'flavor')
+                                                                            const flavorsWithType =
+                                                                                enrichedAddOns.map(
+                                                                                    (
+                                                                                        a,
+                                                                                    ) => {
+                                                                                        const pm =
+                                                                                            a.product_mapping;
+                                                                                        const oit =
+                                                                                            resolveItemType(
+                                                                                                pm?.item_type,
+                                                                                                a
+                                                                                                    .mapping
+                                                                                                    ?.option_type,
+                                                                                            );
+                                                                                        return {
+                                                                                            name: a.name,
+                                                                                            pm_item_type:
+                                                                                                pm?.item_type,
+                                                                                            resolved:
+                                                                                                oit,
+                                                                                            is_flavor:
+                                                                                                oit ===
+                                                                                                'flavor',
+                                                                                            quantity:
+                                                                                                a.quantity ||
+                                                                                                1,
+                                                                                        };
+                                                                                    },
+                                                                                );
+
+                                                                            console.log(
+                                                                                '  flavorsWithType:',
+                                                                                flavorsWithType,
+                                                                            );
+
                                                                             const flavorCount =
                                                                                 enrichedAddOns
                                                                                     .filter(
@@ -1431,6 +1504,10 @@ export function OrderFinancialCard({
                                                                                 addOn.quantity ||
                                                                                 1;
 
+                                                                            console.log(
+                                                                                `  flavorCount: ${flavorCount}, addonQuantity: ${addonQuantity}`,
+                                                                            );
+
                                                                             if (
                                                                                 flavorCount >
                                                                                 0
@@ -1438,6 +1515,9 @@ export function OrderFinancialCard({
                                                                                 individualFraction =
                                                                                     addonQuantity /
                                                                                     flavorCount;
+                                                                                console.log(
+                                                                                    `  individualFraction: ${individualFraction}`,
+                                                                                );
                                                                             }
                                                                         } else {
                                                                             // Para outros tipos, usar a quantity do mapping se existir
@@ -1547,6 +1627,11 @@ export function OrderFinancialCard({
                                                                             } else {
                                                                                 fractionText = `${(individualFraction * 100).toFixed(0)}%`;
                                                                             }
+
+                                                                            // DEBUG: Log final do fractionText
+                                                                            console.log(
+                                                                                `  fractionText gerado: "${fractionText}"`,
+                                                                            );
                                                                         }
 
                                                                         // Tooltip com produto vinculado
