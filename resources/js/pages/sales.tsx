@@ -1,8 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { Head, usePage } from '@inertiajs/react';
 
-import { index as salesRoute } from '@/routes/sales';
-
 import { Sale } from '@/components/sales/columns';
 import { DataTable } from '@/components/sales/data-table';
 import { type BreadcrumbItem } from '@/types';
@@ -10,7 +8,7 @@ import { type BreadcrumbItem } from '@/types';
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Vendas',
-        href: salesRoute().url,
+        href: '/sales',
     },
 ];
 
