@@ -33,7 +33,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { useForm, usePage } from '@inertiajs/react';
+import { usePage } from '@inertiajs/react';
 import { Calculator, Info, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -59,14 +59,16 @@ interface ProductFormDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     product: Product | null;
+    onSuccess?: (product: any) => void;
 }
 
 export function ProductFormDialog({
     open,
     onOpenChange,
     product,
+    onSuccess: onSuccessCallback,
 }: ProductFormDialogProps) {
-    const { ingredients, taxCategories } = usePage<{
+    const pageProps = usePage<{
         ingredients?: Ingredient[];
         taxCategories?: Array<{
             id: number;
@@ -75,10 +77,44 @@ export function ProductFormDialog({
             total_tax_rate: number;
         }>;
     }>().props;
-    const availableIngredients = ingredients || [];
-    const availableTaxCategories = taxCategories || [];
 
-    const { data, setData, post, put, processing, errors, reset } = useForm({
+    const [availableIngredients, setAvailableIngredients] = useState<
+        Ingredient[]
+    >(pageProps.ingredients || []);
+    const [availableTaxCategories, setAvailableTaxCategories] = useState<
+        Array<{
+            id: number;
+            name: string;
+            tax_calculation_type: string;
+            total_tax_rate: number;
+        }>
+    >(pageProps.taxCategories || []);
+
+    // Buscar ingredientes e categorias via API se não estiverem disponíveis nas props
+    useEffect(() => {
+        if (open && availableIngredients.length === 0) {
+            fetch('/api/ingredients')
+                .then((res) => res.json())
+                .then((data) => {
+                    setAvailableIngredients(data);
+                })
+                .catch((err) =>
+                    console.error('Erro ao carregar ingredientes:', err),
+                );
+        }
+        if (open && availableTaxCategories.length === 0) {
+            fetch('/api/tax-categories')
+                .then((res) => res.json())
+                .then((data) => {
+                    setAvailableTaxCategories(data);
+                })
+                .catch((err) =>
+                    console.error('Erro ao carregar categorias fiscais:', err),
+                );
+        }
+    }, [open]);
+
+    const [data, setData] = useState({
         name: '',
         sku: '',
         type: 'product',
@@ -87,13 +123,39 @@ export function ProductFormDialog({
         size: '',
         unit: 'unit',
         unit_cost: '0',
-        sale_price: '',
+        sale_price: '0',
         tax_category_id: '',
         active: true,
         is_ingredient: false,
         recipe: [] as TechnicalSheetItem[],
         update_existing_orders: false,
     });
+    const [processing, setProcessing] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
+    const updateData = (key: string, value: any) => {
+        setData((prev) => ({ ...prev, [key]: value }));
+    };
+
+    const reset = () => {
+        setData({
+            name: '',
+            sku: '',
+            type: 'product',
+            product_category: '',
+            max_flavors: 1,
+            size: '',
+            unit: 'unit',
+            unit_cost: '0',
+            sale_price: '0',
+            tax_category_id: '',
+            active: true,
+            is_ingredient: false,
+            recipe: [],
+            update_existing_orders: false,
+        });
+        setErrors({});
+    };
 
     const [selectedIngredientId, setSelectedIngredientId] =
         useState<string>('');
@@ -242,7 +304,7 @@ export function ProductFormDialog({
             // Atualizar quantidade
             const newRecipe = [...data.recipe];
             newRecipe[existingIndex].qty = parseFloat(ingredientQty);
-            setData('recipe', newRecipe);
+            updateData('recipe', newRecipe);
         } else {
             // Adicionar novo
             const newItem: TechnicalSheetItem = {
@@ -258,7 +320,7 @@ export function ProductFormDialog({
                 newItem.size = selectedSize;
             }
 
-            setData('recipe', [...data.recipe, newItem]);
+            updateData('recipe', [...data.recipe, newItem]);
         }
 
         setSelectedIngredientId('');
@@ -270,7 +332,7 @@ export function ProductFormDialog({
         ingredientId: number,
         size?: string,
     ) => {
-        setData(
+        updateData(
             'recipe',
             data.recipe.filter((item) => {
                 if (data.product_category === 'sabor_pizza' && size) {
@@ -294,14 +356,16 @@ export function ProductFormDialog({
             const newCost = cmv.toFixed(4);
             // Só atualizar se realmente mudou para evitar loops
             if (currentCost !== newCost) {
-                setData('unit_cost', newCost);
+                updateData('unit_cost', newCost);
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [data.recipe, open]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setProcessing(true);
+        setErrors({});
 
         // Se tem produto E não é duplicação, então é edição
         const isDuplicate =
@@ -309,29 +373,54 @@ export function ProductFormDialog({
             '_isDuplicate' in product &&
             (product as { _isDuplicate?: boolean })._isDuplicate;
 
-        if (product && !isDuplicate) {
-            put(`/products/${product.id}`, {
-                onSuccess: () => {
-                    toast.success('Produto atualizado com sucesso!');
-                    onOpenChange(false);
-                    reset();
+        const isEdit = product && !isDuplicate;
+        const url = isEdit ? `/products/${product.id}` : '/products';
+        const method = isEdit ? 'PUT' : 'POST';
+
+        try {
+            const response = await fetch(url, {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN':
+                        document
+                            .querySelector('meta[name="csrf-token"]')
+                            ?.getAttribute('content') || '',
                 },
-                onError: () => {
-                    toast.error('Erro ao atualizar produto');
-                },
+                body: JSON.stringify(data),
             });
-        } else {
-            // Criar novo produto (tanto para novo quanto para duplicação)
-            post('/products', {
-                onSuccess: () => {
-                    toast.success('Produto criado com sucesso!');
-                    onOpenChange(false);
-                    reset();
-                },
-                onError: () => {
-                    toast.error('Erro ao criar produto');
-                },
-            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                // Tratar erros de validação
+                if (result.errors) {
+                    setErrors(result.errors);
+                }
+                toast.error(
+                    result.message ||
+                        `Erro ao ${isEdit ? 'atualizar' : 'criar'} produto`,
+                );
+                setProcessing(false);
+                return;
+            }
+
+            toast.success(
+                `Produto ${isEdit ? 'atualizado' : 'criado'} com sucesso!`,
+            );
+
+            if (onSuccessCallback && result.product) {
+                onSuccessCallback(result.product);
+            }
+
+            onOpenChange(false);
+            reset();
+        } catch (error) {
+            console.error('Erro ao salvar produto:', error);
+            toast.error(`Erro ao ${isEdit ? 'atualizar' : 'criar'} produto`);
+        } finally {
+            setProcessing(false);
         }
     };
 
@@ -392,7 +481,10 @@ export function ProductFormDialog({
                                             id="name"
                                             value={data.name}
                                             onChange={(e) =>
-                                                setData('name', e.target.value)
+                                                updateData(
+                                                    'name',
+                                                    e.target.value,
+                                                )
                                             }
                                             placeholder="Ex: Pizza Margherita"
                                             required
@@ -410,7 +502,10 @@ export function ProductFormDialog({
                                             id="sku"
                                             value={data.sku}
                                             onChange={(e) =>
-                                                setData('sku', e.target.value)
+                                                updateData(
+                                                    'sku',
+                                                    e.target.value,
+                                                )
                                             }
                                             placeholder="Código do produto"
                                         />
@@ -434,7 +529,7 @@ export function ProductFormDialog({
                                         <Select
                                             value={data.type}
                                             onValueChange={(value) =>
-                                                setData('type', value)
+                                                updateData('type', value)
                                             }
                                         >
                                             <SelectTrigger className="w-full">
@@ -462,7 +557,7 @@ export function ProductFormDialog({
                                                 data.product_category || 'none'
                                             }
                                             onValueChange={(value) =>
-                                                setData(
+                                                updateData(
                                                     'product_category',
                                                     value === 'none'
                                                         ? ''
@@ -516,7 +611,7 @@ export function ProductFormDialog({
                                             <Select
                                                 value={data.size || 'none'}
                                                 onValueChange={(value) =>
-                                                    setData(
+                                                    updateData(
                                                         'size',
                                                         value === 'none'
                                                             ? ''
@@ -592,7 +687,7 @@ export function ProductFormDialog({
                                                 max="10"
                                                 value={data.max_flavors}
                                                 onChange={(e) =>
-                                                    setData(
+                                                    updateData(
                                                         'max_flavors',
                                                         parseInt(
                                                             e.target.value,
@@ -618,7 +713,7 @@ export function ProductFormDialog({
                                     <Select
                                         value={data.unit}
                                         onValueChange={(value) =>
-                                            setData('unit', value)
+                                            updateData('unit', value)
                                         }
                                     >
                                         <SelectTrigger className="w-full">
@@ -664,7 +759,7 @@ export function ProductFormDialog({
                                             step="0.0001"
                                             value={data.unit_cost}
                                             onChange={(e) =>
-                                                setData(
+                                                updateData(
                                                     'unit_cost',
                                                     e.target.value,
                                                 )
@@ -687,10 +782,7 @@ export function ProductFormDialog({
 
                                     <div className="grid gap-2">
                                         <Label htmlFor="sale_price">
-                                            Preço de Venda{' '}
-                                            <span className="text-red-500">
-                                                *
-                                            </span>
+                                            Preço de Venda
                                         </Label>
                                         <Input
                                             id="sale_price"
@@ -698,13 +790,12 @@ export function ProductFormDialog({
                                             step="0.01"
                                             value={data.sale_price}
                                             onChange={(e) =>
-                                                setData(
+                                                updateData(
                                                     'sale_price',
                                                     e.target.value,
                                                 )
                                             }
                                             placeholder="0.00"
-                                            required
                                         />
                                         {margin > 0 && (
                                             <p className="text-xs text-muted-foreground">
@@ -727,7 +818,7 @@ export function ProductFormDialog({
                                     <Select
                                         value={data.tax_category_id || 'none'}
                                         onValueChange={(value) =>
-                                            setData(
+                                            updateData(
                                                 'tax_category_id',
                                                 value === 'none' ? '' : value,
                                             )
@@ -776,7 +867,7 @@ export function ProductFormDialog({
                                         id="active"
                                         checked={data.active}
                                         onCheckedChange={(checked) =>
-                                            setData('active', checked)
+                                            updateData('active', checked)
                                         }
                                     />
                                 </div>
@@ -799,7 +890,7 @@ export function ProductFormDialog({
                                         id="is_ingredient"
                                         checked={data.is_ingredient}
                                         onCheckedChange={(checked) =>
-                                            setData('is_ingredient', checked)
+                                            updateData('is_ingredient', checked)
                                         }
                                     />
                                 </div>
@@ -1184,7 +1275,7 @@ export function ProductFormDialog({
                                     id="update_existing_orders"
                                     checked={data.update_existing_orders}
                                     onCheckedChange={(checked) =>
-                                        setData(
+                                        updateData(
                                             'update_existing_orders',
                                             checked,
                                         )
