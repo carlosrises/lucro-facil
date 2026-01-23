@@ -849,6 +849,27 @@ export function OrderFinancialCard({
                                         {/* Detalhamento dos custos por produto */}
                                         <ul className="flex w-full flex-col items-center justify-between pl-0">
                                             {items.map((item: OrderItem) => {
+                                                // DEBUG: Log PRIMEIRO quando processa cada item
+                                                console.log(
+                                                    `[DEBUG START] Processando OrderItem ${item.id}`,
+                                                    {
+                                                        name: item.name,
+                                                        has_add_ons:
+                                                            !!item.add_ons,
+                                                        add_ons_length:
+                                                            Array.isArray(
+                                                                item.add_ons,
+                                                            )
+                                                                ? item.add_ons
+                                                                      .length
+                                                                : 0,
+                                                        has_add_ons_product_mappings:
+                                                            !!item.add_ons_product_mappings,
+                                                        add_ons_product_mappings:
+                                                            item.add_ons_product_mappings,
+                                                    },
+                                                );
+
                                                 // Custo apenas do item principal (add-ons são listados separadamente abaixo)
                                                 const itemTotalCost =
                                                     calculateItemCost(item);
