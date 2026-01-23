@@ -900,11 +900,70 @@ class ItemTriageController extends Controller
                 'unit_cost_override' => $correctCMV,
             ]);
 
-            // Se for parent_product (pizza completa), recalcular sabores existentes
+            // Se for parent_product (pizza completa), criar mappings dos sabores e recalcular
             if ($mapping->item_type === 'parent_product' && $product) {
+                // Primeiro, criar OrderItemMappings para sabores que já têm ProductMapping
+                $this->createFlavorMappingsForOrderItem($orderItem, $tenantId);
+                
+                // Depois, recalcular frações de todos os sabores
                 $pizzaFractionService = new \App\Services\PizzaFractionService;
                 $pizzaFractionService->recalculateFractions($orderItem);
             }
+        }
+    }
+
+    /**
+     * Criar OrderItemMappings para sabores que já têm ProductMapping mas não têm OrderItemMapping
+     */
+    private function createFlavorMappingsForOrderItem(OrderItem $orderItem, int $tenantId): void
+    {
+        if (!$orderItem->add_ons || !is_array($orderItem->add_ons)) {
+            return;
+        }
+
+        foreach ($orderItem->add_ons as $index => $addOn) {
+            $addOnName = $addOn['name'] ?? '';
+            if (!$addOnName) {
+                continue;
+            }
+
+            // Gerar SKU do add-on
+            $addOnSku = 'addon_' . md5($addOnName);
+
+            // Verificar se já tem OrderItemMapping
+            $existingMapping = \App\Models\OrderItemMapping::where('order_item_id', $orderItem->id)
+                ->where('mapping_type', 'addon')
+                ->where('external_reference', (string) $index)
+                ->first();
+
+            if ($existingMapping) {
+                continue; // Já tem mapping, pular
+            }
+
+            // Buscar ProductMapping do sabor
+            $productMapping = ProductMapping::where('tenant_id', $tenantId)
+                ->where('external_item_id', $addOnSku)
+                ->where('item_type', 'flavor')
+                ->first();
+
+            if (!$productMapping || !$productMapping->internal_product_id) {
+                continue; // Não está classificado como sabor ou sem produto vinculado
+            }
+
+            // Criar OrderItemMapping para este sabor
+            $addOnQty = $addOn['quantity'] ?? 1;
+
+            \App\Models\OrderItemMapping::create([
+                'tenant_id' => $tenantId,
+                'order_item_id' => $orderItem->id,
+                'internal_product_id' => $productMapping->internal_product_id,
+                'quantity' => $addOnQty, // Será recalculado pelo PizzaFractionService
+                'mapping_type' => 'addon',
+                'option_type' => 'pizza_flavor',
+                'auto_fraction' => true,
+                'external_reference' => (string) $index,
+                'external_name' => $addOnName,
+            ]);
         }
     }
 
