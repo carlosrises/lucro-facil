@@ -9,6 +9,7 @@ import { useRealtimeOrders } from '@/hooks/use-realtime-orders';
 import { type BreadcrumbItem } from '@/types';
 import { RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -247,6 +248,50 @@ export default function Orders() {
     );
 
     useRealtimeOrders(auth.user?.tenant_id, handleOrderUpsert);
+
+    // Listener para recálculo de pedidos após vincular taxa (Triagem/LinkPaymentFee)
+    useEffect(() => {
+        if (!auth.user?.tenant_id) return;
+
+        const channel = (window as any).Echo?.private(
+            `tenant.${auth.user.tenant_id}`,
+        );
+
+        if (!channel) {
+            console.warn(
+                'Echo não disponível para ouvir payment-method-linked',
+            );
+            return;
+        }
+
+        const handlePaymentMethodLinked = (event: any) => {
+            console.log('payment-method-linked recebido:', event);
+
+            if (event.success) {
+                toast.success(
+                    `✅ Recálculo concluído! ${event.orders_recalculated} pedido(s) atualizado(s).`,
+                    { duration: 5000 },
+                );
+
+                // Recarregar a página para mostrar os dados atualizados
+                window.location.reload();
+            } else {
+                toast.error(
+                    `❌ Erro no recálculo: ${event.error || 'Erro desconhecido'}`,
+                    { duration: 7000 },
+                );
+            }
+        };
+
+        channel.listen('.payment-method-linked', handlePaymentMethodLinked);
+
+        return () => {
+            channel.stopListening(
+                '.payment-method-linked',
+                handlePaymentMethodLinked,
+            );
+        };
+    }, [auth.user?.tenant_id]);
 
     // Hook para verificar novos pedidos sincronizados (DESABILITADO - usando WebSocket)
     // const { hasNewOrders, newOrdersCount, refreshOrders } = useOrderPolling({
