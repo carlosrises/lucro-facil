@@ -256,7 +256,7 @@ export function ProductFormDialog({
         } else if (!open) {
             reset();
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, [product, open]);
 
     const calculateCMV = () => {

@@ -57,6 +57,11 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
         href: '/item-triage',
         icon: ClipboardList,
     },
+    {
+        title: 'Triagem de Pagamentos',
+        href: '/payment-triage',
+        icon: CreditCard,
+    },
     // {
     //     title: 'Vendas',
     //     href: sales(),

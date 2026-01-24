@@ -1,4 +1,5 @@
 import { startRecalculateMonitoring } from '@/components/global-recalculate-progress';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Combobox } from '@/components/ui/combobox';
 import {
@@ -20,6 +21,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useForm, usePage } from '@inertiajs/react';
+import { AlertTriangle } from 'lucide-react';
 import * as React from 'react';
 import { CostCommission } from './columns';
 
@@ -268,32 +270,57 @@ export function CostCommissionFormDialog({
                         )}
                     </div>
 
-                    {/* Marketplace/Provider */}
-                    <div className="space-y-2">
-                        <Label htmlFor="provider">Marketplace</Label>
-                        <Combobox
-                            options={[
-                                { value: '', label: 'Todos os marketplaces' },
-                                ...availableProviders.map((provider) => ({
-                                    value: provider.value,
-                                    label: provider.label,
-                                })),
-                            ]}
-                            value={data.provider || ''}
-                            onChange={(value) => setData('provider', value)}
-                            placeholder="Selecione um marketplace..."
-                            searchPlaceholder="Buscar marketplace..."
-                            emptyMessage="Nenhum marketplace integrado"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            Apenas marketplaces integrados estão disponíveis
-                        </p>
-                        {errors.provider && (
-                            <p className="text-sm text-destructive">
-                                {errors.provider}
-                            </p>
+                    {/* Alerta para taxas antigas de payment_method */}
+                    {data.category === 'payment_method' &&
+                        isEditing &&
+                        data.provider && (
+                            <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+                                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                <AlertTitle>
+                                    Taxas Antigas Detectadas
+                                </AlertTitle>
+                                <AlertDescription className="text-sm">
+                                    Esta taxa será automaticamente convertida
+                                    para{' '}
+                                    <strong>"Todos os marketplaces"</strong> ao
+                                    salvar. Por favor, exclua as taxas
+                                    duplicadas que foram criadas individualmente
+                                    para cada marketplace.
+                                </AlertDescription>
+                            </Alert>
                         )}
-                    </div>
+
+                    {/* Marketplace/Provider - Oculto para payment_method pois será definido na triagem */}
+                    {data.category !== 'payment_method' && (
+                        <div className="space-y-2">
+                            <Label htmlFor="provider">Marketplace</Label>
+                            <Combobox
+                                options={[
+                                    {
+                                        value: '',
+                                        label: 'Todos os marketplaces',
+                                    },
+                                    ...availableProviders.map((provider) => ({
+                                        value: provider.value,
+                                        label: provider.label,
+                                    })),
+                                ]}
+                                value={data.provider || ''}
+                                onChange={(value) => setData('provider', value)}
+                                placeholder="Selecione um marketplace..."
+                                searchPlaceholder="Buscar marketplace..."
+                                emptyMessage="Nenhum marketplace integrado"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Apenas marketplaces integrados estão disponíveis
+                            </p>
+                            {errors.provider && (
+                                <p className="text-sm text-destructive">
+                                    {errors.provider}
+                                </p>
+                            )}
+                        </div>
+                    )}
 
                     {/* Tipo e Valor */}
                     <div className="grid grid-cols-2 gap-4">
@@ -358,48 +385,47 @@ export function CostCommissionFormDialog({
                         </div>
                     </div>
 
-                    {/* Aplica-se a */}
-                    <div className="space-y-2">
-                        <Label htmlFor="applies_to">
-                            Aplica-se a{' '}
-                            <span className="text-destructive">*</span>
-                        </Label>
-                        <Select
-                            value={data.applies_to}
-                            onValueChange={(value) =>
-                                setData(
-                                    'applies_to',
-                                    value as typeof data.applies_to,
-                                )
-                            }
-                        >
-                            <SelectTrigger id="applies_to">
-                                <SelectValue placeholder="Selecione" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all_orders">
-                                    Todos os pedidos
-                                </SelectItem>
-                                <SelectItem value="delivery_only">
-                                    Apenas Delivery
-                                </SelectItem>
-                                <SelectItem value="pickup_only">
-                                    Apenas Retirada
-                                </SelectItem>
-                                <SelectItem value="payment_method">
-                                    Método de pagamento
-                                </SelectItem>
-                                <SelectItem value="custom">
-                                    Personalizado
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        {errors.applies_to && (
-                            <p className="text-sm text-destructive">
-                                {errors.applies_to}
-                            </p>
-                        )}
-                    </div>
+                    {/* Aplica-se a - Oculto para payment_method */}
+                    {data.category !== 'payment_method' && (
+                        <div className="space-y-2">
+                            <Label htmlFor="applies_to">
+                                Aplica-se a{' '}
+                                <span className="text-destructive">*</span>
+                            </Label>
+                            <Select
+                                value={data.applies_to}
+                                onValueChange={(value) =>
+                                    setData(
+                                        'applies_to',
+                                        value as typeof data.applies_to,
+                                    )
+                                }
+                            >
+                                <SelectTrigger id="applies_to">
+                                    <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all_orders">
+                                        Todos os pedidos
+                                    </SelectItem>
+                                    <SelectItem value="delivery_only">
+                                        Apenas Delivery
+                                    </SelectItem>
+                                    <SelectItem value="pickup_only">
+                                        Apenas Retirada
+                                    </SelectItem>
+                                    <SelectItem value="custom">
+                                        Personalizado
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            {errors.applies_to && (
+                                <p className="text-sm text-destructive">
+                                    {errors.applies_to}
+                                </p>
+                            )}
+                        </div>
+                    )}
 
                     {/* Quem realiza o delivery (apenas para delivery_only) */}
                     {data.applies_to === 'delivery_only' && (
@@ -446,150 +472,6 @@ export function CostCommissionFormDialog({
                     )}
 
                     {/* Condição (condicional) */}
-                    {data.applies_to === 'payment_method' && (
-                        <>
-                            {/* Tipo de Pagamento */}
-                            <div className="space-y-2">
-                                <Label htmlFor="payment_type">
-                                    Tipo de Pagamento{' '}
-                                    <span className="text-destructive">*</span>
-                                </Label>
-                                <Select
-                                    value={data.payment_type || 'all'}
-                                    onValueChange={(value) =>
-                                        setData(
-                                            'payment_type',
-                                            value as
-                                                | 'all'
-                                                | 'online'
-                                                | 'offline',
-                                        )
-                                    }
-                                >
-                                    <SelectTrigger id="payment_type">
-                                        <SelectValue placeholder="Selecione" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">
-                                            Todos
-                                        </SelectItem>
-                                        <SelectItem value="online">
-                                            Online (Pago via Marketplace)
-                                        </SelectItem>
-                                        <SelectItem value="offline">
-                                            Offline (Pago ao Estabelecimento)
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground">
-                                    Online = pago via marketplace | Offline =
-                                    pago direto ao estabelecimento
-                                </p>
-                                {errors.payment_type && (
-                                    <p className="text-sm text-destructive">
-                                        {errors.payment_type}
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Métodos de Pagamento (seleção múltipla) - Apenas para offline e all */}
-                            {data.payment_type !== 'online' && (
-                                <div className="space-y-2">
-                                    <Label htmlFor="condition_values">
-                                        Métodos de Pagamento{' '}
-                                        <span className="text-destructive">
-                                            *
-                                        </span>
-                                    </Label>
-                                    {data.provider &&
-                                    getPaymentMethodsForProvider(data.provider)
-                                        .length > 0 ? (
-                                        <div className="space-y-2 rounded-md border p-3">
-                                            {getPaymentMethodsForProvider(
-                                                data.provider,
-                                            ).map((method) => (
-                                                <div
-                                                    key={method.value}
-                                                    className="flex items-center space-x-2"
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        id={`method-${method.value}`}
-                                                        checked={(
-                                                            data.condition_values ||
-                                                            []
-                                                        ).includes(
-                                                            method.value,
-                                                        )}
-                                                        onChange={(e) => {
-                                                            const currentValues =
-                                                                data.condition_values ||
-                                                                [];
-                                                            if (
-                                                                e.target.checked
-                                                            ) {
-                                                                setData(
-                                                                    'condition_values',
-                                                                    [
-                                                                        ...currentValues,
-                                                                        method.value,
-                                                                    ],
-                                                                );
-                                                            } else {
-                                                                setData(
-                                                                    'condition_values',
-                                                                    currentValues.filter(
-                                                                        (
-                                                                            v: string,
-                                                                        ) =>
-                                                                            v !==
-                                                                            method.value,
-                                                                    ),
-                                                                );
-                                                            }
-                                                        }}
-                                                        className="h-4 w-4"
-                                                    />
-                                                    <Label
-                                                        htmlFor={`method-${method.value}`}
-                                                        className="cursor-pointer text-sm font-normal"
-                                                    >
-                                                        {method.label}
-                                                    </Label>
-                                                </div>
-                                            ))}
-                                            {(data.condition_values || [])
-                                                .length > 0 && (
-                                                <p className="mt-2 text-xs text-muted-foreground">
-                                                    {
-                                                        (
-                                                            data.condition_values ||
-                                                            []
-                                                        ).length
-                                                    }{' '}
-                                                    método(s) selecionado(s)
-                                                </p>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="rounded-md border border-dashed p-4 text-center">
-                                            <p className="text-sm text-muted-foreground">
-                                                {!data.provider
-                                                    ? 'Selecione um marketplace primeiro'
-                                                    : 'Nenhum método de pagamento disponível'}
-                                            </p>
-                                        </div>
-                                    )}
-                                    {errors.condition_values && (
-                                        <p className="text-sm text-destructive">
-                                            {errors.condition_values}
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-                        </>
-                    )}
-
                     {data.applies_to === 'custom' && (
                         <div className="space-y-2">
                             <Label htmlFor="condition_value">
@@ -670,7 +552,7 @@ export function CostCommissionFormDialog({
                             />
                         </div>
 
-                        {!isEditing && (
+                        {!isEditing && data.category !== 'payment_method' && (
                             <div className="flex items-center justify-between space-x-2 rounded-md border border-amber-200 bg-amber-50 p-3">
                                 <Label
                                     htmlFor="apply_to_existing_orders"
@@ -691,7 +573,7 @@ export function CostCommissionFormDialog({
                             </div>
                         )}
 
-                        {isEditing && (
+                        {isEditing && data.category !== 'payment_method' && (
                             <div className="flex items-center justify-between space-x-2 rounded-md border border-amber-200 bg-amber-50 p-3">
                                 <Label
                                     htmlFor="apply_retroactively"

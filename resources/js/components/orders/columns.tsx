@@ -13,7 +13,6 @@ import {
 } from '@/components/ui/tooltip';
 import {
     calculateItemCost,
-    calculateNetRevenue,
     calculateOrderCMV,
     isTakeatIfoodOrder,
 } from '@/lib/order-calculations';
@@ -916,8 +915,9 @@ export const columns: ColumnDef<Order>[] = [
             </span>
         ),
         cell: ({ row }) => {
-            // Usar o mesmo cálculo do card de detalhamento financeiro
-            const netRevenue = calculateNetRevenue(row.original);
+            // Ler diretamente do calculated_costs (já calculado pelo backend)
+            const calculatedCosts = row.original.calculated_costs;
+            const netRevenue = calculatedCosts?.net_revenue ?? 0;
             const isCancelled = row.original.status === 'CANCELLED';
 
             return (
@@ -940,44 +940,12 @@ export const columns: ColumnDef<Order>[] = [
         id: 'margin',
         header: 'Margem',
         cell: ({ row, table }) => {
-            const items = row.original.items || [];
-            const raw = row.original.raw;
             const status = row.original.status;
-            const provider = row.original.provider;
+            const calculatedCosts = row.original.calculated_costs;
 
-            // Usar a mesma lógica do order-financial-card
-            let orderTotal =
-                parseFloat(String(row.original.gross_total || '0')) || 0;
-
-            if (provider === 'takeat') {
-                // Para Takeat: usar old_total_price ou total_price (valor dos itens)
-                if (raw?.session?.old_total_price) {
-                    orderTotal =
-                        parseFloat(String(raw.session.old_total_price)) || 0;
-                } else if (raw?.session?.total_price) {
-                    orderTotal =
-                        parseFloat(String(raw.session.total_price)) || 0;
-                }
-            } else if (raw?.total?.orderAmount) {
-                // Para iFood: usar orderAmount se disponível
-                orderTotal = parseFloat(String(raw.total.orderAmount)) || 0;
-            }
-
-            // grossTotal para cálculo do subtotal (usado na margem)
-            let grossTotal =
-                parseFloat(String(row.original.gross_total || '0')) || 0;
-
-            if (provider === 'takeat') {
-                // Prioridade: total_delivery_price > total_price
-                if (raw?.session?.total_delivery_price) {
-                    grossTotal =
-                        parseFloat(String(raw.session.total_delivery_price)) ||
-                        0;
-                } else if (raw?.session?.total_price) {
-                    grossTotal =
-                        parseFloat(String(raw.session.total_price)) || 0;
-                }
-            }
+            // Ler valores já calculados pelo backend
+            const netRevenue = calculatedCosts?.net_revenue ?? 0;
+            const baseValue = calculatedCosts?.base_value ?? 0;
 
             // Pega marginSettings do table.options.meta
             const marginSettings = (
@@ -1003,171 +971,19 @@ export const columns: ColumnDef<Order>[] = [
                 );
             }
 
-            // Verificar se tem valor válido (orderTotal ou grossTotal)
-            if (
-                (!orderTotal || orderTotal <= 0) &&
-                (!grossTotal || grossTotal <= 0)
-            )
+            // Verificar se tem valor válido
+            if (!baseValue || baseValue <= 0) {
                 return (
                     <div className="text-right">
                         <span className="text-muted-foreground">--</span>
                     </div>
                 );
-
-            // Calcular custo total dos produtos (CMV)
-            const totalCost = calculateOrderCMV(items);
-
-            // Calcular impostos dos produtos
-            const productTax = items.reduce((sum, item) => {
-                if (
-                    item.internal_product?.tax_category?.total_tax_rate !==
-                        undefined &&
-                    item.internal_product?.tax_category?.total_tax_rate !== null
-                ) {
-                    const quantity = item.qty || item.quantity || 0;
-                    const unitPrice = item.unit_price || item.price || 0;
-                    const itemTotal = quantity * unitPrice;
-                    const taxRate =
-                        item.internal_product.tax_category.total_tax_rate / 100;
-                    return sum + itemTotal * taxRate;
-                }
-                return sum;
-            }, 0);
-
-            // Impostos adicionais (da categoria 'tax' em calculated_costs)
-            const calculatedCosts = row.original.calculated_costs;
-            const additionalTaxes = calculatedCosts?.taxes || [];
-            const totalAdditionalTax = additionalTaxes.reduce(
-                (sum: number, tax: any) => sum + (tax.calculated_value || 0),
-                0,
-            );
-
-            // Total de impostos = impostos dos produtos + impostos adicionais
-            const totalTax = productTax + totalAdditionalTax;
-
-            // Adicionar custos e comissões da página "Custos e Comissões"
-            const extraCosts =
-                typeof row.original.total_costs === 'string'
-                    ? parseFloat(row.original.total_costs)
-                    : (row.original.total_costs ?? 0);
-            const commissions =
-                typeof row.original.total_commissions === 'string'
-                    ? parseFloat(row.original.total_commissions)
-                    : (row.original.total_commissions ?? 0);
-
-            // Adicionar taxas de pagamento (payment_methods)
-            const paymentMethodFees = calculatedCosts?.payment_methods || [];
-            const totalPaymentMethodFee = paymentMethodFees.reduce(
-                (sum: number, fee: any) => sum + (fee.calculated_value || 0),
-                0,
-            );
-
-            // Adicionar delivery_fee à base de cálculo (para Takeat)
-            const deliveryFee =
-                typeof row.original.delivery_fee === 'string'
-                    ? parseFloat(row.original.delivery_fee)
-                    : (row.original.delivery_fee ?? 0);
-
-            // Calcular subsídio dos pagamentos (apenas para Takeat)
-            let totalSubsidy = 0;
-            if (provider === 'takeat') {
-                const payments = raw?.session?.payments || [];
-                totalSubsidy = payments.reduce((sum: number, payment: any) => {
-                    const paymentName = (
-                        payment.payment_method?.name || ''
-                    ).toLowerCase();
-                    const paymentKeyword = (
-                        payment.payment_method?.keyword || ''
-                    ).toLowerCase();
-                    const isSubsidy =
-                        paymentName.includes('subsid') ||
-                        paymentName.includes('cupom') ||
-                        paymentKeyword.includes('subsid') ||
-                        paymentKeyword.includes('cupom');
-
-                    return isSubsidy
-                        ? sum + parseFloat(payment.payment_value || '0')
-                        : sum;
-                }, 0);
             }
 
-            // Base de cálculo para margem (MESMO cálculo do card financeiro)
-            // Usar grossTotal (não orderTotal) para consistência com o card
-            let subtotal = grossTotal;
-
-            // Para Takeat: verificar se usou total_delivery_price
-            // Se for, NÃO precisa somar nada (já inclui delivery e subsídio)
-            // Se não for, precisa somar subsídio e delivery
-            const usedTotalDeliveryPrice =
-                provider === 'takeat' &&
-                Boolean(raw?.session?.total_delivery_price);
-
-            // Verificar se deve excluir taxa de entrega do subtotal
-            // Só excluir se for iFood via Takeat E a entrega for pelo marketplace (IFOOD/MARKETPLACE)
-            const deliveryBy = raw?.session?.delivery_by?.toUpperCase() || '';
-            const isMarketplaceDelivery = ['IFOOD', 'MARKETPLACE'].includes(
-                deliveryBy,
-            );
-            const skipDeliveryFeeInSubtotal =
-                isTakeatIfoodOrder(row.original) && isMarketplaceDelivery;
-
-            if (!usedTotalDeliveryPrice) {
-                subtotal += totalSubsidy;
-                if (!skipDeliveryFeeInSubtotal) {
-                    subtotal += deliveryFee;
-                }
-            } else if (skipDeliveryFeeInSubtotal && deliveryFee > 0) {
-                subtotal -= deliveryFee;
-            }
-
-            // Calcular cashback
-            const totalCashback =
-                typeof row.original.cashback_total === 'string'
-                    ? parseFloat(row.original.cashback_total)
-                    : (row.original.cashback_total ?? 0);
-
-            // Descontar cashback do subtotal (é desconto da loja)
-            subtotal -= totalCashback;
-
-            // Taxa fixa do iFood (R$ 0,99)
-            // Determinar se tem taxa de serviço iFood
-            const TAKEAT_IFOOD_SERVICE_FEE = 0.99;
-            let ifoodServiceFee = 0;
-
-            if (isTakeatIfoodOrder(row.original)) {
-                // Tentar pegar do raw primeiro
-                const rawServiceFee =
-                    raw?.session?.service_tax_amount ||
-                    raw?.session?.serviceTaxAmount ||
-                    raw?.session?.service_fee ||
-                    raw?.session?.serviceFee;
-
-                if (rawServiceFee) {
-                    ifoodServiceFee = parseFloat(String(rawServiceFee)) || 0;
-                } else {
-                    // Caso não tenha no raw, usar taxa fixa
-                    ifoodServiceFee = TAKEAT_IFOOD_SERVICE_FEE;
-                }
-            }
-
-            // Taxa fixa do iFood reduz o valor recebido pelo lojista
-            // Sempre subtrair para pedidos iFood via Takeat (independente de delivery_by)
-            if (ifoodServiceFee > 0) {
-                subtotal -= ifoodServiceFee;
-            }
-
-            const netTotal =
-                subtotal -
-                totalCost -
-                totalTax -
-                extraCosts -
-                commissions -
-                totalPaymentMethodFee;
-
-            // Margem: tratar caso especial de subtotal = 0
-            if (subtotal <= 0) {
+            // Margem: tratar caso especial de baseValue = 0
+            if (baseValue <= 0) {
                 // Se há prejuízo (custos sem receita), mostrar indicador vermelho
-                if (netTotal < 0) {
+                if (netRevenue < 0) {
                     return (
                         <Badge variant="destructive" className="font-semibold">
                             PREJUÍZO
@@ -1182,7 +998,7 @@ export const columns: ColumnDef<Order>[] = [
                 );
             }
 
-            const margin = (netTotal / subtotal) * 100;
+            const margin = (netRevenue / baseValue) * 100;
 
             // Determinar variante baseada na margem (permitir valores negativos)
             let variant: 'default' | 'warning' | 'destructive' = 'default';
