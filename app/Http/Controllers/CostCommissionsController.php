@@ -158,6 +158,74 @@ class CostCommissionsController extends Controller
         ]);
     }
 
+    /**
+     * Store via API (retorna JSON ao invés de Inertia)
+     */
+    public function apiStore(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'category' => 'required|in:cost,commission,tax,payment_method',
+            'provider' => 'nullable|string|max:100',
+            'type' => 'required|in:percentage,fixed',
+            'value' => 'required|numeric|min:0',
+            'applies_to' => 'required|in:all_orders,delivery_only,pickup_only,payment_method,custom',
+            'delivery_by' => 'nullable|in:all,store,marketplace',
+            'payment_type' => 'nullable|in:all,online,offline',
+            'condition_value' => 'nullable|string',
+            'condition_values' => 'nullable|array',
+            'condition_values.*' => 'string',
+            'affects_revenue_base' => 'nullable|boolean',
+            'enters_tax_base' => 'nullable|boolean',
+            'reduces_revenue_base' => 'nullable|boolean',
+            'active' => 'nullable|boolean',
+        ]);
+
+        $validated['tenant_id'] = $request->user()->tenant_id;
+
+        // Garante valores padrão para os booleanos
+        $validated['affects_revenue_base'] = $validated['affects_revenue_base'] ?? false;
+        $validated['enters_tax_base'] = $validated['enters_tax_base'] ?? false;
+        $validated['reduces_revenue_base'] = $validated['reduces_revenue_base'] ?? false;
+        $validated['active'] = $validated['active'] ?? true;
+
+        $costCommission = CostCommission::create($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Taxa criada com sucesso!',
+            'data' => $costCommission,
+        ], 201);
+    }
+
+    /**
+     * Index via API (retorna JSON ao invés de Inertia)
+     */
+    public function apiIndex(Request $request)
+    {
+        $query = CostCommission::where('tenant_id', $request->user()->tenant_id);
+
+        // Filtros
+        if ($request->has('category')) {
+            $query->where('category', $request->category);
+        }
+
+        if ($request->has('active')) {
+            $query->where('active', $request->active);
+        }
+
+        if ($request->has('provider')) {
+            $query->where('provider', $request->provider);
+        }
+
+        $costCommissions = $query->orderBy('name')->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $costCommissions,
+        ]);
+    }
+
     public function update(Request $request, CostCommission $costCommission)
     {
         // Verifica se pertence ao tenant
@@ -191,6 +259,11 @@ class CostCommissionsController extends Controller
         $validated['active'] = $validated['active'] ?? false;
         $applyRetroactively = $validated['apply_retroactively'] ?? false;
         unset($validated['apply_retroactively']);
+
+        // Se for payment_method, força provider como null (convertendo taxas antigas para "Todos")
+        if ($validated['category'] === 'payment_method') {
+            $validated['provider'] = null;
+        }
 
         // Incrementar versão
         $validated['version'] = $costCommission->version + 1;
