@@ -45,6 +45,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('orders/{id}/cancel', [OrdersController::class, 'cancel'])->name('orders.cancel');
     Route::post('orders/{id}/recalculate-costs', [OrdersController::class, 'recalculateCosts'])->name('orders.recalculateCosts');
     Route::post('orders/{id}/link-payment-fee', [OrdersController::class, 'linkPaymentFee'])->name('orders.linkPaymentFee');
+    Route::post('api/orders/{id}/link-payment-fee', [OrdersController::class, 'apiLinkPaymentFee'])->name('api.orders.linkPaymentFee');
     Route::get('orders/{id}/cancellation-reasons', [OrdersController::class, 'cancellationReasons'])->name('orders.cancellationReasons');
     Route::get('orders/{id}/available-payment-fees', [OrdersController::class, 'availablePaymentFees'])->name('orders.availablePaymentFees');
 
@@ -74,6 +75,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('cost-commissions/{costCommission}/toggle', [CostCommissionsController::class, 'toggle'])->name('cost-commissions.toggle');
     Route::delete('cost-commissions/{costCommission}', [CostCommissionsController::class, 'destroy'])->name('cost-commissions.destroy');
     Route::get('cost-commissions/recalculate-progress', [CostCommissionsController::class, 'getRecalculateProgress'])->name('cost-commissions.recalculate-progress');
+
+    // API endpoints para taxas (retorna JSON)
+    Route::get('api/cost-commissions', [CostCommissionsController::class, 'apiIndex'])->name('api.cost-commissions.index');
+    Route::post('api/cost-commissions', [CostCommissionsController::class, 'apiStore'])->name('api.cost-commissions.store');
 
     // Categories Management Page
     Route::get('categories', [CategoriesController::class, 'manage'])->name('categories.manage');
@@ -125,6 +130,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('api/item-triage/{sku}', [ItemTriageController::class, 'getItemDetails'])->where('sku', '.*')->name('item-triage.details');
     Route::post('item-triage/classify', [ItemTriageController::class, 'classify'])->name('item-triage.classify');
     Route::post('api/item-triage/classify', [ItemTriageController::class, 'classifyApi'])->name('item-triage.classify-api');
+
+    // Payment Triage (Triagem de Métodos de Pagamento)
+    Route::get('payment-triage', [\App\Http\Controllers\PaymentTriageController::class, 'index'])->name('payment-triage.index');
+    Route::get('api/payment-triage/{paymentMethodId}', [\App\Http\Controllers\PaymentTriageController::class, 'getDetails'])->name('payment-triage.details');
+    Route::post('payment-triage/link', [\App\Http\Controllers\PaymentTriageController::class, 'link'])->name('payment-triage.link');
 
     // Order Item Mappings (múltiplas associações por item)
     Route::post('order-items/{orderItem}/mappings', [OrderItemMappingsController::class, 'store'])->name('order-item-mappings.store');
