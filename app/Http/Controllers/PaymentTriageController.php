@@ -40,51 +40,57 @@ class PaymentTriageController extends Controller
     private function getUniquePaymentMethods(int $tenantId)
     {
         $paymentMethods = [];
+        $mappingsCache = [];
 
-        // Buscar pedidos Takeat com pagamentos
-        $orders = Order::where('tenant_id', $tenantId)
+        // Buscar pedidos Takeat com pagamentos em lotes (chunk) para evitar estouro de memória
+        Order::where('tenant_id', $tenantId)
             ->where('provider', 'takeat')
             ->whereNotNull('raw')
-            ->get();
+            ->select('raw') // Selecionar apenas o campo necessário
+            ->chunk(500, function ($orders) use (&$paymentMethods, &$mappingsCache, $tenantId) {
+                foreach ($orders as $order) {
+                    $raw = $order->raw;
+                    $payments = $raw['session']['payments'] ?? [];
 
-        foreach ($orders as $order) {
-            $raw = $order->raw;
-            $payments = $raw['session']['payments'] ?? [];
+                    foreach ($payments as $payment) {
+                        $paymentMethod = $payment['payment_method'] ?? null;
 
-            foreach ($payments as $payment) {
-                $paymentMethod = $payment['payment_method'] ?? null;
+                        if (!$paymentMethod || !isset($paymentMethod['id'])) {
+                            continue;
+                        }
 
-                if (!$paymentMethod || !isset($paymentMethod['id'])) {
-                    continue;
+                        $paymentMethodId = (string) $paymentMethod['id'];
+
+                        if (!isset($paymentMethods[$paymentMethodId])) {
+                            // Buscar mapping existente (cache para evitar N+1 queries)
+                            if (!isset($mappingsCache[$paymentMethodId])) {
+                                $mappingsCache[$paymentMethodId] = PaymentMethodMapping::where('tenant_id', $tenantId)
+                                    ->where('external_payment_method_id', $paymentMethodId)
+                                    ->where('provider', 'takeat')
+                                    ->with('costCommission:id,name')
+                                    ->first();
+                            }
+
+                            $mapping = $mappingsCache[$paymentMethodId];
+
+                            $paymentMethods[$paymentMethodId] = [
+                                'id' => $paymentMethodId,
+                                'name' => $paymentMethod['name'] ?? 'Sem nome',
+                                'keyword' => $paymentMethod['keyword'] ?? null,
+                                'order_count' => 0,
+                                'cost_commission_id' => $mapping?->cost_commission_id,
+                                'cost_commission_name' => $mapping?->costCommission?->name,
+                                'has_no_fee' => $mapping?->has_no_fee ?? false,
+                                'payment_category' => $mapping?->payment_category ?? 'payment',
+                                'is_linked' => (bool) $mapping?->cost_commission_id || ($mapping?->has_no_fee ?? false) || in_array($mapping?->payment_category, ['subsidy', 'discount']),
+                                'is_recalculating' => $mapping?->recalculating_since !== null,
+                            ];
+                        }
+
+                        $paymentMethods[$paymentMethodId]['order_count']++;
+                    }
                 }
-
-                $paymentMethodId = (string) $paymentMethod['id'];
-
-                if (!isset($paymentMethods[$paymentMethodId])) {
-                    // Buscar mapping existente
-                    $mapping = PaymentMethodMapping::where('tenant_id', $tenantId)
-                        ->where('external_payment_method_id', $paymentMethodId)
-                        ->where('provider', 'takeat')
-                        ->with('costCommission:id,name')
-                        ->first();
-
-                    $paymentMethods[$paymentMethodId] = [
-                        'id' => $paymentMethodId,
-                        'name' => $paymentMethod['name'] ?? 'Sem nome',
-                        'keyword' => $paymentMethod['keyword'] ?? null,
-                        'order_count' => 0,
-                        'cost_commission_id' => $mapping?->cost_commission_id,
-                        'cost_commission_name' => $mapping?->costCommission?->name,
-                        'has_no_fee' => $mapping?->has_no_fee ?? false,
-                        'payment_category' => $mapping?->payment_category ?? 'payment',
-                        'is_linked' => (bool) $mapping?->cost_commission_id || ($mapping?->has_no_fee ?? false) || in_array($mapping?->payment_category, ['subsidy', 'discount']),
-                        'is_recalculating' => $mapping?->recalculating_since !== null,
-                    ];
-                }
-
-                $paymentMethods[$paymentMethodId]['order_count']++;
-            }
-        }
+            });
 
         // Converter para array indexado e ordenar por quantidade de pedidos
         $result = array_values($paymentMethods);
@@ -100,38 +106,45 @@ class PaymentTriageController extends Controller
     {
         $tenantId = $request->user()->tenant_id;
 
-        // Buscar últimos 10 pedidos que usaram este método
-        $orders = Order::where('tenant_id', $tenantId)
+        $recentOrders = [];
+
+        // Buscar últimos 10 pedidos que usaram este método (processar em chunks até encontrar 10)
+        Order::where('tenant_id', $tenantId)
             ->where('provider', 'takeat')
             ->whereNotNull('raw')
+            ->select('id', 'code', 'short_reference', 'placed_at', 'gross_total', 'raw')
             ->orderBy('placed_at', 'desc')
-            ->get()
-            ->filter(function ($order) use ($paymentMethodId) {
-                $raw = $order->raw;
-                $payments = $raw['session']['payments'] ?? [];
+            ->chunk(200, function ($orders) use ($paymentMethodId, &$recentOrders) {
+                foreach ($orders as $order) {
+                    // Parar se já tiver 10 pedidos
+                    if (count($recentOrders) >= 10) {
+                        return false; // Para o chunk
+                    }
 
-                foreach ($payments as $payment) {
-                    $paymentMethod = $payment['payment_method'] ?? null;
-                    if ($paymentMethod && (string) $paymentMethod['id'] === $paymentMethodId) {
-                        return true;
+                    $raw = $order->raw;
+                    $payments = $raw['session']['payments'] ?? [];
+
+                    foreach ($payments as $payment) {
+                        $paymentMethod = $payment['payment_method'] ?? null;
+                        if ($paymentMethod && (string) $paymentMethod['id'] === $paymentMethodId) {
+                            $recentOrders[] = [
+                                'id' => $order->id,
+                                'code' => $order->code,
+                                'short_reference' => $order->short_reference,
+                                'placed_at' => $order->placed_at?->format('Y-m-d\TH:i:s.uP'),
+                                'gross_total' => $order->gross_total,
+                            ];
+                            break; // Próximo pedido
+                        }
                     }
                 }
-                return false;
-            })
-            ->take(10)
-            ->map(function ($order) {
-                return [
-                    'id' => $order->id,
-                    'code' => $order->code,
-                    'short_reference' => $order->short_reference,
-                    'placed_at' => $order->placed_at?->format('Y-m-d\TH:i:s.uP'),
-                    'gross_total' => $order->gross_total,
-                ];
-            })
-            ->values();
+
+                // Continuar se ainda não tem 10 pedidos
+                return count($recentOrders) < 10;
+            });
 
         return response()->json([
-            'recent_orders' => $orders,
+            'recent_orders' => $recentOrders,
         ]);
     }
 
