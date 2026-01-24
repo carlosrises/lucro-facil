@@ -128,6 +128,48 @@ class OrderCostService
             }
         }
 
+        // Para pedidos Takeat, adicionar marcadores de métodos sem taxa (has_no_fee, subsidy, cashback)
+        if ($order->provider === 'takeat') {
+            $rawPayments = $order->raw['session']['payments'] ?? [];
+            foreach ($rawPayments as $payment) {
+                $paymentMethod = $payment['payment_method'] ?? [];
+                $externalId = (string) ($paymentMethod['id'] ?? '');
+                $name = $paymentMethod['name'] ?? 'Pagamento';
+                $value = (float) ($payment['payment_value'] ?? 0);
+
+                // Buscar mapping para este método
+                $mapping = \App\Models\PaymentMethodMapping::where('tenant_id', $order->tenant_id)
+                    ->where('external_payment_method_id', $externalId)
+                    ->where('provider', 'takeat')
+                    ->first();
+
+                // Se tem mapping e é sem taxa/subsídio/desconto, adicionar marcador
+                if ($mapping && ($mapping->has_no_fee || $mapping->payment_category === 'subsidy' || $mapping->payment_category === 'discount')) {
+                    $categoryLabels = [
+                        'subsidy' => 'Subsídio',
+                        'discount' => 'Desconto',
+                    ];
+                    $categoryLabel = $categoryLabels[$mapping->payment_category] ?? 'Sem taxa';
+
+                    $paymentMethods[] = [
+                        'id' => 0,
+                        'name' => "{$categoryLabel} ({$name})",
+                        'type' => 'fixed',
+                        'value' => 0,
+                        'calculated_value' => 0,
+                        'category' => 'payment_fee',
+                        'payment_method' => $externalId,
+                        'payment_value' => $value,
+                        'payment_type' => null,
+                        'is_linked' => true,
+                        'linked_via_mapping' => true,
+                        'has_no_fee' => true,
+                        'payment_category' => $mapping->payment_category,
+                    ];
+                }
+            }
+        }
+
         $netRevenue = $baseValue - $totalCosts - $totalCommissions - $totalTaxes - $totalPaymentMethods;
 
         return [
@@ -179,8 +221,8 @@ class OrderCostService
     }
 
     /**
-     * Calcular taxas de pagamento proporcionalmente para cada forma de pagamento
-     * Usa vínculos estruturados (payment_fee_links) quando disponível
+     * Calcular taxas de pagamento usando APENAS PaymentMethodMapping (Triagem de Pagamentos)
+     * Ignora vínculos antigos através de condition_values
      */
     private function calculatePaymentMethodTaxes(
         CostCommission $tax,
@@ -190,51 +232,47 @@ class OrderCostService
     ): array {
         $result = [];
 
-        // Obter pagamentos do pedido
+        // IMPORTANTE: Para pedidos Takeat, usar APENAS PaymentMethodMapping
+        if ($order->provider === 'takeat') {
+            return $this->calculatePaymentTaxesFromMapping($tax, $order, $revenueBase, $taxBase);
+        }
+
+        // Para outros providers, manter lógica antiga
         $payments = $this->getOrderPayments($order);
 
         if (empty($payments)) {
             return $result;
         }
 
-        // Obter subtotal para cálculo correto das taxas
         $subtotal = $this->getOrderSubtotal($order);
 
         // Verificar se esta taxa está vinculada a algum pagamento através de payment_fee_links
         $paymentFeeLinks = $order->payment_fee_links ?? [];
         $taxIsLinked = in_array($tax->id, $paymentFeeLinks);
 
-        // Se a taxa está vinculada, aplicar apenas para os métodos vinculados
         if ($taxIsLinked) {
             foreach ($paymentFeeLinks as $method => $linkedTaxId) {
                 if ($linkedTaxId !== $tax->id) {
                     continue;
                 }
 
-                // IMPORTANTE: Encontrar TODOS os pagamentos do método, não apenas o primeiro
                 $matchedPayments = collect($payments)->where('method', $method);
 
                 if ($matchedPayments->isEmpty()) {
                     continue;
                 }
 
-                // Aplicar taxa para CADA pagamento individual do método
                 foreach ($matchedPayments as $matchedPayment) {
                     $paymentName = $matchedPayment['name'] ?? 'Pagamento';
                     $paymentValue = $matchedPayment['value'] ?? 0;
                     $calculatedValue = 0;
 
-                    // Para taxas percentuais, aplicar sobre o SUBTOTAL (não sobre valor pago)
-                    // Quando há subsídio, a taxa é cobrada sobre subtotal (pago + subsídio)
                     if ($tax->type === 'percentage') {
                         $calculatedValue = ($subtotal * $tax->value) / 100;
                     } else {
-                        // Para taxas fixas, aplicar valor fixo para cada pagamento
                         $calculatedValue = (float) $tax->value;
                     }
 
-                    // Para vínculos manuais, permitir taxas com valor 0 (identificação apenas)
-                    // Isso evita que pedidos vinculados apareçam como "sem taxa de pagamento"
                     $result[] = [
                         'id' => $tax->id,
                         'name' => "{$tax->name} ({$paymentName})",
@@ -244,8 +282,8 @@ class OrderCostService
                         'category' => $tax->category,
                         'payment_method' => $method,
                         'payment_value' => $paymentValue,
-                        'payment_type' => $tax->payment_type ?? null, // online/offline/null
-                        'is_linked' => true, // Marcar que é vínculo estruturado
+                        'payment_type' => $tax->payment_type ?? null,
+                        'is_linked' => true,
                     ];
                 }
             }
@@ -253,43 +291,69 @@ class OrderCostService
             return $result;
         }
 
-        // Se não está vinculada, usar lógica de matching por características (comportamento anterior)
-        $matchedPayment = null;
-        foreach ($payments as $payment) {
-            if ($this->shouldApplyTaxToPayment($tax, $payment, $order)) {
-                $matchedPayment = $payment;
-                break;
+        return $result;
+    }
+
+    /**
+     * Calcular taxas de pagamento usando PaymentMethodMapping da Triagem
+     */
+    private function calculatePaymentTaxesFromMapping(
+        CostCommission $tax,
+        Order $order,
+        float $revenueBase,
+        float $taxBase
+    ): array {
+        $result = [];
+        $rawPayments = $order->raw['session']['payments'] ?? [];
+        $subtotal = $this->getOrderSubtotal($order);
+
+        foreach ($rawPayments as $payment) {
+            $paymentMethod = $payment['payment_method'] ?? [];
+            $externalId = (string) ($paymentMethod['id'] ?? '');
+            $name = $paymentMethod['name'] ?? 'Pagamento';
+            $value = (float) ($payment['payment_value'] ?? 0);
+
+            // Buscar mapping para este método de pagamento
+            $mapping = \App\Models\PaymentMethodMapping::where('tenant_id', $order->tenant_id)
+                ->where('external_payment_method_id', $externalId)
+                ->where('provider', 'takeat')
+                ->first();
+
+            if (!$mapping) {
+                continue; // Sem mapping = sem taxa
             }
-        }
 
-        if (! $matchedPayment) {
-            return $result;
-        }
+            // Se não tem taxa vinculada ou tem has_no_fee, pular cálculo
+            // Os marcadores "sem taxa" serão adicionados após o loop principal (evita duplicação)
+            if (!$mapping->cost_commission_id || $mapping->has_no_fee) {
+                continue;
+            }
 
-        // Aplicar taxa UMA VEZ sobre o subtotal
-        $paymentMethod = $matchedPayment['method'] ?? null;
-        $paymentName = $matchedPayment['name'] ?? 'Pagamento';
+            // Se a taxa vinculada no mapping não é a taxa atual sendo processada, pular
+            if ($mapping->cost_commission_id !== $tax->id) {
+                continue;
+            }
 
-        $calculatedValue = 0;
-        $baseForCalculation = $tax->enters_tax_base ? $taxBase : $subtotal;
+            // Calcular valor da taxa
+            $calculatedValue = 0;
+            if ($tax->type === 'percentage') {
+                $calculatedValue = ($subtotal * $tax->value) / 100;
+            } else {
+                $calculatedValue = (float) $tax->value;
+            }
 
-        if ($tax->type === 'percentage') {
-            $calculatedValue = ($baseForCalculation * $tax->value) / 100;
-        } else {
-            $calculatedValue = (float) $tax->value;
-        }
-
-        if ($calculatedValue > 0) {
             $result[] = [
                 'id' => $tax->id,
-                'name' => "{$tax->name} ({$paymentName})",
+                'name' => "{$tax->name} ({$name})",
                 'type' => $tax->type,
                 'value' => $tax->value,
                 'calculated_value' => round($calculatedValue, 2),
                 'category' => $tax->category,
-                'payment_method' => $paymentMethod,
-                'payment_type' => $tax->payment_type ?? null, // online/offline/null
-                'is_linked' => false, // Matching por características
+                'payment_method' => $externalId,
+                'payment_value' => $value,
+                'payment_type' => $tax->payment_type ?? null,
+                'is_linked' => true,
+                'linked_via_mapping' => true, // Marcador de que veio da Triagem
             ];
         }
 
@@ -313,6 +377,7 @@ class OrderCostService
                 $keyword = $paymentMethod['keyword'] ?? '';
                 $name = $paymentMethod['name'] ?? 'Pagamento';
                 $value = (float) ($payment['payment_value'] ?? 0);
+                $externalId = (string) ($paymentMethod['id'] ?? '');
 
                 // Pular subsídios e cupons (não aplicar taxas sobre eles)
                 $lowerName = strtolower($name);
@@ -325,7 +390,14 @@ class OrderCostService
                     || str_contains($lowerKeyword, 'cupom')
                     || str_contains($lowerKeyword, 'desconto');
 
-                if ($isSubsidy) {
+                // Verificar se existe mapping para este método de pagamento
+                $mapping = \App\Models\PaymentMethodMapping::where('tenant_id', $order->tenant_id)
+                    ->where('external_payment_method_id', $externalId)
+                    ->where('provider', 'takeat')
+                    ->first();
+
+                // Se é subsídio detectado ou marcado como subsidy/cashback no mapping, pular
+                if ($isSubsidy || ($mapping && in_array($mapping->payment_category, ['subsidy', 'cashback']))) {
                     continue;
                 }
 
@@ -971,40 +1043,59 @@ class OrderCostService
     {
         $session = $order->raw['session'] ?? [];
 
-        $hasSubsidy = isset($session['discount_total']) &&
-            (float) $session['discount_total'] > 0;
+        // Pegar o desconto aplicado pela loja
+        $discountTotal = (float) ($session['discount_total'] ?? 0);
 
-        if ($hasSubsidy) {
-            $totalPaid = 0;
-            $payments = $session['payments'] ?? [];
+        // Identificar subsídios e cashback nos pagamentos
+        $totalSubsidy = 0;
+        $totalCashback = 0;
+        $payments = $session['payments'] ?? [];
 
-            foreach ($payments as $payment) {
-                $totalPaid += (float) ($payment['payment_value'] ?? 0);
-            }
+        foreach ($payments as $payment) {
+            $paymentValue = (float) ($payment['payment_value'] ?? 0);
+            $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+            $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
 
-            if ($totalPaid > 0) {
-                // Subtrair taxa de serviço iFood se aplicável
-                return $this->subtractIfoodServiceFee($order, $totalPaid);
-            }
+            // Identificar cashback
+            $isCashback = str_contains($paymentName, 'cashback') ||
+                          str_contains($paymentKeyword, 'clube');
 
-            if (isset($session['old_total_price'])) {
-                return $this->subtractIfoodServiceFee($order, (float) $session['old_total_price']);
+            // Identificar subsídios
+            $isSubsidy = str_contains($paymentName, 'subsid') ||
+                         str_contains($paymentName, 'cupom') ||
+                         str_contains($paymentKeyword, 'subsid') ||
+                         str_contains($paymentKeyword, 'cupom');
+
+            if ($isCashback) {
+                $totalCashback += $paymentValue;
+            } elseif ($isSubsidy) {
+                $totalSubsidy += $paymentValue;
             }
         }
+
+        // Calcular desconto da loja (descontos pagos pela loja, não subsídios)
+        $storeDiscount = $discountTotal - $totalSubsidy + $totalCashback;
+
+        // Usar total_price ou total_delivery_price como base (já incluem descontos)
+        $subtotal = null;
 
         if (isset($session['total_delivery_price'])) {
-            return $this->subtractIfoodServiceFee($order, (float) $session['total_delivery_price']);
+            $subtotal = (float) $session['total_delivery_price'];
+        } elseif (isset($session['total_price'])) {
+            $subtotal = (float) $session['total_price'];
+        } elseif (isset($session['old_total_price'])) {
+            $subtotal = (float) $session['old_total_price'];
         }
 
-        if (isset($session['total_price'])) {
-            return $this->subtractIfoodServiceFee($order, (float) $session['total_price']);
+        if ($subtotal === null) {
+            return null;
         }
 
-        if (isset($session['old_total_price'])) {
-            return $this->subtractIfoodServiceFee($order, (float) $session['old_total_price']);
-        }
+        // Aplicar desconto da loja
+        $subtotal -= $storeDiscount;
 
-        return null;
+        // Subtrair taxa de serviço iFood
+        return $this->subtractIfoodServiceFee($order, $subtotal);
     }
 
     /**

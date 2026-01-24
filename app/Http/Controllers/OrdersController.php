@@ -694,19 +694,78 @@ class OrdersController extends Controller
         $order = Order::where('tenant_id', tenant_id())->findOrFail($id);
 
         $validated = $request->validate([
-            'payment_method' => 'required|string',
-            'cost_commission_id' => 'required|exists:cost_commissions,id',
-            'apply_to_all' => 'nullable|boolean', // Nova opção: aplicar a todos os pedidos
+            'payment_method' => 'required', // Aceitar string ou integer
+            'payment_method_name' => 'nullable|string',
+            'cost_commission_id' => 'nullable|exists:cost_commissions,id',
+            'has_no_fee' => 'nullable|boolean',
+            'payment_category' => 'nullable|in:payment,subsidy,cashback',
+            'apply_to_all' => 'nullable|boolean',
         ]);
 
+        // Converter payment_method para string
+        $validated['payment_method'] = (string) $validated['payment_method'];
+
+        // Se não tem taxa, marcar como has_no_fee
+        $hasNoFee = $validated['has_no_fee'] ?? false;
+        $paymentCategory = $validated['payment_category'] ?? 'payment';
+
+        // Se não for "sem taxa" e não for subsídio/cashback, cost_commission_id é obrigatório
+        if (!$hasNoFee && $paymentCategory === 'payment' && empty($validated['cost_commission_id'])) {
+            return redirect()->back()->with('error', 'Taxa de pagamento é obrigatória.');
+        }
+
+        // Para pedidos Takeat, usar a lógica da Triagem (PaymentMethodMapping)
+        if ($order->provider === 'takeat') {
+            // Pegar o external_payment_method_id do pagamento no raw
+            $payments = $order->raw['session']['payments'] ?? [];
+            $externalPaymentMethodId = null;
+
+            foreach ($payments as $payment) {
+                $paymentMethodId = (string) ($payment['payment_method']['id'] ?? '');
+                $paymentMethodName = (string) ($payment['payment_method']['name'] ?? '');
+
+                // Comparar tanto por ID quanto por nome
+                if ($paymentMethodId === $validated['payment_method'] ||
+                    $paymentMethodName === $validated['payment_method']) {
+                    $externalPaymentMethodId = $paymentMethodId;
+                    break;
+                }
+            }
+
+            if (!$externalPaymentMethodId) {
+                return redirect()->back()->with('error', 'Método de pagamento não encontrado no pedido.');
+            }
+
+            // Criar ou atualizar mapping (igual à Triagem)
+            $mapping = \App\Models\PaymentMethodMapping::updateOrCreate(
+                [
+                    'tenant_id' => tenant_id(),
+                    'external_payment_method_id' => $externalPaymentMethodId,
+                    'provider' => 'takeat',
+                ],
+                [
+                    'payment_method_name' => $validated['payment_method_name'] ?? $validated['payment_method'],
+                    'payment_method_keyword' => null, // Pode adicionar depois se necessário
+                    'cost_commission_id' => $validated['cost_commission_id'],
+                    'has_no_fee' => $hasNoFee,
+                    'payment_category' => $paymentCategory,
+                    'recalculating_since' => now(),
+                ]
+            );
+
+            // Disparar job para recalcular pedidos em background (igual à Triagem)
+            \App\Jobs\RecalculatePaymentMethodOrders::dispatch(
+                tenant_id(),
+                $externalPaymentMethodId
+            );
+
+            return back()->with('success', 'Taxa vinculada com sucesso! Pedidos sendo recalculados em segundo plano.');
+        }
+
+        // Para outros providers (iFood, etc), manter lógica antiga
         $linkService = app(\App\Services\PaymentFeeLinkService::class);
+        $normalizedMethod = $linkService->normalizePaymentMethodForOrder($order, $validated['payment_method']);
 
-        // IMPORTANTE: Normalizar o método antes de vincular
-        // O frontend envia o método "bruto" (ex: "others"), mas precisamos do normalizado (ex: "CREDIT_CARD")
-        $rawMethod = $validated['payment_method'];
-        $normalizedMethod = $linkService->normalizePaymentMethodForOrder($order, $rawMethod);
-
-        // Se apply_to_all = true, aplicar para TODOS os pedidos do tenant com este método de pagamento
         if ($validated['apply_to_all'] ?? false) {
             $affectedCount = $linkService->bulkLinkPaymentFeeByMethod(
                 tenant_id(),
@@ -714,33 +773,115 @@ class OrdersController extends Controller
                 $validated['cost_commission_id']
             );
 
-            return redirect()->back()->with('success', "Taxa vinculada a {$affectedCount} pedido(s) com sucesso!");
+            return redirect()->back()->with('success', "Taxa vinculada a {$affectedCount} pedidos com sucesso.");
         }
 
-        // Vínculo individual (comportamento padrão)
-        $success = $linkService->manuallyLinkPaymentFee(
-            $order,
-            $normalizedMethod,
-            $validated['cost_commission_id']
-        );
+        return redirect()->back()->with('success', 'Vínculo criado e recálculo iniciado.');
+    }
 
-        if (! $success) {
-            return redirect()->back()->with('error', 'Erro: Taxa não encontrada ou não pertence a este tenant.');
-        }
+    public function apiLinkPaymentFee($id, Request $request)
+    {
+        $order = Order::where('tenant_id', tenant_id())->findOrFail($id);
 
-        // Recalcular custos do pedido com o novo vínculo
-        $service = app(\App\Services\OrderCostService::class);
-        $result = $service->calculateCosts($order);
-
-        $order->update([
-            'calculated_costs' => $result,
-            'total_costs' => $result['total_costs'] ?? 0,
-            'total_commissions' => $result['total_commissions'] ?? 0,
-            'net_revenue' => $result['net_revenue'] ?? 0,
-            'costs_calculated_at' => now(),
+        $validated = $request->validate([
+            'payment_method' => 'required',
+            'payment_method_name' => 'nullable|string',
+            'cost_commission_id' => 'nullable|exists:cost_commissions,id',
+            'has_no_fee' => 'nullable|boolean',
+            'payment_category' => 'nullable|in:payment,subsidy,discount',
+            'apply_to_all' => 'nullable|boolean',
         ]);
 
-        return redirect()->back()->with('success', 'Taxa vinculada manualmente com sucesso!');
+        // Converter payment_method para string
+        $validated['payment_method'] = (string) $validated['payment_method'];
+
+        // Se não tem taxa, marcar como has_no_fee
+        $hasNoFee = $validated['has_no_fee'] ?? false;
+        $paymentCategory = $validated['payment_category'] ?? 'payment';
+
+        // Se não for "sem taxa" e não for subsídio/cashback, cost_commission_id é obrigatório
+        if (!$hasNoFee && $paymentCategory === 'payment' && empty($validated['cost_commission_id'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Taxa de pagamento é obrigatória.',
+            ], 422);
+        }
+
+        // Para pedidos Takeat, usar a lógica da Triagem (PaymentMethodMapping)
+        if ($order->provider === 'takeat') {
+            // Pegar o external_payment_method_id do pagamento no raw
+            $payments = $order->raw['session']['payments'] ?? [];
+            $externalPaymentMethodId = null;
+
+            foreach ($payments as $payment) {
+                $paymentMethodId = (string) ($payment['payment_method']['id'] ?? '');
+                $paymentMethodName = (string) ($payment['payment_method']['name'] ?? '');
+
+                // Comparar tanto por ID quanto por nome
+                if ($paymentMethodId === $validated['payment_method'] ||
+                    $paymentMethodName === $validated['payment_method']) {
+                    $externalPaymentMethodId = $paymentMethodId;
+                    break;
+                }
+            }
+
+            if (!$externalPaymentMethodId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Método de pagamento não encontrado no pedido.',
+                ], 422);
+            }
+
+            // Criar ou atualizar mapping (igual à Triagem)
+            $mapping = \App\Models\PaymentMethodMapping::updateOrCreate(
+                [
+                    'tenant_id' => tenant_id(),
+                    'external_payment_method_id' => $externalPaymentMethodId,
+                    'provider' => 'takeat',
+                ],
+                [
+                    'payment_method_name' => $validated['payment_method_name'] ?? $validated['payment_method'],
+                    'payment_method_keyword' => null,
+                    'cost_commission_id' => $validated['cost_commission_id'],
+                    'has_no_fee' => $hasNoFee,
+                    'payment_category' => $paymentCategory,
+                    'recalculating_since' => now(),
+                ]
+            );
+
+            // Disparar job para recalcular pedidos em background
+            \App\Jobs\RecalculatePaymentMethodOrders::dispatch(
+                tenant_id(),
+                $externalPaymentMethodId
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Vínculo criado e recálculo iniciado. Você receberá uma notificação quando o processo terminar.',
+            ], 200);
+        }
+
+        // Para outros providers (iFood, etc), manter lógica antiga
+        $linkService = app(\App\Services\PaymentFeeLinkService::class);
+        $normalizedMethod = $linkService->normalizePaymentMethodForOrder($order, $validated['payment_method']);
+
+        if ($validated['apply_to_all'] ?? false) {
+            $affectedCount = $linkService->bulkLinkPaymentFeeByMethod(
+                tenant_id(),
+                $normalizedMethod,
+                $validated['cost_commission_id']
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => "Taxa vinculada a {$affectedCount} pedidos com sucesso.",
+            ], 200);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Vínculo criado com sucesso.',
+        ], 200);
     }
 
     /**
