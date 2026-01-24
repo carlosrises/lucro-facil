@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Combobox } from '@/components/ui/combobox';
 import {
     Dialog,
     DialogContent,
@@ -9,14 +10,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { router } from '@inertiajs/react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -61,67 +55,69 @@ export function LinkPaymentFeeDialog({
     onCreateNew,
 }: LinkPaymentFeeDialogProps) {
     const [selectedFeeId, setSelectedFeeId] = useState<string>('');
-    const [applyToAll, setApplyToAll] = useState(false);
+    const [selectedCategory, setSelectedCategory] = useState<string>('payment');
+    const [applyToAll, setApplyToAll] = useState(true);
     const [isLinking, setIsLinking] = useState(false);
 
-    const handleLink = () => {
-        if (!selectedFeeId) {
+    const handleLink = async () => {
+        // Se for categoria especial (sem taxa, cashback, subsídio), não precisa selecionar taxa
+        const isSpecialCategory = selectedCategory !== 'payment';
+
+        if (!isSpecialCategory && !selectedFeeId) {
             toast.error('Selecione uma taxa de pagamento');
             return;
         }
 
         setIsLinking(true);
 
-        router.post(
-            `/orders/${orderId}/link-payment-fee`,
-            {
-                payment_method: paymentMethod,
-                cost_commission_id: parseInt(selectedFeeId),
-                apply_to_all: applyToAll,
-            },
-            {
-                preserveScroll: true,
-                onSuccess: () => {
-                    if (applyToAll) {
-                        toast.success(
-                            'Taxa vinculada a todos os pedidos com sucesso!',
-                        );
-                    } else {
-                        toast.success(
-                            'Taxa vinculada manualmente com sucesso!',
-                        );
-                    }
-                    setSelectedFeeId('');
-                    setApplyToAll(false);
-                    onOpenChange(false);
+        try {
+            const response = await fetch(
+                `/api/orders/${orderId}/link-payment-fee`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN':
+                            document
+                                .querySelector('meta[name="csrf-token"]')
+                                ?.getAttribute('content') || '',
+                    },
+                    body: JSON.stringify({
+                        payment_method: paymentMethod,
+                        payment_method_name: paymentMethodName,
+                        has_no_fee: selectedCategory === 'no_fee',
+                        payment_category:
+                            selectedCategory === 'no_fee'
+                                ? 'payment'
+                                : selectedCategory,
+                        cost_commission_id: isSpecialCategory
+                            ? null
+                            : parseInt(selectedFeeId),
+                        apply_to_all: applyToAll,
+                    }),
                 },
-                onError: (errors) => {
-                    const errorMessage = Object.values(errors)
-                        .flat()
-                        .join(', ');
-                    toast.error(`Erro ao vincular taxa: ${errorMessage}`);
-                },
-                onFinish: () => {
-                    setIsLinking(false);
-                },
-            },
-        );
+            );
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                toast.success('Vínculo criado com sucesso!', {
+                    description:
+                        'Os pedidos estão sendo recalculados. Você receberá uma notificação quando terminar.',
+                });
+                setSelectedFeeId('');
+                setSelectedCategory('payment');
+                onOpenChange(false);
+            } else {
+                toast.error(data.message || 'Erro ao vincular taxa');
+            }
+        } catch (error) {
+            console.error('Erro ao vincular taxa:', error);
+            toast.error('Erro ao vincular taxa ao método de pagamento');
+        } finally {
+            setIsLinking(false);
+        }
     };
-
-    // VÍNCULO MANUAL: Mostrar TODAS as taxas, ordenadas por compatibilidade
-    const allFees = [...availableFees].sort((a, b) => {
-        const scoreA = a.compatibility?.compatibility_score ?? 0;
-        const scoreB = b.compatibility?.compatibility_score ?? 0;
-        return scoreB - scoreA; // Mais compatíveis primeiro
-    });
-
-    // Separar em recomendadas e outras
-    const recommendedFees = allFees.filter(
-        (fee) => fee.compatibility?.is_compatible !== false,
-    );
-    const otherFees = allFees.filter(
-        (fee) => fee.compatibility?.is_compatible === false,
-    );
 
     const formatFeeValue = (fee: PaymentFee) => {
         if (fee.type === 'percentage') {
@@ -148,7 +144,7 @@ export function LinkPaymentFeeDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[550px]">
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[550px]">
                 <DialogHeader>
                     <DialogTitle>
                         Vincular Taxa de Pagamento Existente
@@ -160,265 +156,172 @@ export function LinkPaymentFeeDialog({
                 </DialogHeader>
 
                 <div className="grid gap-4">
-                    {allFees.length === 0 ? (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
-                            <p className="text-amber-900">
-                                Nenhuma taxa de pagamento cadastrada para este
-                                tenant.
-                            </p>
-                            <p className="mt-2 text-amber-700">
-                                Crie uma nova taxa para vincular a este pedido.
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+                        <p className="font-medium text-blue-900">
+                            💡 Vínculo Manual
+                        </p>
+                        <p className="mt-1 text-xs text-blue-700">
+                            Você pode vincular qualquer taxa manualmente. As
+                            taxas recomendadas aparecem primeiro, mas você tem
+                            total liberdade de escolha.
+                        </p>
+                    </div>
+
+                    {/* Categoria do método de pagamento */}
+                    <div className="grid gap-3">
+                        <Label>Categoria do método</Label>
+                        <RadioGroup
+                            value={selectedCategory}
+                            onValueChange={setSelectedCategory}
+                            className="grid gap-2"
+                        >
+                            <div className="flex items-center space-x-2 rounded-lg border p-3 hover:bg-muted/50">
+                                <RadioGroupItem value="payment" id="payment" />
+                                <Label
+                                    htmlFor="payment"
+                                    className="flex flex-1 cursor-pointer flex-col"
+                                >
+                                    <span className="font-medium">
+                                        Pagamento com Taxa
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        Método de pagamento normal que terá taxa
+                                        aplicada
+                                    </span>
+                                </Label>
+                            </div>
+
+                            <div className="flex items-center space-x-2 rounded-lg border p-3 hover:bg-muted/50">
+                                <RadioGroupItem value="subsidy" id="subsidy" />
+                                <Label
+                                    htmlFor="subsidy"
+                                    className="flex flex-1 cursor-pointer flex-col"
+                                >
+                                    <span className="font-medium">
+                                        Subsídio (Cupom)
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        Desconto do marketplace, soma ao valor
+                                        recebido
+                                    </span>
+                                </Label>
+                            </div>
+
+                            <div className="flex items-center space-x-2 rounded-lg border p-3 hover:bg-muted/50">
+                                <RadioGroupItem
+                                    value="discount"
+                                    id="discount"
+                                />
+                                <Label
+                                    htmlFor="discount"
+                                    className="flex flex-1 cursor-pointer flex-col"
+                                >
+                                    <span className="font-medium">
+                                        Desconto
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        Cupom/desconto aplicado, subtrai do
+                                        valor recebido
+                                    </span>
+                                </Label>
+                            </div>
+
+                            <div className="flex items-center space-x-2 rounded-lg border p-3 hover:bg-muted/50">
+                                <RadioGroupItem value="no_fee" id="no_fee" />
+                                <Label
+                                    htmlFor="no_fee"
+                                    className="flex flex-1 cursor-pointer flex-col"
+                                >
+                                    <span className="font-medium">
+                                        Sem taxa de pagamento
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        Método que não cobra taxa (ex: dinheiro)
+                                    </span>
+                                </Label>
+                            </div>
+                        </RadioGroup>
+                    </div>
+
+                    {/* Só mostrar seleção de taxa se categoria for 'payment' */}
+                    {selectedCategory === 'payment' && (
+                        <div className="grid gap-2">
+                            <Label htmlFor="fee_select">
+                                Selecionar Taxa ({availableFees.length}{' '}
+                                disponível
+                                {availableFees.length > 1 ? 'is' : ''})
+                            </Label>
+                            <Combobox
+                                value={selectedFeeId}
+                                onChange={setSelectedFeeId}
+                                options={availableFees.map((fee) => ({
+                                    value: fee.id.toString(),
+                                    label: `${fee.name} - ${formatFeeValue(fee)} (${formatProvider(fee.provider)})`,
+                                }))}
+                                placeholder="Buscar taxa..."
+                                emptyMessage="Nenhuma taxa encontrada"
+                            />
+                        </div>
+                    )}
+
+                    {/* Checkbox para aplicar a todos - sempre visível */}
+                    <div className="flex items-start space-x-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                        <Checkbox
+                            id="apply_to_all"
+                            checked={applyToAll}
+                            onCheckedChange={(checked) =>
+                                setApplyToAll(checked === true)
+                            }
+                        />
+                        <div className="grid gap-1.5 leading-none">
+                            <Label
+                                htmlFor="apply_to_all"
+                                className="cursor-pointer font-medium text-blue-900"
+                            >
+                                Aplicar a todos os pedidos com este método de
+                                pagamento
+                            </Label>
+                            <p className="text-xs text-blue-700">
+                                {selectedCategory === 'payment'
+                                    ? `Vincula esta taxa automaticamente a todos os pedidos que possuem o método ${paymentMethodName}`
+                                    : 'Classifica todos os pedidos com este método automaticamente'}
                             </p>
                         </div>
-                    ) : (
-                        <>
-                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
-                                <p className="font-medium text-blue-900">
-                                    💡 Vínculo Manual
-                                </p>
-                                <p className="mt-1 text-xs text-blue-700">
-                                    Você pode vincular qualquer taxa
-                                    manualmente. As taxas recomendadas aparecem
-                                    primeiro, mas você tem total liberdade de
-                                    escolha.
-                                </p>
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="fee_select">
-                                    Selecionar Taxa ({allFees.length} disponível
-                                    {allFees.length > 1 ? 'is' : ''})
-                                </Label>
-                                <Select
-                                    value={selectedFeeId}
-                                    onValueChange={setSelectedFeeId}
-                                >
-                                    <SelectTrigger id="fee_select">
-                                        <SelectValue placeholder="Selecione uma taxa..." />
-                                    </SelectTrigger>
-                                    <SelectContent className="max-h-[400px]">
-                                        {recommendedFees.length > 0 && (
-                                            <>
-                                                <div className="bg-muted/50 px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                                                    ✓ Recomendadas
-                                                </div>
-                                                {recommendedFees.map((fee) => (
-                                                    <SelectItem
-                                                        key={fee.id}
-                                                        value={fee.id.toString()}
-                                                    >
-                                                        <div className="flex items-center justify-between gap-4">
-                                                            <span className="font-medium">
-                                                                {fee.name}
-                                                            </span>
-                                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                                <span className="font-semibold text-green-600">
-                                                                    {formatFeeValue(
-                                                                        fee,
-                                                                    )}
-                                                                </span>
-                                                                <span>•</span>
-                                                                <span>
-                                                                    {formatProvider(
-                                                                        fee.provider,
-                                                                    )}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </SelectItem>
-                                                ))}
-                                            </>
-                                        )}
-                                        {otherFees.length > 0 && (
-                                            <>
-                                                <div className="bg-muted/50 px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                                                    Outras Taxas
-                                                </div>
-                                                {otherFees.map((fee) => (
-                                                    <SelectItem
-                                                        key={fee.id}
-                                                        value={fee.id.toString()}
-                                                    >
-                                                        <div className="flex items-center justify-between gap-4">
-                                                            <span className="font-medium">
-                                                                {fee.name}
-                                                            </span>
-                                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                                <span className="font-semibold text-amber-600">
-                                                                    {formatFeeValue(
-                                                                        fee,
-                                                                    )}
-                                                                </span>
-                                                                <span>•</span>
-                                                                <span>
-                                                                    {formatProvider(
-                                                                        fee.provider,
-                                                                    )}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </SelectItem>
-                                                ))}
-                                            </>
-                                        )}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {selectedFeeId && (
-                                <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
-                                    {(() => {
-                                        const selectedFee = allFees.find(
-                                            (f) =>
-                                                f.id.toString() ===
-                                                selectedFeeId,
-                                        );
-                                        if (!selectedFee) return null;
-
-                                        const isRecommended =
-                                            selectedFee.compatibility
-                                                ?.is_compatible !== false;
-
-                                        return (
-                                            <>
-                                                <div className="space-y-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <p className="font-semibold">
-                                                            {selectedFee.name}
-                                                        </p>
-                                                        {isRecommended ? (
-                                                            <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-700">
-                                                                ✓ Recomendada
-                                                            </span>
-                                                        ) : (
-                                                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
-                                                                ⚠ Verificar
-                                                                compatibilidade
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <p>
-                                                        <strong>Valor:</strong>{' '}
-                                                        {formatFeeValue(
-                                                            selectedFee,
-                                                        )}
-                                                    </p>
-                                                    <p>
-                                                        <strong>
-                                                            Provider:
-                                                        </strong>{' '}
-                                                        {formatProvider(
-                                                            selectedFee.provider,
-                                                        )}
-                                                    </p>
-                                                    {selectedFee.condition_values &&
-                                                        selectedFee
-                                                            .condition_values
-                                                            .length > 0 && (
-                                                            <p>
-                                                                <strong>
-                                                                    Métodos:
-                                                                </strong>{' '}
-                                                                {selectedFee.condition_values.join(
-                                                                    ', ',
-                                                                )}
-                                                            </p>
-                                                        )}
-                                                </div>
-
-                                                {selectedFee.compatibility
-                                                    ?.reasons && (
-                                                    <div className="mt-2 border-t pt-2">
-                                                        <p className="mb-1 text-xs font-semibold">
-                                                            Análise de
-                                                            Compatibilidade:
-                                                        </p>
-                                                        <ul className="list-inside list-disc space-y-0.5 text-xs">
-                                                            {selectedFee.compatibility.reasons.map(
-                                                                (
-                                                                    reason,
-                                                                    idx,
-                                                                ) => (
-                                                                    <li
-                                                                        key={
-                                                                            idx
-                                                                        }
-                                                                    >
-                                                                        {reason}
-                                                                    </li>
-                                                                ),
-                                                            )}
-                                                        </ul>
-                                                    </div>
-                                                )}
-                                            </>
-                                        );
-                                    })()}
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
-
-                {/* Opção de aplicar a todos os pedidos */}
-                <div className="flex items-start space-x-3 rounded-md border p-4">
-                    <Checkbox
-                        id="apply-to-all"
-                        checked={applyToAll}
-                        onCheckedChange={(checked) =>
-                            setApplyToAll(checked === true)
-                        }
-                        disabled={isLinking}
-                    />
-                    <div className="space-y-1 leading-none">
-                        <label
-                            htmlFor="apply-to-all"
-                            className="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                            Aplicar a todos os pedidos com este método de
-                            pagamento
-                        </label>
-                        <p className="text-sm text-muted-foreground">
-                            Vincula esta taxa automaticamente a todos os pedidos
-                            que possuem o método{' '}
-                            <strong>{paymentMethodName}</strong>
-                        </p>
                     </div>
                 </div>
 
-                <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+                <DialogFooter className="gap-2">
                     <Button
                         type="button"
                         variant="outline"
                         onClick={onCreateNew}
                         disabled={isLinking}
-                        className="w-full sm:w-auto"
                     >
                         Criar Nova Taxa
                     </Button>
-                    <div className="flex gap-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => onOpenChange(false)}
-                            disabled={isLinking}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button
-                            onClick={handleLink}
-                            disabled={!selectedFeeId || isLinking}
-                        >
-                            {isLinking ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Vinculando...
-                                </>
-                            ) : (
-                                'Vincular Taxa'
-                            )}
-                        </Button>
-                    </div>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                        disabled={isLinking}
+                    >
+                        Cancelar
+                    </Button>
+                    <Button
+                        type="button"
+                        onClick={handleLink}
+                        disabled={
+                            isLinking ||
+                            (selectedCategory === 'payment' && !selectedFeeId)
+                        }
+                    >
+                        {isLinking && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        {selectedCategory === 'payment'
+                            ? 'Vincular Taxa'
+                            : 'Classificar Método'}
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

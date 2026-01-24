@@ -1,4 +1,3 @@
-import { startRecalculateMonitoring } from '@/components/global-recalculate-progress';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -17,8 +16,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { useForm, usePage } from '@inertiajs/react';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -26,378 +23,227 @@ import { toast } from 'sonner';
 interface CreatePaymentFeeDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    orderId: number;
-    paymentMethod: string;
-    paymentMethodName: string;
-    provider: string;
-    origin?: string;
+    onSuccess?: () => void;
 }
 
 export function CreatePaymentFeeDialog({
     open,
     onOpenChange,
-    orderId,
-    paymentMethod,
-    paymentMethodName,
-    provider,
-    origin,
+    onSuccess,
 }: CreatePaymentFeeDialogProps) {
-    const [type, setType] = useState<'percentage' | 'fixed'>('percentage');
-
-    // Detectar tipo de pagamento pelo nome
-    const detectPaymentMethod = (name: string, method: string): string => {
-        const lowerName = name.toLowerCase();
-
-        // Se já tem método específico, usar ele
-        if (method && method !== 'others') {
-            return method;
-        }
-
-        // Detectar pelo nome
-        if (lowerName.includes('pix')) return 'PIX';
-        if (lowerName.includes('débito') || lowerName.includes('debit'))
-            return 'DEBIT_CARD';
-        if (lowerName.includes('crédito') || lowerName.includes('credit'))
-            return 'CREDIT_CARD';
-        if (
-            lowerName.includes('dinheiro') ||
-            lowerName.includes('cash') ||
-            lowerName.includes('money')
-        )
-            return 'MONEY';
-        if (lowerName.includes('vale') || lowerName.includes('voucher'))
-            return 'VOUCHER';
-
-        return method; // Fallback para o método original
-    };
-
-    // Detectar se é online ou offline pelo método
-    const detectPaymentType = (name: string): 'online' | 'offline' => {
-        const lowerName = name.toLowerCase();
-
-        // Online: geralmente tem "online" no nome ou é cartão via marketplace
-        if (lowerName.includes('online')) return 'online';
-        if (lowerName.includes('marketplace')) return 'online';
-
-        // Offline: PIX, dinheiro, cartão na maquininha
-        return 'offline';
-    };
-
-    const detectedMethod = detectPaymentMethod(
-        paymentMethodName,
-        paymentMethod,
-    );
-    const detectedPaymentType = detectPaymentType(paymentMethodName);
-
-    // Para Takeat, salvar apenas "takeat" no provider
-    // O origin já está no próprio pedido
-    const getProvider = () => {
-        // Para providers não-Takeat (ifood direto, rappi, etc), manter o provider original
-        if (provider !== 'takeat') {
-            return provider;
-        }
-
-        // Para Takeat, sempre usar "takeat" independente do origin
-        return 'takeat';
-    };
-
-    const { data, setData, post, processing, reset } = useForm({
-        name: `Taxa ${paymentMethodName}`,
-        provider: getProvider(),
-        category: 'payment_method',
-        type: 'percentage',
+    const [formData, setFormData] = useState({
+        name: '',
+        type: 'percentage' as 'percentage' | 'fixed',
         value: '',
-        applies_to: 'payment_method',
-        // Online: condition_values vazio (aplica a todos), Offline: método específico
-        condition_values:
-            detectedPaymentType === 'online' ? [] : [detectedMethod],
-        payment_type: detectedPaymentType, // Adicionar payment_type
-        active: true,
-        apply_to_existing_orders: true, // Por padrão, aplicar aos pedidos existentes
     });
+    const [processing, setProcessing] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
-    // Monitorar recalculate_cache_key retornado do backend
-    const { props } = usePage<{ recalculate_cache_key?: string }>();
     useEffect(() => {
-        if (props.recalculate_cache_key) {
-            startRecalculateMonitoring(props.recalculate_cache_key);
+        if (open) {
+            setFormData({
+                name: '',
+                type: 'percentage',
+                value: '',
+            });
+            setErrors({});
         }
-    }, [props.recalculate_cache_key]);
+    }, [open]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setProcessing(true);
+        setErrors({});
 
-        post('/cost-commissions', {
-            preserveScroll: true,
-            onSuccess: (page) => {
-                toast.success(
-                    'Taxa de pagamento criada com sucesso! Recalculando custos dos pedidos...',
-                );
+        try {
+            const response = await fetch('/api/cost-commissions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN':
+                        document.querySelector<HTMLMetaElement>(
+                            'meta[name="csrf-token"]',
+                        )?.content || '',
+                    Accept: 'application/json',
+                },
+                body: JSON.stringify({
+                    name: formData.name,
+                    category: 'payment_method',
+                    type: formData.type,
+                    value: formData.value,
+                    provider: '',
+                    applies_to: 'payment_method',
+                    active: true,
+                }),
+            });
 
-                // Extrair o cache key do flash message retornado
-                const cacheKey = page.props.recalculate_cache_key as
-                    | string
-                    | undefined;
-                    
-                console.log('Cache key recebido:', cacheKey);
-                console.log('Props da página:', page.props);
-                
-                if (cacheKey) {
-                    console.log('Iniciando monitoramento para:', cacheKey);
-                    startRecalculateMonitoring(cacheKey);
+            const data = await response.json();
+
+            if (!response.ok) {
+                if (data.errors) {
+                    setErrors(data.errors);
+                    const errorMessages = Object.values(data.errors)
+                        .flat()
+                        .join(', ');
+                    toast.error(errorMessages);
                 } else {
-                    console.warn('Cache key não encontrado nas props');
+                    toast.error(data.message || 'Erro ao criar taxa');
                 }
+                setProcessing(false);
+                return;
+            }
 
-                reset();
-                onOpenChange(false);
-            },
-            onError: (errors) => {
-                const errorMessage = Object.values(errors).flat().join(', ');
-                toast.error(`Erro ao criar taxa: ${errorMessage}`);
-            },
-        });
-    };
+            toast.success('Taxa criada com sucesso!');
 
-    const handleTypeChange = (value: string) => {
-        const newType = value as 'percentage' | 'fixed';
-        setType(newType);
-        setData('type', newType);
+            onOpenChange(false);
+
+            // Chamar callback de sucesso
+            if (onSuccess) {
+                onSuccess();
+            }
+        } catch (error) {
+            console.error('Erro ao criar taxa:', error);
+            toast.error('Erro ao criar taxa');
+        } finally {
+            setProcessing(false);
+        }
     };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[500px]">
-                <form onSubmit={handleSubmit}>
-                    <DialogHeader>
-                        <DialogTitle>Criar Taxa de Pagamento</DialogTitle>
-                        <DialogDescription>
-                            Configure a taxa para o método de pagamento{' '}
-                            <strong>{paymentMethodName}</strong>
-                        </DialogDescription>
-                    </DialogHeader>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[500px]">
+                <DialogHeader>
+                    <DialogTitle>Criar Nova Taxa de Pagamento</DialogTitle>
+                    <DialogDescription>
+                        Adicione uma nova taxa de meio de pagamento para ser
+                        aplicada nas vendas.
+                    </DialogDescription>
+                </DialogHeader>
 
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="name">Nome da taxa</Label>
-                            <Input
-                                id="name"
-                                value={data.name}
-                                onChange={(e) =>
-                                    setData('name', e.target.value)
-                                }
-                                placeholder="Ex: Taxa PIX, Taxa Cartão Crédito"
-                                required
-                            />
-                        </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    {/* Nome */}
+                    <div className="space-y-2">
+                        <Label htmlFor="name">
+                            Nome <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                            id="name"
+                            value={formData.name}
+                            onChange={(e) =>
+                                setFormData((prev) => ({
+                                    ...prev,
+                                    name: e.target.value,
+                                }))
+                            }
+                            placeholder="Ex: Taxa Pix, Taxa Crédito"
+                            required
+                        />
+                        {errors.name && (
+                            <p className="text-sm text-destructive">
+                                {errors.name}
+                            </p>
+                        )}
+                    </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="type">Tipo</Label>
-                                <Select
-                                    value={data.type}
-                                    onValueChange={handleTypeChange}
-                                >
-                                    <SelectTrigger id="type">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="percentage">
-                                            Percentual (%)
-                                        </SelectItem>
-                                        <SelectItem value="fixed">
-                                            Valor Fixo (R$)
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="value">
-                                    {type === 'percentage'
-                                        ? 'Percentual'
-                                        : 'Valor'}
-                                </Label>
-                                <Input
-                                    id="value"
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={data.value}
-                                    onChange={(e) =>
-                                        setData('value', e.target.value)
-                                    }
-                                    placeholder={
-                                        type === 'percentage' ? '2.5' : '1.50'
-                                    }
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid gap-2">
-                            <Label htmlFor="payment_type">
-                                Tipo de Pagamento
+                    {/* Tipo e Valor */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="type">
+                                Tipo <span className="text-destructive">*</span>
                             </Label>
                             <Select
-                                value={data.payment_type}
-                                onValueChange={(value) => {
-                                    const newType = value as
-                                        | 'online'
-                                        | 'offline';
-                                    setData('payment_type', newType);
-                                    // Se mudar para online, limpar condition_values
-                                    if (newType === 'online') {
-                                        setData('condition_values', []);
-                                    } else if (
-                                        data.condition_values.length === 0
-                                    ) {
-                                        // Se mudar para offline e não tem método, adicionar o detectado
-                                        setData('condition_values', [
-                                            detectedMethod,
-                                        ]);
-                                    }
-                                }}
+                                value={formData.type}
+                                onValueChange={(value) =>
+                                    setFormData((prev) => ({
+                                        ...prev,
+                                        type: value as typeof formData.type,
+                                    }))
+                                }
                             >
-                                <SelectTrigger id="payment_type">
-                                    <SelectValue />
+                                <SelectTrigger id="type">
+                                    <SelectValue placeholder="Selecione" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="online">
-                                        Online (Pago via Marketplace)
+                                    <SelectItem value="percentage">
+                                        Percentual %
                                     </SelectItem>
-                                    <SelectItem value="offline">
-                                        Offline (Pago ao Estabelecimento)
+                                    <SelectItem value="fixed">
+                                        Fixo R$
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
-                            <p className="text-xs text-muted-foreground">
-                                Online = taxa do marketplace (todos os métodos)
-                                | Offline = taxa específica por método
-                            </p>
-                        </div>
-
-                        {/* Método de Pagamento - apenas para offline */}
-                        {data.payment_type === 'offline' && (
-                            <div className="grid gap-2">
-                                <Label htmlFor="payment_method">
-                                    Método de Pagamento
-                                </Label>
-                                <Select
-                                    value={
-                                        data.condition_values[0] ||
-                                        detectedMethod
-                                    }
-                                    onValueChange={(value) =>
-                                        setData('condition_values', [value])
-                                    }
-                                >
-                                    <SelectTrigger id="payment_method">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="PIX">PIX</SelectItem>
-                                        <SelectItem value="CREDIT_CARD">
-                                            Cartão de Crédito
-                                        </SelectItem>
-                                        <SelectItem value="DEBIT_CARD">
-                                            Cartão de Débito
-                                        </SelectItem>
-                                        <SelectItem value="MONEY">
-                                            Dinheiro
-                                        </SelectItem>
-                                        <SelectItem value="VOUCHER">
-                                            Vale/Voucher
-                                        </SelectItem>
-                                        <SelectItem value="others">
-                                            Outros
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground">
-                                    Método detectado automaticamente. Ajuste se
-                                    necessário.
+                            {errors.type && (
+                                <p className="text-sm text-destructive">
+                                    {errors.type}
                                 </p>
-                            </div>
-                        )}
-
-                        <div className="rounded-lg bg-muted p-3 text-sm">
-                            <p className="text-muted-foreground">
-                                <strong>Provider:</strong>{' '}
-                                {(() => {
-                                    const integratedMarketplaces = [
-                                        'ifood',
-                                        '99food',
-                                        'neemo',
-                                        'keeta',
-                                    ];
-                                    const providerLabels: Record<
-                                        string,
-                                        string
-                                    > = {
-                                        ifood: 'iFood',
-                                        '99food': '99Food',
-                                        neemo: 'Neemo',
-                                        keeta: 'Keeta',
-                                    };
-
-                                    // Se for takeat com origin de marketplace integrado
-                                    if (
-                                        data.provider === 'takeat' &&
-                                        origin &&
-                                        integratedMarketplaces.includes(origin)
-                                    ) {
-                                        return `${providerLabels[origin] || origin} (Takeat)`;
-                                    }
-
-                                    // Para outros casos (balcony, totem, pdv, etc): apenas "Takeat"
-                                    if (data.provider === 'takeat') {
-                                        return 'Takeat';
-                                    }
-
-                                    return data.provider;
-                                })()}
-                            </p>
+                            )}
                         </div>
 
-                        <div className="flex items-center justify-between space-x-2 rounded-md border border-amber-200 bg-amber-50 p-3">
-                            <Label
-                                htmlFor="apply_to_existing_orders"
-                                className="text-sm font-normal"
-                            >
-                                Aplicar aos pedidos já existentes
+                        <div className="space-y-2">
+                            <Label htmlFor="value">
+                                Valor{' '}
+                                <span className="text-destructive">*</span>
                             </Label>
-                            <Switch
-                                id="apply_to_existing_orders"
-                                checked={data.apply_to_existing_orders}
-                                onCheckedChange={(checked) =>
-                                    setData('apply_to_existing_orders', checked)
+                            <Input
+                                id="value"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={formData.value}
+                                onChange={(e) =>
+                                    setFormData((prev) => ({
+                                        ...prev,
+                                        value: e.target.value,
+                                    }))
                                 }
+                                placeholder={
+                                    formData.type === 'percentage'
+                                        ? '3.50'
+                                        : '2.00'
+                                }
+                                required
                             />
+                            {errors.value && (
+                                <p className="text-sm text-destructive">
+                                    {errors.value}
+                                </p>
+                            )}
                         </div>
                     </div>
 
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => onOpenChange(false)}
-                            disabled={processing}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button type="submit" disabled={processing}>
-                            {processing ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Criando...
-                                </>
-                            ) : (
-                                'Criar e Aplicar'
-                            )}
-                        </Button>
-                    </DialogFooter>
+                    {/* Info sobre marketplace */}
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                        <p className="text-sm text-blue-900">
+                            💡 Esta taxa será aplicável a{' '}
+                            <strong>todos os marketplaces</strong>
+                        </p>
+                        <p className="mt-1 text-xs text-blue-700">
+                            Para vincular a taxa ao método de pagamento, use a
+                            Triagem de Pagamentos após criar.
+                        </p>
+                    </div>
                 </form>
+
+                <DialogFooter className="gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                        disabled={processing}
+                    >
+                        Cancelar
+                    </Button>
+                    <Button
+                        type="submit"
+                        onClick={handleSubmit}
+                        disabled={processing}
+                    >
+                        {processing && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Criar Taxa
+                    </Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     );

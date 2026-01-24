@@ -23,6 +23,7 @@ import {
     ArrowUpRight,
     Box,
     Check,
+    CreditCard,
     CupSoda,
     DollarSign,
     IceCream2,
@@ -147,6 +148,7 @@ export function OrderFinancialCard({
     // Estado para controlar o dialog de criação de taxa
     const [isCreateFeeDialogOpen, setIsCreateFeeDialogOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState<{
+        id: string;
         method: string;
         name: string;
     } | null>(null);
@@ -1922,25 +1924,92 @@ export function OrderFinancialCard({
                                                 (fee: CostCommissionItem) =>
                                                     fee.calculated_value > 0,
                                             )
-                                            .map((fee: CostCommissionItem) => (
-                                                <li
-                                                    key={fee.id}
-                                                    className="flex w-full flex-row items-start justify-between px-3 py-0.5"
-                                                >
-                                                    <span className="text-xs leading-4 font-normal text-muted-foreground">
-                                                        {fee.name}
-                                                        {fee.type ===
-                                                        'percentage'
-                                                            ? ` (${String(fee.value)}%)`
-                                                            : ''}
-                                                    </span>
-                                                    <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
-                                                        {formatCurrency(
-                                                            fee.calculated_value,
-                                                        )}
-                                                    </span>
-                                                </li>
-                                            ))}
+                                            .map((fee: CostCommissionItem) => {
+                                                // Encontrar o pagamento original para mostrar o nome real
+                                                const originalPayment =
+                                                    financials.realPayments.find(
+                                                        (p: any) => {
+                                                            const paymentName =
+                                                                p.payment_method
+                                                                    ?.name ||
+                                                                '';
+                                                            return fee.name
+                                                                .toLowerCase()
+                                                                .includes(
+                                                                    paymentName.toLowerCase(),
+                                                                );
+                                                        },
+                                                    );
+
+                                                const displayName =
+                                                    originalPayment
+                                                        ?.payment_method
+                                                        ?.name || fee.name;
+
+                                                // Remover o nome do pagamento original do nome da taxa para evitar duplicação
+                                                let linkedTax = fee.name;
+                                                if (
+                                                    originalPayment
+                                                        ?.payment_method?.name
+                                                ) {
+                                                    const paymentName =
+                                                        originalPayment
+                                                            .payment_method
+                                                            .name;
+                                                    // Remove (Nome do Pagamento) do final da string
+                                                    linkedTax = linkedTax
+                                                        .replace(
+                                                            new RegExp(
+                                                                `\\s*\\(${paymentName}\\)\\s*$`,
+                                                                'i',
+                                                            ),
+                                                            '',
+                                                        )
+                                                        .trim();
+                                                }
+
+                                                return (
+                                                    <li
+                                                        key={fee.id}
+                                                        className="flex w-full flex-row items-start justify-between gap-2 px-3 py-0.5"
+                                                    >
+                                                        <div className="flex flex-1 items-center gap-1.5">
+                                                            <TooltipProvider>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger
+                                                                        asChild
+                                                                    >
+                                                                        <div className="flex items-center gap-2">
+                                                                            <CreditCard className="h-3 w-3 text-muted-foreground" />
+                                                                            <span className="text-xs leading-4 font-normal text-muted-foreground">
+                                                                                {
+                                                                                    displayName
+                                                                                }
+                                                                            </span>
+                                                                        </div>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="right">
+                                                                        <p className="text-xs">
+                                                                            {
+                                                                                linkedTax
+                                                                            }
+                                                                            {fee.type ===
+                                                                            'percentage'
+                                                                                ? ` (${String(fee.value)}%)`
+                                                                                : ` - ${formatCurrency(fee.value)}`}
+                                                                        </p>
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            </TooltipProvider>
+                                                        </div>
+                                                        <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
+                                                            {formatCurrency(
+                                                                fee.calculated_value,
+                                                            )}
+                                                        </span>
+                                                    </li>
+                                                );
+                                            })}
                                     </ul>
                                 )}
 
@@ -1959,6 +2028,7 @@ export function OrderFinancialCard({
                                                 ) => {
                                                     const p = payment as {
                                                         payment_method?: {
+                                                            id?: string;
                                                             name?: string;
                                                             method?: string;
                                                             keyword?: string;
@@ -1969,6 +2039,9 @@ export function OrderFinancialCard({
                                                         p.payment_method
                                                             ?.name ||
                                                         'Pagamento';
+                                                    const paymentMethodId =
+                                                        p.payment_method?.id ||
+                                                        '';
                                                     const paymentMethod =
                                                         p.payment_method
                                                             ?.method ||
@@ -1984,8 +2057,9 @@ export function OrderFinancialCard({
                                                             (
                                                                 fee: CostCommissionItem,
                                                             ) =>
-                                                                fee.calculated_value >
-                                                                    0 &&
+                                                                (fee.calculated_value >
+                                                                    0 ||
+                                                                    fee.is_linked) &&
                                                                 fee.name
                                                                     .toLowerCase()
                                                                     .includes(
@@ -2001,13 +2075,12 @@ export function OrderFinancialCard({
                                                             key={idx}
                                                             className="flex w-full flex-row items-center justify-between gap-2 px-3 py-1 hover:bg-muted/50"
                                                         >
-                                                            <div className="flex flex-1 flex-col gap-0.5">
+                                                            <div className="flex flex-1 items-center gap-1.5">
+                                                                <CreditCard className="h-3 w-3 text-muted-foreground" />
                                                                 <span className="text-xs leading-4 font-normal text-muted-foreground">
                                                                     {
                                                                         paymentName
                                                                     }
-                                                                    {paymentMethod &&
-                                                                        ` (${paymentMethod})`}
                                                                 </span>
                                                             </div>
                                                             <span className="text-xs leading-4 font-normal whitespace-nowrap text-muted-foreground">
@@ -2024,6 +2097,7 @@ export function OrderFinancialCard({
                                                                     onClick={async () => {
                                                                         setSelectedPayment(
                                                                             {
+                                                                                id: paymentMethodId,
                                                                                 method: paymentMethod,
                                                                                 name: paymentName,
                                                                             },
@@ -2150,7 +2224,7 @@ export function OrderFinancialCard({
                         open={isLinkFeeDialogOpen}
                         onOpenChange={setIsLinkFeeDialogOpen}
                         orderId={order.id}
-                        paymentMethod={selectedPayment.method}
+                        paymentMethod={selectedPayment.id}
                         paymentMethodName={selectedPayment.name}
                         provider={order.provider}
                         origin={order.origin}
@@ -2167,11 +2241,34 @@ export function OrderFinancialCard({
                     <CreatePaymentFeeDialog
                         open={isCreateFeeDialogOpen}
                         onOpenChange={setIsCreateFeeDialogOpen}
-                        orderId={order.id}
-                        paymentMethod={selectedPayment.method}
-                        paymentMethodName={selectedPayment.name}
-                        provider={order.provider}
-                        origin={order.origin}
+                        onSuccess={async () => {
+                            // Recarregar apenas as taxas disponíveis via API
+                            try {
+                                const response = await fetch(
+                                    `/api/cost-commissions?category=payment_method&active=1`,
+                                    {
+                                        headers: {
+                                            'X-Requested-With':
+                                                'XMLHttpRequest',
+                                        },
+                                    },
+                                );
+                                if (response.ok) {
+                                    const data = await response.json();
+                                    setAvailableFees(data.data || []);
+                                    toast.success('Lista de taxas atualizada!');
+                                }
+                            } catch (error) {
+                                console.error(
+                                    'Erro ao recarregar taxas:',
+                                    error,
+                                );
+                            }
+
+                            // Reabrir o dialog de vinculação
+                            setIsCreateFeeDialogOpen(false);
+                            setIsLinkFeeDialogOpen(true);
+                        }}
                     />
                 )}
 
