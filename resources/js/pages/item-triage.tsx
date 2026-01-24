@@ -455,13 +455,18 @@ export default function ItemTriage({
     };
 
     const formatDate = (date: string) => {
-        return new Intl.DateTimeFormat('pt-BR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: '2-digit',
+        const dateObj = new Date(date);
+        // Subtrair 3 horas pois o placed_at foi salvo com 3h a mais
+        dateObj.setHours(dateObj.getHours() - 3);
+        const dateStr = dateObj.toLocaleDateString('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
+        });
+        const timeStr = dateObj.toLocaleTimeString('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
             hour: '2-digit',
             minute: '2-digit',
-        }).format(new Date(date));
+        });
+        return `${dateStr}, ${timeStr}`;
     };
 
     return (

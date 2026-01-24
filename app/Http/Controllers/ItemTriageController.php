@@ -429,7 +429,7 @@ class ItemTriageController extends Controller
                         'id' => $order->id,
                         'code' => $order->code,
                         'short_reference' => $order->short_reference,
-                        'placed_at' => $order->placed_at,
+                        'placed_at' => $order->placed_at?->format('Y-m-d\TH:i:s.uP'),
                         'gross_total' => $order->gross_total,
                         'items' => $order->items->map(function ($item) {
                             return [
@@ -495,7 +495,7 @@ class ItemTriageController extends Controller
                     'id' => $order->id,
                     'code' => $order->code,
                     'short_reference' => $order->short_reference,
-                    'placed_at' => $order->placed_at,
+                    'placed_at' => $order->placed_at?->format('Y-m-d\TH:i:s.uP'),
                     'gross_total' => $order->gross_total,
                     'items' => $order->items->map(function ($item) {
                         return [
