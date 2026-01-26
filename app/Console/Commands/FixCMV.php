@@ -465,7 +465,7 @@ class FixCMV extends Command
                 $order = \App\Models\Order::find($orderId);
                 if ($order) {
                     try {
-                        $result = $costService->calculateOrderCosts($order);
+                        $result = $costService->calculateCosts($order);
                         $order->update([
                             'calculated_costs' => $result,
                             'total_costs' => $result['total_costs'] ?? 0,
