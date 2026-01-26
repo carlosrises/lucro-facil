@@ -21,6 +21,85 @@ import { ColumnDef } from '@tanstack/react-table';
 import { endOfDay, startOfDay } from 'date-fns';
 import { Badge } from '../ui/badge';
 
+const TAKEAT_IFOOD_SERVICE_FEE = 0.99; // Mantém alinhado com OrderCostService.php e order-financial-card.tsx
+
+/**
+ * Calcula o subtotal do pedido seguindo a mesma lógica do card financeiro
+ * Este é o valor base usado para calcular a margem de lucro
+ */
+function calculateOrderSubtotal(order: Order): number {
+    const grossTotal = parseFloat(String(order?.gross_total || '0')) || 0;
+    const discountTotal = parseFloat(String(order?.discount_total || '0')) || 0;
+    const deliveryFee = parseFloat(String(order?.delivery_fee || '0')) || 0;
+    
+    // Pagamentos da sessão (para Takeat)
+    const sessionPayments = order?.raw?.session?.payments || [];
+    
+    // Filtrar cashback
+    const totalCashback = sessionPayments
+        .filter((payment: any) => {
+            const paymentName = payment.payment_method?.name?.toLowerCase() || '';
+            const paymentKeyword = payment.payment_method?.keyword?.toLowerCase() || '';
+            return paymentName.includes('cashback') || paymentKeyword.includes('clube');
+        })
+        .reduce((sum: number, payment: any) => {
+            const value = parseFloat(String(payment.payment_value || '0')) || 0;
+            return sum + value;
+        }, 0);
+    
+    // Filtrar subsídios
+    const totalSubsidy = sessionPayments
+        .filter((payment: any) => {
+            const paymentName = payment.payment_method?.name?.toLowerCase() || '';
+            const paymentKeyword = payment.payment_method?.keyword?.toLowerCase() || '';
+            const isCashback = paymentName.includes('cashback') || paymentKeyword.includes('clube');
+            const isSubsidy = paymentName.includes('subsid') || paymentName.includes('cupom') ||
+                paymentKeyword.includes('subsid') || paymentKeyword.includes('cupom');
+            return isSubsidy && !isCashback;
+        })
+        .reduce((sum: number, payment: any) => {
+            const value = parseFloat(String(payment.payment_value || '0')) || 0;
+            return sum + value;
+        }, 0);
+    
+    const storeDiscount = discountTotal - totalSubsidy + totalCashback;
+    
+    // Taxa fixa do iFood
+    const rawSessionServiceFee = parseFloat(
+        String(order?.raw?.session?.service_fee ?? order?.raw?.session?.serviceFee ?? 0)
+    ) || 0;
+    const ifoodServiceFee = isTakeatIfoodOrder(order)
+        ? rawSessionServiceFee > 0 ? rawSessionServiceFee : TAKEAT_IFOOD_SERVICE_FEE
+        : 0;
+    
+    // Começar com grossTotal e aplicar ajustes
+    let subtotal = grossTotal;
+    subtotal -= storeDiscount;
+    
+    const usedTotalDeliveryPrice = order?.provider === 'takeat' && 
+        Boolean(order?.raw?.session?.total_delivery_price);
+    
+    const deliveryBy = order?.raw?.session?.delivery_by?.toUpperCase() || '';
+    const isMarketplaceDelivery = ['IFOOD', 'MARKETPLACE'].includes(deliveryBy);
+    
+    if (!usedTotalDeliveryPrice) {
+        subtotal += totalSubsidy;
+        if (!isMarketplaceDelivery && deliveryFee > 0) {
+            subtotal += deliveryFee;
+        }
+    } else if (isMarketplaceDelivery && deliveryFee > 0) {
+        subtotal -= deliveryFee;
+    }
+    
+    subtotal -= totalCashback;
+    
+    if (ifoodServiceFee > 0) {
+        subtotal -= ifoodServiceFee;
+    }
+    
+    return subtotal;
+}
+
 // Tipagem vinda do backend
 export type OrderItemMapping = {
     id: number;
@@ -915,10 +994,20 @@ export const columns: ColumnDef<Order>[] = [
             </span>
         ),
         cell: ({ row }) => {
-            // Ler diretamente do calculated_costs (já calculado pelo backend)
-            const calculatedCosts = row.original.calculated_costs;
-            const netRevenue = calculatedCosts?.net_revenue ?? 0;
-            const isCancelled = row.original.status === 'CANCELLED';
+            const order = row.original;
+            const calculatedCosts = order.calculated_costs;
+            const isCancelled = order.status === 'CANCELLED';
+
+            // Calcular net_revenue manualmente seguindo a mesma lógica do card financeiro
+            const subtotal = calculateOrderSubtotal(order);
+            const cmv = calculateOrderCMV(order.items || []);
+            const totalTax = calculatedCosts?.total_taxes ?? 0;
+            const totalCosts = calculatedCosts?.total_costs ?? 0;
+            const totalCommissions = calculatedCosts?.total_commissions ?? 0;
+            const totalPaymentMethodFee = calculatedCosts?.total_payment_methods ?? 0;
+            
+            // Líquido = Subtotal - CMV - Impostos - Custos - Comissão - Taxas de Pagamento
+            const netRevenue = subtotal - cmv - totalTax - totalCosts - totalCommissions - totalPaymentMethodFee;
 
             return (
                 <span
@@ -940,12 +1029,22 @@ export const columns: ColumnDef<Order>[] = [
         id: 'margin',
         header: 'Margem',
         cell: ({ row, table }) => {
-            const status = row.original.status;
-            const calculatedCosts = row.original.calculated_costs;
+            const order = row.original;
+            const status = order.status;
+            const calculatedCosts = order.calculated_costs;
 
-            // Ler valores já calculados pelo backend
-            const netRevenue = calculatedCosts?.net_revenue ?? 0;
-            const baseValue = calculatedCosts?.base_value ?? 0;
+            // Calcular subtotal seguindo a MESMA lógica do card financeiro
+            const subtotal = calculateOrderSubtotal(order);
+            
+            // Calcular net_revenue manualmente (não confiar no backend)
+            const cmv = calculateOrderCMV(order.items || []);
+            const totalTax = calculatedCosts?.total_taxes ?? 0;
+            const totalCosts = calculatedCosts?.total_costs ?? 0;
+            const totalCommissions = calculatedCosts?.total_commissions ?? 0;
+            const totalPaymentMethodFee = calculatedCosts?.total_payment_methods ?? 0;
+            
+            // Líquido = Subtotal - CMV - Impostos - Custos - Comissão - Taxas de Pagamento
+            const netRevenue = subtotal - cmv - totalTax - totalCosts - totalCommissions - totalPaymentMethodFee;
 
             // Pega marginSettings do table.options.meta
             const marginSettings = (
@@ -972,7 +1071,7 @@ export const columns: ColumnDef<Order>[] = [
             }
 
             // Verificar se tem valor válido
-            if (!baseValue || baseValue <= 0) {
+            if (!subtotal || subtotal <= 0) {
                 return (
                     <div className="text-right">
                         <span className="text-muted-foreground">--</span>
@@ -980,8 +1079,8 @@ export const columns: ColumnDef<Order>[] = [
                 );
             }
 
-            // Margem: tratar caso especial de baseValue = 0
-            if (baseValue <= 0) {
+            // Margem: tratar caso especial de subtotal = 0
+            if (subtotal <= 0) {
                 // Se há prejuízo (custos sem receita), mostrar indicador vermelho
                 if (netRevenue < 0) {
                     return (
@@ -998,7 +1097,9 @@ export const columns: ColumnDef<Order>[] = [
                 );
             }
 
-            const margin = (netRevenue / baseValue) * 100;
+            // Margem = (Receita Líquida / Subtotal) * 100
+            // Mesma fórmula do card financeiro
+            const margin = (netRevenue / subtotal) * 100;
 
             // Determinar variante baseada na margem (permitir valores negativos)
             let variant: 'default' | 'warning' | 'destructive' = 'default';
