@@ -16,14 +16,25 @@ use App\Http\Controllers\ProductsController;
 use App\Http\Controllers\RecalculationStatusController;
 // use App\Http\Controllers\SalesController;
 use App\Http\Controllers\StoresController;
+use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\TakeatSyncController;
 use App\Http\Controllers\TaxCategoriesController;
 use App\Http\Controllers\UsersController;
+use App\Models\Plan;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
+// Stripe Webhook (sem CSRF, configurado em bootstrap/app.php)
+Route::post('stripe/webhook', [StripeWebhookController::class, 'handle'])->name('stripe.webhook');
+
 Route::get('/', function () {
-    return Inertia::render('welcome');
+    $plans = Plan::where('active', true)
+        ->orderBy('price_month')
+        ->get(['id', 'code', 'name', 'description', 'price_month', 'features']);
+
+    return Inertia::render('welcome', [
+        'plans' => $plans,
+    ]);
 })->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -156,6 +167,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('financial/entries', [FinanceEntriesController::class, 'index'])->name('financial.entries');
     Route::post('financial/entries', [FinanceEntriesController::class, 'store'])->name('financial.entries.store');
     Route::put('financial/entries/{entry}', [FinanceEntriesController::class, 'update'])->name('financial.entries.update');
+    Route::patch('financial/entries/{entry}/pay', [FinanceEntriesController::class, 'markAsPaid'])->name('financial.entries.pay');
+    Route::patch('financial/entries/{entry}/unpay', [FinanceEntriesController::class, 'markAsUnpaid'])->name('financial.entries.unpay');
     Route::delete('financial/entries/{entry}', [FinanceEntriesController::class, 'destroy'])->name('financial.entries.destroy');
 
     // Takeat Sync
