@@ -35,6 +35,15 @@ return [
         ],
     ],
 
+    'stripe' => [
+        'key' => env('STRIPE_KEY'),
+        'secret' => env('STRIPE_SECRET'),
+        'webhook' => [
+            'secret' => env('STRIPE_WEBHOOK_SECRET'),
+            'tolerance' => env('STRIPE_WEBHOOK_TOLERANCE', 300),
+        ],
+    ],
+
     'ifood' => [
         'base_url' => env('IFOOD_BASE_URL', 'https://merchant-api.ifood.com.br/'),
         'client_id' => env('IFOOD_CLIENT_ID'),
