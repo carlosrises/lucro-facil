@@ -213,9 +213,8 @@ export function AppSidebar() {
         },
         {
             title: 'Planos',
-            href: admin.plans(),
+            href: admin.plans.index(),
             icon: ClipboardList,
-            locked: true,
         },
         {
             title: 'Pagamentos',
