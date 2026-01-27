@@ -265,6 +265,14 @@ export function DataTable({
                             .getAllColumns()
                             .filter((column) => column.getCanHide())
                             .map((column) => {
+                                // Usar meta.label se disponível, senão column.id
+                                const label =
+                                    (
+                                        column.columnDef.meta as {
+                                            label?: string;
+                                        }
+                                    )?.label || column.id;
+
                                 return (
                                     <DropdownMenuCheckboxItem
                                         key={column.id}
@@ -274,7 +282,7 @@ export function DataTable({
                                             column.toggleVisibility(!!value)
                                         }
                                     >
-                                        {column.id}
+                                        {label}
                                     </DropdownMenuCheckboxItem>
                                 );
                             })}

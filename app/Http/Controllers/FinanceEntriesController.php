@@ -39,8 +39,30 @@ class FinanceEntriesController extends Controller
             ->when($request->input('status'), fn ($q, $status) => $q->where('status', $status)
             )
             // Sempre aplicar filtro de mês (padrão: mês atual)
-            ->whereYear('occurred_on', substr($month, 0, 4))
-            ->whereMonth('occurred_on', substr($month, 5, 2))
+            // Filtrar por competence_date OU due_date OU occurred_on (prioridade: competence > due > occurred)
+            ->where(function ($q) use ($month) {
+                $year = substr($month, 0, 4);
+                $monthNum = substr($month, 5, 2);
+
+                $q->where(function ($query) use ($year, $monthNum) {
+                    // Prioridade 1: data de competência
+                    $query->whereYear('competence_date', $year)
+                        ->whereMonth('competence_date', $monthNum);
+                })
+                ->orWhere(function ($query) use ($year, $monthNum) {
+                    // Prioridade 2: data de vencimento (quando não tem competência)
+                    $query->whereNull('competence_date')
+                        ->whereYear('due_date', $year)
+                        ->whereMonth('due_date', $monthNum);
+                })
+                ->orWhere(function ($query) use ($year, $monthNum) {
+                    // Prioridade 3: data de emissão (quando não tem nem competência nem vencimento)
+                    $query->whereNull('competence_date')
+                        ->whereNull('due_date')
+                        ->whereYear('occurred_on', $year)
+                        ->whereMonth('occurred_on', $monthNum);
+                });
+            })
             ->orderBy('occurred_on', 'desc');
 
         $perPage = (int) $request->input('per_page', 10);
@@ -116,11 +138,6 @@ class FinanceEntriesController extends Controller
                 // Garantir que is_recurring seja false para entradas únicas
                 $validated['is_recurring'] = false;
                 $entry = FinanceEntry::create($validated);
-
-                // logger()->info('Movimentação única criada', [
-                //     'entry_id' => $entry->id,
-                //     'tenant_id' => $validated['tenant_id'],
-                // ]);
             }
 
             return redirect()->back()->with('success', 'Movimentação criada com sucesso!');
@@ -173,23 +190,61 @@ class FinanceEntriesController extends Controller
                 $validated['paid_at'] = now();
             }
 
-            // Se é uma parcela filha de recorrência, atualizar o template pai
+// Se é uma parcela filha de recorrência
             if ($entry->parent_entry_id !== null) {
-                $template = FinanceEntry::find($entry->parent_entry_id);
-                if ($template && $template->is_recurring && $validated['recurrence_type'] !== 'single') {
-                    // Atualizar o template com os novos dados
-                    $this->recurringService->updateRecurringEntry($template, $validated);
+                $updateScope = $request->input('update_scope', 'single');
 
-                    return redirect()->back()->with('success', 'Recorrência atualizada! Todas as parcelas futuras foram regeneradas.');
+                if ($updateScope === 'all') {
+                    // Atualizar template e regenerar todas as parcelas futuras
+                    $template = FinanceEntry::find($entry->parent_entry_id);
+                    if ($template && $template->is_recurring) {
+                        $this->recurringService->updateRecurringEntry($template, $validated);
+                        return redirect()->back()->with('success', 'Template e parcelas futuras atualizados com sucesso!');
+                    }
                 }
+
+                // Atualizar apenas esta parcela
+                $validated['is_recurring'] = false;
+                $validated['parent_entry_id'] = $entry->parent_entry_id;
+                $entry->update($validated);
+
+                return redirect()->back()->with('success', 'Parcela atualizada com sucesso!');
             }
 
-            // Se é um template recorrente, atualizar e regenerar parcelas
+            // CASO 1: Converter entrada única para recorrente
+            if (!$entry->is_recurring && $validated['recurrence_type'] !== 'single') {
+                // Converter a entrada existente em template
+                $validated['is_recurring'] = true;
+                $validated['parent_entry_id'] = null;
+                $entry->update($validated);
+
+                // Gerar parcelas futuras
+                $count = $this->recurringService->calculateInstallmentsCount($entry);
+                $this->recurringService->generateInstallments($entry, $count);
+
+                return redirect()->back()->with('success', 'Movimentação convertida para recorrente! Parcelas criadas com sucesso.');
+            }
+
+            // CASO 2: Converter recorrente para única (deletar parcelas filhas)
+            if ($entry->is_recurring && $validated['recurrence_type'] === 'single') {
+                // Deletar todas as parcelas filhas
+                FinanceEntry::where('parent_entry_id', $entry->id)->delete();
+
+                $validated['is_recurring'] = false;
+                $validated['recurrence_end_date'] = null;
+                $entry->update($validated);
+
+                return redirect()->back()->with('success', 'Movimentação convertida para única! Parcelas removidas.');
+            }
+
+            // CASO 3: Já é template recorrente, apenas atualizar e regenerar parcelas
             if ($entry->is_recurring && $entry->parent_entry_id === null && $validated['recurrence_type'] !== 'single') {
                 $this->recurringService->updateRecurringEntry($entry, $validated);
-            } else {
-                $entry->update($validated);
+                return redirect()->back()->with('success', 'Recorrência atualizada! Parcelas futuras regeneradas.');
             }
+
+            // CASO 4: Entrada única permanece única
+            $entry->update($validated);
 
             return redirect()->back()->with('success', 'Movimentação atualizada com sucesso!');
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -221,5 +276,41 @@ class FinanceEntriesController extends Controller
         $entry->delete();
 
         return redirect()->back();
+    }
+
+    /**
+     * Dar baixa rápida em uma movimentação (marcar como pago)
+     */
+    public function markAsPaid(FinanceEntry $entry)
+    {
+        // Verificar se o entry pertence ao tenant
+        if ($entry->tenant_id !== tenant_id()) {
+            abort(403, 'Unauthorized');
+        }
+
+        $entry->update([
+            'status' => 'paid',
+            'paid_at' => now(),
+        ]);
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Desfazer baixa de uma movimentação (marcar como pendente)
+     */
+    public function markAsUnpaid(FinanceEntry $entry)
+    {
+        // Verificar se o entry pertence ao tenant
+        if ($entry->tenant_id !== tenant_id()) {
+            abort(403, 'Unauthorized');
+        }
+
+        $entry->update([
+            'status' => 'pending',
+            'paid_at' => null,
+        ]);
+
+        return response()->json(['success' => true]);
     }
 }

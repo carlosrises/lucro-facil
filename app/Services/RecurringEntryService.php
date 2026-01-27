@@ -74,12 +74,22 @@ class RecurringEntryService
             $installmentData = $template->toArray();
             unset($installmentData['id'], $installmentData['created_at'], $installmentData['updated_at']);
 
+            // Calcular diferença de dias entre occurred_on e due_date/competence do template
+            $templateOccurredOn = Carbon::parse($template->occurred_on);
+            $dueDateDiff = $template->due_date
+                ? Carbon::parse($template->due_date)->diffInDays($templateOccurredOn, false)
+                : 0;
+            $competenceDateDiff = $template->competence_date
+                ? Carbon::parse($template->competence_date)->diffInDays($templateOccurredOn, false)
+                : 0;
+
             $installmentData['is_recurring'] = false;
             $installmentData['parent_entry_id'] = $template->id;
             $installmentData['installment_number'] = $installmentNumber;
             $installmentData['occurred_on'] = $nextDate->format('Y-m-d');
-            $installmentData['due_date'] = $nextDate->format('Y-m-d');
-            $installmentData['competence_date'] = $nextDate->format('Y-m-d');
+            // Aplicar a mesma diferença de dias do template
+            $installmentData['due_date'] = $nextDate->copy()->addDays($dueDateDiff)->format('Y-m-d');
+            $installmentData['competence_date'] = $nextDate->copy()->addDays($competenceDateDiff)->format('Y-m-d');
             $installmentData['status'] = 'pending';
             $installmentData['paid_at'] = null;
 
@@ -152,7 +162,7 @@ class RecurringEntryService
     /**
      * Calcular número de parcelas necessárias até a data limite
      */
-    private function calculateInstallmentsCount(FinanceEntry $template): int
+    public function calculateInstallmentsCount(FinanceEntry $template): int
     {
         if (!$template->recurrence_end_date) {
             return 12; // Sem limite, gera 12 parcelas (1 ano)

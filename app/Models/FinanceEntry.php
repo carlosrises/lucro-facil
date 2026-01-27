@@ -36,10 +36,10 @@ class FinanceEntry extends Model
     ];
 
     protected $casts = [
-        'occurred_on' => 'date',
-        'due_date' => 'date',
-        'recurrence_end_date' => 'date',
-        'competence_date' => 'date',
+        'occurred_on' => 'date:Y-m-d',
+        'due_date' => 'date:Y-m-d',
+        'recurrence_end_date' => 'date:Y-m-d',
+        'competence_date' => 'date:Y-m-d',
         'paid_at' => 'datetime',
         'is_recurring' => 'boolean',
         'consider_business_days' => 'boolean',

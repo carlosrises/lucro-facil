@@ -1,3 +1,13 @@
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -99,13 +109,23 @@ export function EntryFormDialog({
     });
 
     const [giveReceipt, setGiveReceipt] = useState(false);
+    const [showRecurrenceDialog, setShowRecurrenceDialog] = useState(false);
+    const [pendingSubmit, setPendingSubmit] = useState<'single' | 'all' | null>(
+        null,
+    );
 
     useEffect(() => {
         if (entry) {
-            // Função auxiliar para formatar datas
+            // Função auxiliar para formatar datas para o input type="date"
             const formatDate = (date: string | null) => {
                 if (!date) return '';
-                return date.split('T')[0]; // Pega apenas a parte YYYY-MM-DD
+                // Lidar com diferentes formatos de data do Laravel
+                // Pode vir como "2026-01-10", "2026-01-10T00:00:00.000000Z", ou objeto Date
+                const dateStr =
+                    typeof date === 'string' ? date : date.toString();
+                // Pegar apenas YYYY-MM-DD
+                const match = dateStr.match(/(\d{4}-\d{2}-\d{2})/);
+                return match ? match[1] : '';
             };
 
             setFormData({
@@ -170,6 +190,17 @@ export function EntryFormDialog({
             return;
         }
 
+        // Se está editando uma parcela de recorrência, perguntar o escopo da atualização
+        if (entry && entry.parent_entry_id) {
+            setShowRecurrenceDialog(true);
+            return;
+        }
+
+        // Caso contrário, submeter normalmente
+        submitForm('single');
+    };
+
+    const submitForm = (updateScope: 'single' | 'all') => {
         const url = entry
             ? `/financial/entries/${entry.id}`
             : '/financial/entries';
@@ -179,6 +210,7 @@ export function EntryFormDialog({
         const dataToSend = {
             ...formData,
             status: giveReceipt ? 'paid' : 'pending',
+            update_scope: updateScope, // Adicionar flag para o backend
         };
 
         router[method](url, dataToSend, {
@@ -711,9 +743,17 @@ export function EntryFormDialog({
                                     </div>
                                     <div className="mt-1">
                                         {formData.occurred_on
-                                            ? new Date(
-                                                  formData.occurred_on,
-                                              ).toLocaleDateString('pt-BR')
+                                            ? (() => {
+                                                  const [y, m, d] =
+                                                      formData.occurred_on.split(
+                                                          '-',
+                                                      );
+                                                  return new Date(
+                                                      parseInt(y),
+                                                      parseInt(m) - 1,
+                                                      parseInt(d),
+                                                  ).toLocaleDateString('pt-BR');
+                                              })()
                                             : '—'}
                                     </div>
                                 </div>
@@ -723,9 +763,17 @@ export function EntryFormDialog({
                                     </div>
                                     <div className="mt-1">
                                         {formData.competence_date
-                                            ? new Date(
-                                                  formData.competence_date,
-                                              ).toLocaleDateString('pt-BR')
+                                            ? (() => {
+                                                  const [y, m, d] =
+                                                      formData.competence_date.split(
+                                                          '-',
+                                                      );
+                                                  return new Date(
+                                                      parseInt(y),
+                                                      parseInt(m) - 1,
+                                                      parseInt(d),
+                                                  ).toLocaleDateString('pt-BR');
+                                              })()
                                             : '—'}
                                     </div>
                                 </div>
@@ -735,9 +783,17 @@ export function EntryFormDialog({
                                     </div>
                                     <div className="mt-1">
                                         {formData.due_date
-                                            ? new Date(
-                                                  formData.due_date,
-                                              ).toLocaleDateString('pt-BR')
+                                            ? (() => {
+                                                  const [y, m, d] =
+                                                      formData.due_date.split(
+                                                          '-',
+                                                      );
+                                                  return new Date(
+                                                      parseInt(y),
+                                                      parseInt(m) - 1,
+                                                      parseInt(d),
+                                                  ).toLocaleDateString('pt-BR');
+                                              })()
                                             : '—'}
                                     </div>
                                 </div>
@@ -788,6 +844,44 @@ export function EntryFormDialog({
                     </DialogFooter>
                 </form>
             </DialogContent>
+
+            {/* Dialog de confirmação para edição de parcela recorrente */}
+            <AlertDialog
+                open={showRecurrenceDialog}
+                onOpenChange={setShowRecurrenceDialog}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            Atualizar movimentação recorrente
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Esta é uma parcela de uma movimentação recorrente.
+                            Como deseja atualizar?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setShowRecurrenceDialog(false);
+                                submitForm('single');
+                            }}
+                        >
+                            Apenas esta parcela
+                        </Button>
+                        <AlertDialogAction
+                            onClick={() => {
+                                setShowRecurrenceDialog(false);
+                                submitForm('all');
+                            }}
+                        >
+                            Todas as parcelas
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </Dialog>
     );
 }

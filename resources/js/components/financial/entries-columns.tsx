@@ -8,6 +8,8 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Switch } from '@/components/ui/switch';
+import { router } from '@inertiajs/react';
 import { ColumnDef } from '@tanstack/react-table';
 import {
     AlertTriangle,
@@ -17,6 +19,7 @@ import {
     Repeat,
     Trash2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 export type FinanceEntry = {
     id: number;
@@ -93,6 +96,9 @@ export const createColumns = ({
                 </Button>
             );
         },
+        meta: {
+            label: 'Data',
+        },
         cell: ({ row }) => {
             const date = new Date(row.getValue('occurred_on'));
             return date.toLocaleDateString('pt-BR');
@@ -101,6 +107,9 @@ export const createColumns = ({
     {
         accessorKey: 'description',
         header: 'Descrição',
+        meta: {
+            label: 'Descrição',
+        },
         cell: ({ row }) => {
             const description = row.getValue('description') as string | null;
             return (
@@ -111,6 +120,9 @@ export const createColumns = ({
     {
         accessorKey: 'category',
         header: 'Categoria',
+        meta: {
+            label: 'Categoria',
+        },
         cell: ({ row }) => {
             const category = row.original.category;
             const isRecurring = row.original.parent_entry_id !== null;
@@ -154,6 +166,9 @@ export const createColumns = ({
     {
         accessorKey: 'supplier',
         header: 'Fornecedor',
+        meta: {
+            label: 'Fornecedor',
+        },
         cell: ({ row }) => {
             const supplier = row.getValue('supplier') as string | null;
             return supplier || <span className="text-muted-foreground">—</span>;
@@ -173,6 +188,9 @@ export const createColumns = ({
                     <ArrowUpDown className="ml-2 h-4 w-4" />
                 </Button>
             );
+        },
+        meta: {
+            label: 'Valor',
         },
         cell: ({ row }) => {
             const amount = parseFloat(row.getValue('amount'));
@@ -194,6 +212,9 @@ export const createColumns = ({
     {
         accessorKey: 'due_date',
         header: 'Vencimento',
+        meta: {
+            label: 'Vencimento',
+        },
         cell: ({ row }) => {
             const dueDate = row.getValue('due_date') as string | null;
             if (!dueDate) {
@@ -206,18 +227,81 @@ export const createColumns = ({
     {
         accessorKey: 'status',
         header: 'Status',
+        meta: {
+            label: 'Status',
+        },
         cell: ({ row }) => {
-            const status = row.getValue('status') as string;
+            const entry = row.original;
+            const isPaid = entry.status === 'paid';
+
+            const handleToggleStatus = (checked: boolean) => {
+                if (checked) {
+                    // Marcar como pago
+                    fetch(`/financial/entries/${entry.id}/pay`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN':
+                                document
+                                    .querySelector('meta[name="csrf-token"]')
+                                    ?.getAttribute('content') || '',
+                        },
+                    })
+                        .then((response) => {
+                            if (!response.ok)
+                                throw new Error('Erro ao dar baixa');
+                            toast.success('Marcado como pago!');
+                            router.reload({ only: ['entries'] });
+                        })
+                        .catch(() => {
+                            toast.error('Erro ao dar baixa');
+                        });
+                } else {
+                    // Marcar como pendente - criar endpoint específico
+                    fetch(`/financial/entries/${entry.id}/unpay`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN':
+                                document
+                                    .querySelector('meta[name="csrf-token"]')
+                                    ?.getAttribute('content') || '',
+                        },
+                    })
+                        .then((response) => {
+                            if (!response.ok)
+                                throw new Error('Erro ao marcar como pendente');
+                            toast.success('Marcado como pendente!');
+                            router.reload({ only: ['entries'] });
+                        })
+                        .catch(() => {
+                            toast.error('Erro ao marcar como pendente');
+                        });
+                }
+            };
+
             return (
-                <Badge variant={status === 'paid' ? 'default' : 'secondary'}>
-                    {status === 'paid' ? 'Pago' : 'Pendente'}
-                </Badge>
+                <div className="flex items-center gap-3">
+                    <Badge variant={isPaid ? 'default' : 'secondary'}>
+                        {isPaid ? 'Pago' : 'Pendente'}
+                    </Badge>
+                    <Switch
+                        checked={isPaid}
+                        onCheckedChange={handleToggleStatus}
+                        title={
+                            isPaid ? 'Marcar como pendente' : 'Marcar como pago'
+                        }
+                    />
+                </div>
             );
         },
     },
     {
         accessorKey: 'recurrence_type',
         header: 'Recorrência',
+        meta: {
+            label: 'Recorrência',
+        },
         cell: ({ row }) => {
             const type = row.getValue('recurrence_type') as string;
             return (
@@ -230,6 +314,9 @@ export const createColumns = ({
     {
         accessorKey: 'reference',
         header: 'Referência',
+        meta: {
+            label: 'Referência',
+        },
         cell: ({ row }) => {
             const reference = row.getValue('reference') as string | null;
             return (
@@ -240,6 +327,9 @@ export const createColumns = ({
     {
         accessorKey: 'notes',
         header: 'Histórico',
+        meta: {
+            label: 'Histórico',
+        },
         cell: ({ row }) => {
             const notes = row.getValue('notes') as string | null;
             return notes ? (
