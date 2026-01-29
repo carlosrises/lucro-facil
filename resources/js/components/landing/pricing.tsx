@@ -97,6 +97,23 @@ export default function Pricing({ id, plans: dbPlans }: PricingProps) {
         },
     ];
 
+    const normalizeFeatures = (f: any): string[] => {
+        if (Array.isArray(f)) return f;
+        if (typeof f === 'string') {
+            try {
+                const parsed = JSON.parse(f);
+                if (Array.isArray(parsed)) return parsed;
+            } catch (e) {
+                // fallthrough to split
+            }
+            return f
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
+        }
+        return [];
+    };
+
     // Usar planos do banco se disponível, senão usar os hardcoded
     const plans =
         dbPlans && dbPlans.length > 0
@@ -109,7 +126,7 @@ export default function Pricing({ id, plans: dbPlans }: PricingProps) {
                       ? null
                       : Number(plan.price_month || 0),
                   prices: plan.prices,
-                  features: plan.features || [],
+                  features: normalizeFeatures(plan.features),
                   cta: plan.is_contact_plan
                       ? 'Falar com especialista'
                       : 'Começar grátis',

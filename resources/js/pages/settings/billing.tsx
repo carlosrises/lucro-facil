@@ -142,6 +142,25 @@ export default function Billing() {
 
                         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                             {plans.map((plan) => {
+                                const normalizeFeatures = (
+                                    f: any,
+                                ): string[] => {
+                                    if (Array.isArray(f)) return f;
+                                    if (typeof f === 'string') {
+                                        try {
+                                            const parsed = JSON.parse(f);
+                                            if (Array.isArray(parsed))
+                                                return parsed;
+                                        } catch (e) {
+                                            // fallthrough to split
+                                        }
+                                        return f
+                                            .split(',')
+                                            .map((s) => s.trim())
+                                            .filter(Boolean);
+                                    }
+                                    return [];
+                                };
                                 const isCurrentPlan =
                                     currentPlan?.id === plan.id;
                                 const isUpgrade =
@@ -252,24 +271,24 @@ export default function Billing() {
                                             </Button>
                                         )}
 
-                                        {plan.features &&
-                                            plan.features.length > 0 && (
-                                                <ul className="space-y-3">
-                                                    {plan.features.map(
-                                                        (feature, index) => (
-                                                            <li
-                                                                key={index}
-                                                                className="flex items-start gap-3"
-                                                            >
-                                                                <Check className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-500" />
-                                                                <span className="text-sm text-gray-600 dark:text-gray-400">
-                                                                    {feature}
-                                                                </span>
-                                                            </li>
-                                                        ),
-                                                    )}
-                                                </ul>
-                                            )}
+                                        {normalizeFeatures(plan.features)
+                                            .length > 0 && (
+                                            <ul className="space-y-3">
+                                                {normalizeFeatures(
+                                                    plan.features,
+                                                ).map((feature, index) => (
+                                                    <li
+                                                        key={index}
+                                                        className="flex items-start gap-3"
+                                                    >
+                                                        <Check className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-500" />
+                                                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                                                            {feature}
+                                                        </span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
                                     </div>
                                 );
                             })}
