@@ -23,6 +23,19 @@ interface PlanFormDialogProps {
     plan: Plan | null;
 }
 
+interface PlanFormData {
+    code: string;
+    name: string;
+    description: string;
+    price_month: string;
+    price_year: string;
+    features: string[];
+    active: boolean;
+    is_visible: boolean;
+    is_contact_plan: boolean;
+    contact_url: string;
+}
+
 export function PlanFormDialog({
     open,
     onOpenChange,
@@ -30,14 +43,19 @@ export function PlanFormDialog({
 }: PlanFormDialogProps) {
     const [featureInput, setFeatureInput] = useState('');
 
-    const { data, setData, post, patch, processing, errors, reset } = useForm({
-        code: '',
-        name: '',
-        description: '',
-        price: '',
-        features: [] as string[],
-        active: true,
-    });
+    const { data, setData, post, patch, processing, errors, reset } =
+        useForm<PlanFormData>({
+            code: '',
+            name: '',
+            description: '',
+            price_month: '',
+            price_year: '',
+            features: [],
+            active: true,
+            is_visible: true,
+            is_contact_plan: false,
+            contact_url: '',
+        });
 
     useEffect(() => {
         if (plan && open) {
@@ -45,9 +63,27 @@ export function PlanFormDialog({
                 code: plan.code,
                 name: plan.name,
                 description: plan.description || '',
-                price: plan.price.toString(),
+                price_month:
+                    plan.prices
+                        ?.find(
+                            (price) =>
+                                price.interval === 'month' ||
+                                price.key === 'monthly',
+                        )
+                        ?.amount?.toString() || '',
+                price_year:
+                    plan.prices
+                        ?.find(
+                            (price) =>
+                                price.interval === 'year' ||
+                                price.key === 'annual',
+                        )
+                        ?.amount?.toString() || '',
                 features: plan.features || [],
                 active: plan.active,
+                is_visible: plan.is_visible ?? true,
+                is_contact_plan: plan.is_contact_plan ?? false,
+                contact_url: plan.contact_url || '',
             });
         } else if (!open) {
             reset();
@@ -80,9 +116,54 @@ export function PlanFormDialog({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
+        // Validação customizada: contact_url é obrigatório se is_contact_plan=true
+        if (data.is_contact_plan && !data.contact_url.trim()) {
+            toast.error(
+                'URL de contato é obrigatória para planos sob consulta.',
+            );
+            return;
+        }
+
+        if (!data.is_contact_plan) {
+            const monthly = Number(data.price_month || 0);
+            const annual = Number(data.price_year || 0);
+
+            if (monthly <= 0 && annual <= 0) {
+                toast.error('Informe pelo menos um preço mensal ou anual.');
+                return;
+            }
+        }
+
+        const normalizedPrices = data.is_contact_plan
+            ? []
+            : [
+                  data.price_month
+                      ? {
+                            key: 'monthly',
+                            label: 'Mensal',
+                            amount: Number(data.price_month),
+                            interval: 'month',
+                            period_label: 'por mês',
+                            is_annual: false,
+                        }
+                      : null,
+                  data.price_year
+                      ? {
+                            key: 'annual',
+                            label: 'Anual',
+                            amount: Number(data.price_year),
+                            interval: 'year',
+                            period_label: 'por ano',
+                            is_annual: true,
+                        }
+                      : null,
+              ].filter(Boolean);
+
+        const { price_month, price_year, ...rest } = data;
+
         const formData = {
-            ...data,
-            price: parseFloat(data.price) || 0,
+            ...rest,
+            prices: normalizedPrices,
         };
 
         if (plan) {
@@ -128,7 +209,7 @@ export function PlanFormDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
                         <DialogTitle>
@@ -157,27 +238,6 @@ export function PlanFormDialog({
                                 {errors.code && (
                                     <p className="text-sm text-red-500">
                                         {errors.code}
-                                    </p>
-                                )}
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="price">Preço (R$)</Label>
-                                <Input
-                                    id="price"
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={data.price}
-                                    onChange={(e) =>
-                                        setData('price', e.target.value)
-                                    }
-                                    placeholder="99.90"
-                                    required
-                                />
-                                {errors.price && (
-                                    <p className="text-sm text-red-500">
-                                        {errors.price}
                                     </p>
                                 )}
                             </div>
@@ -215,6 +275,62 @@ export function PlanFormDialog({
                             {errors.description && (
                                 <p className="text-sm text-red-500">
                                     {errors.description}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="grid gap-2">
+                            <Label>Preços do Plano</Label>
+                            <p className="text-xs text-muted-foreground">
+                                Configure apenas preço mensal e anual.
+                            </p>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="price_month">
+                                        Mensal (R$)
+                                    </Label>
+                                    <Input
+                                        id="price_month"
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={data.price_month}
+                                        onChange={(e) =>
+                                            setData(
+                                                'price_month',
+                                                e.target.value,
+                                            )
+                                        }
+                                        placeholder="99.90"
+                                        disabled={data.is_contact_plan}
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="price_year">
+                                        Anual (R$)
+                                    </Label>
+                                    <Input
+                                        id="price_year"
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={data.price_year}
+                                        onChange={(e) =>
+                                            setData(
+                                                'price_year',
+                                                e.target.value,
+                                            )
+                                        }
+                                        placeholder="999.90"
+                                        disabled={data.is_contact_plan}
+                                    />
+                                </div>
+                            </div>
+
+                            {errors.prices && (
+                                <p className="text-sm text-red-500">
+                                    {errors.prices}
                                 </p>
                             )}
                         </div>
@@ -279,6 +395,75 @@ export function PlanFormDialog({
                                 }
                             />
                         </div>
+
+                        <div className="flex items-center justify-between rounded-lg border p-4">
+                            <div className="space-y-0.5">
+                                <Label htmlFor="is_visible">
+                                    Visível na Listagem
+                                </Label>
+                                <p className="text-sm text-muted-foreground">
+                                    Controla se o plano aparece na listagem
+                                    pública
+                                </p>
+                            </div>
+                            <Switch
+                                id="is_visible"
+                                checked={data.is_visible}
+                                onCheckedChange={(checked) =>
+                                    setData('is_visible', checked)
+                                }
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-between rounded-lg border p-4">
+                            <div className="space-y-0.5">
+                                <Label htmlFor="is_contact_plan">
+                                    Plano Sob Consulta
+                                </Label>
+                                <p className="text-sm text-muted-foreground">
+                                    Planos sob consulta não são sincronizados
+                                    com o Stripe
+                                </p>
+                            </div>
+                            <Switch
+                                id="is_contact_plan"
+                                checked={data.is_contact_plan}
+                                onCheckedChange={(checked) => {
+                                    setData('is_contact_plan', checked);
+                                    if (checked) {
+                                        setData('price_month', '');
+                                        setData('price_year', '');
+                                    }
+                                }}
+                            />
+                        </div>
+
+                        {data.is_contact_plan && (
+                            <div className="grid gap-2">
+                                <Label htmlFor="contact_url">
+                                    URL de Contato *
+                                </Label>
+                                <Input
+                                    id="contact_url"
+                                    type="url"
+                                    value={data.contact_url}
+                                    onChange={(e) =>
+                                        setData('contact_url', e.target.value)
+                                    }
+                                    placeholder="https://wa.me/5511999999999"
+                                    required={data.is_contact_plan}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Link do WhatsApp ou formulário de contato
+                                    para planos personalizados
+                                </p>
+                                {errors.contact_url && (
+                                    <p className="text-sm text-red-500">
+                                        {errors.contact_url}
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <DialogFooter>

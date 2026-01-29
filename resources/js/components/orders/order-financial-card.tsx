@@ -338,17 +338,14 @@ export function OrderFinancialCard({
         }
 
         // Subtotal para cálculo de receita líquida
-        // Começar com grossTotal e aplicar ajustes
-        // IMPORTANTE: grossTotal já pode incluir ou não os descontos dependendo da fonte
-        let subtotal = grossTotal;
+        // Subtotal = Pago pelo cliente + Subsídio + Taxa de Entrega (se for pela loja)
+        // Este é o valor que realmente entra na loja
+        let subtotal = paidByClient;
 
-        // Aplicar desconto de loja (descontos reais pagos pela loja, não subsídios)
-        subtotal -= storeDiscount;
-
-        // Verifica se usou total_delivery_price (que já inclui subsídio e delivery)
-        const usedTotalDeliveryPrice =
-            order?.provider === 'takeat' &&
-            Boolean(order?.raw?.session?.total_delivery_price);
+        // Adicionar subsídio (valor pago pelo marketplace)
+        if (totalSubsidy > 0) {
+            subtotal += totalSubsidy;
+        }
 
         // Verificar se a entrega foi feita pelo marketplace
         // Quando for pelo marketplace, a taxa de entrega já está em calculated_costs como custo
@@ -358,98 +355,156 @@ export function OrderFinancialCard({
             deliveryBy,
         );
 
-        // Se NÃO usou total_delivery_price, precisa somar subsídio e (quando aplicável) delivery
-        if (!usedTotalDeliveryPrice) {
-            subtotal += totalSubsidy;
-            // Só somar deliveryFee ao subtotal se a entrega for pela LOJA (não marketplace)
-            // Quando é marketplace, a taxa já está em calculated_costs como custo
-            if (!isMarketplaceDelivery && deliveryFee > 0) {
-                subtotal += deliveryFee;
-            }
-        } else if (isMarketplaceDelivery && deliveryFee > 0) {
-            // total_delivery_price inclui delivery; remover se for entrega marketplace
-            subtotal -= deliveryFee;
-        }
-
-        // Descontar cashback do subtotal (é desconto da loja)
-        subtotal -= totalCashback;
-
-        // Taxa fixa do iFood reduz o valor recebido pelo lojista
-        // Sempre subtrair para pedidos iFood via Takeat (independente de delivery_by)
-        if (ifoodServiceFee > 0) {
-            subtotal -= ifoodServiceFee;
+        // Adicionar taxa de entrega se for entrega pela LOJA (não marketplace)
+        // Quando é marketplace, a taxa já está em calculated_costs como custo
+        if (!isMarketplaceDelivery && deliveryFee > 0) {
+            subtotal += deliveryFee;
         }
 
         // CMV (custo dos produtos + add-ons)
         const items = order?.items || [];
         const cmv = calculateOrderCMV(items);
 
-        // Impostos dos produtos
-        const productTax = items.reduce((sum: number, item: OrderItem) => {
+        // Obter calculated_costs antes de calcular impostos
+        const calculatedCosts = order?.calculated_costs || null;
+
+        // Impostos dos produtos - RECALCULAR baseado no Subtotal de forma proporcional
+        // Agrupar itens por tax_category para calcular proporcionalmente
+        const taxCategories = new Map<
+            number,
+            { rate: number; itemsTotal: number }
+        >();
+        let totalItemsPrice = 0;
+
+        items.forEach((item: OrderItem) => {
             if (item.internal_product?.tax_category?.total_tax_rate) {
                 const quantity = item.qty || item.quantity || 0;
                 const unitPrice = item.unit_price || item.price || 0;
-                const taxRate =
-                    item.internal_product.tax_category.total_tax_rate || 0;
-                const taxValue = (quantity * unitPrice * taxRate) / 100;
-                // Proteção contra NaN
-                return sum + (isNaN(taxValue) ? 0 : taxValue);
+                const itemTotal = quantity * unitPrice;
+                totalItemsPrice += itemTotal;
+
+                const taxCategoryId = item.internal_product.tax_category.id;
+                const existingCategory = taxCategories.get(taxCategoryId);
+
+                if (existingCategory) {
+                    existingCategory.itemsTotal += itemTotal;
+                } else {
+                    taxCategories.set(taxCategoryId, {
+                        rate: item.internal_product.tax_category.total_tax_rate,
+                        itemsTotal: itemTotal,
+                    });
+                }
             }
-            return sum;
-        }, 0);
+        });
+
+        // Calcular impostos proporcionais ao subtotal
+        let productTax = 0;
+        taxCategories.forEach((category) => {
+            // Proporção deste grupo de itens no total
+            const proportion =
+                totalItemsPrice > 0 ? category.itemsTotal / totalItemsPrice : 0;
+            // Aplicar a taxa sobre a parte proporcional do subtotal
+            const taxValue = (subtotal * proportion * category.rate) / 100;
+            productTax += taxValue;
+        });
 
         // Impostos adicionais (da categoria 'tax' em cost_commissions)
-        const calculatedCosts = order?.calculated_costs || null;
+        // RECALCULAR valores percentuais baseado no Subtotal
         const additionalTaxes = calculatedCosts?.taxes || [];
         const totalAdditionalTax = additionalTaxes.reduce(
-            (sum: number, tax: CostCommissionItem) =>
-                sum + (tax.calculated_value || 0),
+            (sum: number, tax: CostCommissionItem) => {
+                if (tax.type === 'percentage') {
+                    // Recalcular: subtotal * (value / 100)
+                    const value = parseFloat(String(tax.value || '0')) || 0;
+                    const calculated = (subtotal * value) / 100;
+                    return sum + calculated;
+                }
+                // Se for valor fixo, usar calculated_value original
+                return sum + (tax.calculated_value || 0);
+            },
             0,
         );
 
         // Total de impostos = impostos dos produtos + impostos adicionais
         const totalTax = productTax + totalAdditionalTax;
 
-        // Custos operacionais (do order.total_costs)
-        const totalCosts =
-            typeof order?.total_costs === 'string'
-                ? parseFloat(order.total_costs)
-                : (order?.total_costs ?? 0);
-
-        // Comissões (do order.total_commissions)
-        const totalCommissions =
-            typeof order?.total_commissions === 'string'
-                ? parseFloat(order.total_commissions)
-                : (order?.total_commissions ?? 0);
-
-        // Comissões do marketplace (category='commission')
-        const commissions = calculatedCosts?.commissions || [];
-        const marketplaceCommissions = commissions.reduce(
-            (sum: number, comm: CostCommissionItem) =>
-                sum + (comm.calculated_value || 0),
+        // Custos operacionais - RECALCULAR valores percentuais baseado no Subtotal
+        const costs = calculatedCosts?.costs || [];
+        const totalCosts = costs.reduce(
+            (sum: number, cost: CostCommissionItem) => {
+                if (cost.type === 'percentage') {
+                    // Recalcular: subtotal * (value / 100)
+                    const value = parseFloat(String(cost.value || '0')) || 0;
+                    const calculated = (subtotal * value) / 100;
+                    return sum + calculated;
+                }
+                // Se for valor fixo, usar calculated_value original
+                return sum + (cost.calculated_value || 0);
+            },
             0,
         );
 
-        // Custos de entrega do marketplace (category='cost' com 'delivery' no nome ou applies_to='delivery')
-        const costs = calculatedCosts?.costs || [];
+        // Comissões - RECALCULAR valores percentuais baseado no Subtotal
+        const commissions = calculatedCosts?.commissions || [];
+        const totalCommissions = commissions.reduce(
+            (sum: number, comm: CostCommissionItem) => {
+                if (comm.type === 'percentage') {
+                    // Recalcular: subtotal * (value / 100)
+                    const value = parseFloat(String(comm.value || '0')) || 0;
+                    const calculated = (subtotal * value) / 100;
+                    return sum + calculated;
+                }
+                // Se for valor fixo, usar calculated_value original
+                return sum + (comm.calculated_value || 0);
+            },
+            0,
+        );
+
+        // Comissões do marketplace (para receita líquida marketplace)
+        const marketplaceCommissions = commissions.reduce(
+            (sum: number, comm: CostCommissionItem) => {
+                if (comm.type === 'percentage') {
+                    const value = parseFloat(String(comm.value || '0')) || 0;
+                    const calculated = (subtotal * value) / 100;
+                    return sum + calculated;
+                }
+                return sum + (comm.calculated_value || 0);
+            },
+            0,
+        );
+
+        // Custos de entrega do marketplace
         const marketplaceDeliveryCosts = costs.reduce(
             (sum: number, cost: CostCommissionItem) => {
                 // Verificar se é custo de entrega (nome contém 'entrega' ou 'delivery')
                 const isDeliveryCost =
                     cost.name?.toLowerCase().includes('entrega') ||
                     cost.name?.toLowerCase().includes('delivery');
-                return isDeliveryCost
-                    ? sum + (cost.calculated_value || 0)
-                    : sum;
+                if (!isDeliveryCost) return sum;
+
+                if (cost.type === 'percentage') {
+                    const value = parseFloat(String(cost.value || '0')) || 0;
+                    const calculated = (subtotal * value) / 100;
+                    return sum + calculated;
+                }
+                return sum + (cost.calculated_value || 0);
             },
             0,
         );
 
-        // Taxas do meio de pagamento (da categoria 'payment_method' em cost_commissions)
+        // Taxas do meio de pagamento - RECALCULAR valores percentuais baseado no Subtotal
         const paymentMethodFees = calculatedCosts?.payment_methods || [];
         const totalPaymentMethodFee = paymentMethodFees.reduce(
-            (sum: number, fee: CostCommissionItem) =>
-                sum + (fee.calculated_value || 0),
+            (sum: number, fee: CostCommissionItem) => {
+                if (fee.type === 'percentage') {
+                    // Recalcular: subtotal * (value / 100)
+                    const value = parseFloat(String(fee.value || '0')) || 0;
+                    const calculated = (subtotal * value) / 100;
+                    return sum + calculated;
+                }
+                // Se for valor fixo, usar calculated_value original
+                return sum + (fee.calculated_value || 0);
+            },
             0,
         );
 
@@ -465,9 +520,7 @@ export function OrderFinancialCard({
             );
         });
 
-        // Taxas de pagamento online
-        // Se o pedido tem pagamento online, considerar TODAS as taxas de pagamento como online
-        // Caso contrário, filtrar apenas payment_type='online'
+        // Taxas de pagamento online - RECALCULAR valores percentuais baseado no Subtotal
         const totalOnlinePaymentFee = hasOnlinePayment
             ? totalPaymentMethodFee
             : paymentMethodFees
@@ -475,11 +528,54 @@ export function OrderFinancialCard({
                       (fee: CostCommissionItem) =>
                           fee.payment_type === 'online',
                   )
-                  .reduce(
-                      (sum: number, fee: CostCommissionItem) =>
-                          sum + (fee.calculated_value || 0),
-                      0,
-                  );
+                  .reduce((sum: number, fee: CostCommissionItem) => {
+                      if (fee.type === 'percentage') {
+                          const value =
+                              parseFloat(String(fee.value || '0')) || 0;
+                          const calculated = (subtotal * value) / 100;
+                          return sum + calculated;
+                      }
+                      return sum + (fee.calculated_value || 0);
+                  }, 0);
+
+        // Criar versões recalculadas dos arrays para exibição nos detalhamentos
+        const recalculatedAdditionalTaxes = additionalTaxes.map((tax) => ({
+            ...tax,
+            calculated_value:
+                tax.type === 'percentage'
+                    ? (subtotal * (parseFloat(String(tax.value || '0')) || 0)) /
+                      100
+                    : tax.calculated_value,
+        }));
+
+        const recalculatedCosts = costs.map((cost) => ({
+            ...cost,
+            calculated_value:
+                cost.type === 'percentage'
+                    ? (subtotal *
+                          (parseFloat(String(cost.value || '0')) || 0)) /
+                      100
+                    : cost.calculated_value,
+        }));
+
+        const recalculatedCommissions = commissions.map((comm) => ({
+            ...comm,
+            calculated_value:
+                comm.type === 'percentage'
+                    ? (subtotal *
+                          (parseFloat(String(comm.value || '0')) || 0)) /
+                      100
+                    : comm.calculated_value,
+        }));
+
+        const recalculatedPaymentMethodFees = paymentMethodFees.map((fee) => ({
+            ...fee,
+            calculated_value:
+                fee.type === 'percentage'
+                    ? (subtotal * (parseFloat(String(fee.value || '0')) || 0)) /
+                      100
+                    : fee.calculated_value,
+        }));
 
         // Receita líquida marketplace = Subtotal - Comissão Marketplace - Custo Entrega Marketplace (se aplicável) - Taxa Pagamento Online
         // Só descontar marketplaceDeliveryCosts se a entrega foi pelo marketplace
@@ -510,17 +606,19 @@ export function OrderFinancialCard({
             subtotal,
             cmv,
             productTax,
-            additionalTaxes,
+            additionalTaxes: recalculatedAdditionalTaxes,
             totalTax,
             totalCosts,
             totalCommissions,
-            paymentMethodFees,
+            paymentMethodFees: recalculatedPaymentMethodFees,
             totalPaymentMethodFee,
             marketplaceNetRevenue,
             netRevenue,
             deliveryFee,
             realPayments,
             ifoodServiceFee,
+            costs: recalculatedCosts,
+            commissions: recalculatedCommissions,
         };
     };
 
@@ -1762,9 +1860,7 @@ export function OrderFinancialCard({
 
                             {/* Custos operacionais */}
                             {(() => {
-                                const calculatedCosts =
-                                    order.calculated_costs || null;
-                                const costs = calculatedCosts?.costs || [];
+                                const costs = financials.costs || [];
                                 const costsWithValue = costs.filter(
                                     (cost: CostCommissionItem) =>
                                         cost.calculated_value > 0,
@@ -1826,10 +1922,8 @@ export function OrderFinancialCard({
 
                             {/* COMISSÃO */}
                             {(() => {
-                                const calculatedCosts =
-                                    order.calculated_costs || null;
                                 const commissions =
-                                    calculatedCosts?.commissions || [];
+                                    financials.commissions || [];
                                 const commissionsWithValue = commissions.filter(
                                     (comm: CostCommissionItem) =>
                                         comm.calculated_value > 0,

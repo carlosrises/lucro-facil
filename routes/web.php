@@ -17,6 +17,8 @@ use App\Http\Controllers\RecalculationStatusController;
 // use App\Http\Controllers\SalesController;
 use App\Http\Controllers\StoresController;
 use App\Http\Controllers\StripeWebhookController;
+use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\TakeatSyncController;
 use App\Http\Controllers\TaxCategoriesController;
 use App\Http\Controllers\UsersController;
@@ -27,17 +29,46 @@ use Inertia\Inertia;
 // Stripe Webhook (sem CSRF, configurado em bootstrap/app.php)
 Route::post('stripe/webhook', [StripeWebhookController::class, 'handle'])->name('stripe.webhook');
 
+// Rota de escolha de plano (pública)
+Route::get('/plans/{plan}/choose', [SubscriptionController::class, 'choose'])->name('subscription.choose');
+
+// Rotas de checkout (requer autenticação)
+Route::middleware(['auth'])->group(function () {
+    // Onboarding
+    Route::get('/onboarding', [OnboardingController::class, 'show'])->name('onboarding');
+    Route::post('/onboarding/business-type', [OnboardingController::class, 'setBusinessType'])->name('onboarding.businessType');
+    Route::post('/onboarding/complete', [OnboardingController::class, 'complete'])->name('onboarding.complete');
+    Route::post('/onboarding/skip', [OnboardingController::class, 'skip'])->name('onboarding.skip');
+
+    // Subscription/Checkout
+    Route::get('/subscription/checkout', [SubscriptionController::class, 'checkout'])->name('subscription.checkout');
+    Route::get('/subscription/success', [SubscriptionController::class, 'success'])->name('subscription.success');
+    Route::get('/subscription/cancel', [SubscriptionController::class, 'cancel'])->name('subscription.cancel');
+    Route::get('/subscription/manage', [SubscriptionController::class, 'manage'])->name('subscription.manage');
+});
+
 Route::get('/', function () {
     $plans = Plan::where('active', true)
-        ->orderBy('price_month')
-        ->get(['id', 'code', 'name', 'description', 'price_month', 'features']);
+        ->where('is_visible', true)
+        ->with('prices')
+        ->orderBy('display_order')
+        ->get(['id', 'code', 'name', 'description', 'price_month', 'features', 'is_contact_plan', 'contact_url', 'is_featured']);
 
     return Inertia::render('welcome', [
         'plans' => $plans,
     ]);
 })->name('home');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+// Páginas públicas
+Route::get('/terms', function () {
+    return Inertia::render('terms');
+})->name('terms');
+
+Route::get('/privacy', function () {
+    return Inertia::render('privacy');
+})->name('privacy');
+
+Route::middleware(['auth', 'verified', 'check.onboarding'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // Verificar status de recálculos ativos

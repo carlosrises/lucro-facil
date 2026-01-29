@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Plan;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
@@ -20,7 +21,7 @@ class RegisteredUserController extends Controller
     /**
      * Show the registration page.
      */
-    public function create(): Response
+    public function create(Request $request): Response
     {
         return Inertia::render('auth/register');
     }
@@ -38,11 +39,15 @@ class RegisteredUserController extends Controller
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
-        // 1. Cria o Tenant
+        // Buscar plano FREE
+        $freePlan = Plan::where('code', 'FREE')->orWhere('code', 'START')->first();
+
+        // 1. Cria o Tenant com plano FREE
         $tenant = Tenant::create([
             'uuid' => Str::uuid(),
-            'name' => $request->name."'s Workspace", // ou algo default
+            'name' => $request->name."'s Workspace",
             'email' => $request->email,
+            'plan_id' => $freePlan?->id,
         ]);
 
         $user = User::create([

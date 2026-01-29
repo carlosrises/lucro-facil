@@ -21,82 +21,101 @@ import { ColumnDef } from '@tanstack/react-table';
 import { endOfDay, startOfDay } from 'date-fns';
 import { Badge } from '../ui/badge';
 
-const TAKEAT_IFOOD_SERVICE_FEE = 0.99; // Mantém alinhado com OrderCostService.php e order-financial-card.tsx
-
 /**
  * Calcula o subtotal do pedido seguindo a mesma lógica do card financeiro
  * Este é o valor base usado para calcular a margem de lucro
+ *
+ * IMPORTANTE: Esta função deve manter a MESMA lógica da função calculateFinancials
+ * em order-financial-card.tsx para garantir consistência entre tabela e detalhes
+ *
+ * @export Exportada para uso em data-table e outros componentes
  */
-function calculateOrderSubtotal(order: Order): number {
+export function calculateOrderSubtotal(order: Order): number {
+    // NOVA LÓGICA SIMPLIFICADA (alinhada com order-financial-card.tsx):
+    // Subtotal = valor pago pelo cliente + subsídios do marketplace + taxa de entrega (se delivery próprio)
+
     const grossTotal = parseFloat(String(order?.gross_total || '0')) || 0;
-    const discountTotal = parseFloat(String(order?.discount_total || '0')) || 0;
     const deliveryFee = parseFloat(String(order?.delivery_fee || '0')) || 0;
-    
+
     // Pagamentos da sessão (para Takeat)
     const sessionPayments = order?.raw?.session?.payments || [];
-    
-    // Filtrar cashback
-    const totalCashback = sessionPayments
-        .filter((payment: any) => {
-            const paymentName = payment.payment_method?.name?.toLowerCase() || '';
-            const paymentKeyword = payment.payment_method?.keyword?.toLowerCase() || '';
-            return paymentName.includes('cashback') || paymentKeyword.includes('clube');
-        })
-        .reduce((sum: number, payment: any) => {
-            const value = parseFloat(String(payment.payment_value || '0')) || 0;
-            return sum + value;
-        }, 0);
-    
-    // Filtrar subsídios
-    const totalSubsidy = sessionPayments
-        .filter((payment: any) => {
-            const paymentName = payment.payment_method?.name?.toLowerCase() || '';
-            const paymentKeyword = payment.payment_method?.keyword?.toLowerCase() || '';
-            const isCashback = paymentName.includes('cashback') || paymentKeyword.includes('clube');
-            const isSubsidy = paymentName.includes('subsid') || paymentName.includes('cupom') ||
-                paymentKeyword.includes('subsid') || paymentKeyword.includes('cupom');
-            return isSubsidy && !isCashback;
-        })
-        .reduce((sum: number, payment: any) => {
-            const value = parseFloat(String(payment.payment_value || '0')) || 0;
-            return sum + value;
-        }, 0);
-    
-    const storeDiscount = discountTotal - totalSubsidy + totalCashback;
-    
-    // Taxa fixa do iFood
-    const rawSessionServiceFee = parseFloat(
-        String(order?.raw?.session?.service_fee ?? order?.raw?.session?.serviceFee ?? 0)
-    ) || 0;
-    const ifoodServiceFee = isTakeatIfoodOrder(order)
-        ? rawSessionServiceFee > 0 ? rawSessionServiceFee : TAKEAT_IFOOD_SERVICE_FEE
-        : 0;
-    
-    // Começar com grossTotal e aplicar ajustes
-    let subtotal = grossTotal;
-    subtotal -= storeDiscount;
-    
-    const usedTotalDeliveryPrice = order?.provider === 'takeat' && 
-        Boolean(order?.raw?.session?.total_delivery_price);
-    
+
+    // Filtrar pagamentos de cashback (desconto da loja, não subsídio)
+    const cashbackPayments = sessionPayments.filter((payment: any) => {
+        const paymentName = payment.payment_method?.name?.toLowerCase() || '';
+        const paymentKeyword =
+            payment.payment_method?.keyword?.toLowerCase() || '';
+        return (
+            paymentName.includes('cashback') || paymentKeyword.includes('clube')
+        );
+    });
+
+    // Filtrar subsídios (cupons do marketplace)
+    const subsidyPayments = sessionPayments.filter((payment: any) => {
+        const paymentName = payment.payment_method?.name?.toLowerCase() || '';
+        const paymentKeyword =
+            payment.payment_method?.keyword?.toLowerCase() || '';
+        const isCashback =
+            paymentName.includes('cashback') ||
+            paymentKeyword.includes('clube');
+        const isSubsidy =
+            paymentName.includes('subsid') ||
+            paymentName.includes('cupom') ||
+            paymentKeyword.includes('subsid') ||
+            paymentKeyword.includes('cupom');
+        return isSubsidy && !isCashback;
+    });
+
+    // Filtrar pagamentos reais (não subsidiados e não cashback)
+    const realPayments = sessionPayments.filter((payment: any) => {
+        const paymentName = payment.payment_method?.name?.toLowerCase() || '';
+        const paymentKeyword =
+            payment.payment_method?.keyword?.toLowerCase() || '';
+        const isCashback =
+            paymentName.includes('cashback') ||
+            paymentKeyword.includes('clube');
+        const isSubsidized =
+            paymentName.includes('subsid') ||
+            paymentName.includes('cupom') ||
+            paymentKeyword.includes('subsid') ||
+            paymentKeyword.includes('cupom');
+        return !isSubsidized && !isCashback && (payment.payment_value || 0) > 0;
+    });
+
+    const totalSubsidy = subsidyPayments.reduce((sum: number, payment: any) => {
+        const value = parseFloat(String(payment.payment_value || '0')) || 0;
+        return sum + value;
+    }, 0);
+
+    // Pago pelo cliente (soma dos pagamentos reais)
+    let paidByClient = realPayments.reduce((sum: number, payment: any) => {
+        const value = parseFloat(String(payment.payment_value || '0')) || 0;
+        return sum + value;
+    }, 0);
+
+    // Se não houver pagamentos, usar gross_total como fallback
+    if (paidByClient === 0 && realPayments.length === 0) {
+        if (order?.provider === 'takeat' && order?.raw?.session?.total_price) {
+            // Para Takeat, usar total_price (já com desconto)
+            paidByClient =
+                parseFloat(String(order.raw.session.total_price)) || 0;
+        } else {
+            paidByClient = grossTotal;
+        }
+    }
+
+    // Determinar se a entrega é do marketplace ou da loja
     const deliveryBy = order?.raw?.session?.delivery_by?.toUpperCase() || '';
     const isMarketplaceDelivery = ['IFOOD', 'MARKETPLACE'].includes(deliveryBy);
-    
-    if (!usedTotalDeliveryPrice) {
-        subtotal += totalSubsidy;
-        if (!isMarketplaceDelivery && deliveryFee > 0) {
-            subtotal += deliveryFee;
-        }
-    } else if (isMarketplaceDelivery && deliveryFee > 0) {
-        subtotal -= deliveryFee;
+
+    // Subtotal = pago pelo cliente + subsídios + taxa de entrega (se delivery próprio)
+    let subtotal = paidByClient + totalSubsidy;
+
+    // Adicionar taxa de entrega apenas se for delivery da loja (não marketplace)
+    if (!isMarketplaceDelivery && deliveryFee > 0) {
+        subtotal += deliveryFee;
     }
-    
-    subtotal -= totalCashback;
-    
-    if (ifoodServiceFee > 0) {
-        subtotal -= ifoodServiceFee;
-    }
-    
+
     return subtotal;
 }
 
@@ -527,6 +546,9 @@ export const columns: ColumnDef<Order>[] = [
     },
     {
         accessorKey: 'total',
+        meta: {
+            label: 'Total do pedido',
+        },
         header: () => (
             <span>
                 <span className="hidden lg:inline">Total do pedido</span>
@@ -577,90 +599,15 @@ export const columns: ColumnDef<Order>[] = [
     },
     {
         accessorKey: 'subtotal',
-        header: 'Subtotal',
+        meta: {
+            label: 'Subtotal',
+        },
+        header: () => <div className="text-right">Subtotal</div>,
         cell: ({ row }) => {
-            const raw = row.original.raw;
-            const provider = row.original.provider;
             const isCancelled = row.original.status === 'CANCELLED';
 
-            // Usar a mesma lógica do card financeiro para calcular o subtotal
-            let grossTotal =
-                parseFloat(String(row.original.gross_total || '0')) || 0;
-
-            if (provider === 'takeat') {
-                // Prioridade: total_delivery_price > total_price
-                if (raw?.session?.total_delivery_price) {
-                    grossTotal =
-                        parseFloat(String(raw.session.total_delivery_price)) ||
-                        0;
-                } else if (raw?.session?.total_price) {
-                    grossTotal =
-                        parseFloat(String(raw.session.total_price)) || 0;
-                }
-            }
-
-            // Delivery fee
-            const deliveryFee =
-                parseFloat(String(row.original.delivery_fee || '0')) || 0;
-
-            // Subsídio (para Takeat)
-            let totalSubsidy = 0;
-            if (provider === 'takeat') {
-                const payments = raw?.session?.payments || [];
-                totalSubsidy = payments.reduce((sum: number, payment: any) => {
-                    const paymentName = (
-                        payment.payment_method?.name || ''
-                    ).toLowerCase();
-                    const paymentKeyword = (
-                        payment.payment_method?.keyword || ''
-                    ).toLowerCase();
-                    const isSubsidy =
-                        paymentName.includes('subsid') ||
-                        paymentName.includes('cupom') ||
-                        paymentKeyword.includes('subsid') ||
-                        paymentKeyword.includes('cupom');
-
-                    return isSubsidy
-                        ? sum + parseFloat(payment.payment_value || '0')
-                        : sum;
-                }, 0);
-            }
-
-            // Cashback
-            const totalCashback =
-                parseFloat(String(row.original.cashback_total || '0')) || 0;
-
-            // Calcular subtotal
-            let subtotal = grossTotal;
-            const usedTotalDeliveryPrice =
-                provider === 'takeat' &&
-                Boolean(raw?.session?.total_delivery_price);
-
-            // Verificar se deve excluir taxa de entrega
-            const deliveryBy = raw?.session?.delivery_by?.toUpperCase() || '';
-            const isMarketplaceDelivery = ['IFOOD', 'MARKETPLACE'].includes(
-                deliveryBy,
-            );
-            const skipDeliveryFeeInSubtotal =
-                isTakeatIfoodOrder(row.original) && isMarketplaceDelivery;
-
-            if (!usedTotalDeliveryPrice) {
-                subtotal += totalSubsidy;
-                if (!skipDeliveryFeeInSubtotal) {
-                    subtotal += deliveryFee;
-                }
-            } else if (skipDeliveryFeeInSubtotal && deliveryFee > 0) {
-                subtotal -= deliveryFee;
-            }
-
-            // Descontar cashback
-            subtotal -= totalCashback;
-
-            // Taxa de serviço iFood
-            const ifoodServiceFee = isTakeatIfoodOrder(row.original) ? 0.99 : 0;
-            if (ifoodServiceFee > 0) {
-                subtotal -= ifoodServiceFee;
-            }
+            // IMPORTANTE: Usar a função calculateOrderSubtotal para garantir consistência
+            const subtotal = calculateOrderSubtotal(row.original);
 
             return (
                 <div className="text-right">
@@ -797,37 +744,80 @@ export const columns: ColumnDef<Order>[] = [
         accessorKey: 'tax',
         header: 'Impostos',
         cell: ({ row }) => {
-            const items = row.original.items || [];
+            const order = row.original;
+            const items = order.items || [];
 
-            // Calcular impostos dos produtos
-            const productTax = items.reduce((sum, item) => {
-                if (
-                    item.internal_product?.tax_category?.total_tax_rate !==
-                        undefined &&
-                    item.internal_product?.tax_category?.total_tax_rate !== null
-                ) {
+            // IMPORTANTE: Calcular impostos seguindo a MESMA lógica do card financeiro
+            // Impostos devem ser calculados sobre o SUBTOTAL, não sobre itens individuais
+
+            // Calcular subtotal do pedido
+            const subtotal = calculateOrderSubtotal(order);
+
+            // Calcular impostos dos produtos baseado no subtotal
+            // Agrupar itens por tax_category e calcular proporcionalmente ao subtotal
+            const taxCategories = new Map<
+                number,
+                { rate: number; itemsTotal: number }
+            >();
+            let totalItemsPrice = 0;
+
+            items.forEach((item) => {
+                if (item.internal_product?.tax_category?.total_tax_rate) {
                     const quantity = item.qty || item.quantity || 0;
                     const unitPrice = item.unit_price || item.price || 0;
                     const itemTotal = quantity * unitPrice;
-                    const taxRate =
-                        item.internal_product.tax_category.total_tax_rate / 100;
-                    return sum + itemTotal * taxRate;
+                    totalItemsPrice += itemTotal;
+
+                    const taxCategoryId = item.internal_product.tax_category.id;
+                    const existingCategory = taxCategories.get(taxCategoryId);
+
+                    if (existingCategory) {
+                        existingCategory.itemsTotal += itemTotal;
+                    } else {
+                        taxCategories.set(taxCategoryId, {
+                            rate: item.internal_product.tax_category
+                                .total_tax_rate,
+                            itemsTotal: itemTotal,
+                        });
+                    }
                 }
-                return sum;
-            }, 0);
+            });
+
+            // Calcular impostos proporcionais ao subtotal
+            let productTax = 0;
+            taxCategories.forEach((category) => {
+                // Proporção deste grupo de itens no total
+                const proportion =
+                    totalItemsPrice > 0
+                        ? category.itemsTotal / totalItemsPrice
+                        : 0;
+                // Aplicar a taxa sobre a parte proporcional do subtotal
+                const taxValue = (subtotal * proportion * category.rate) / 100;
+                productTax += taxValue;
+            });
 
             // Impostos adicionais (da categoria 'tax' em calculated_costs)
-            const calculatedCosts = row.original.calculated_costs;
+            // RECALCULAR valores percentuais baseado no Subtotal
+            const calculatedCosts = order.calculated_costs;
             const additionalTaxes = calculatedCosts?.taxes || [];
             const totalAdditionalTax = additionalTaxes.reduce(
-                (sum: number, tax: any) => sum + (tax.calculated_value || 0),
+                (sum: number, tax: any) => {
+                    if (tax.type === 'percentage') {
+                        // Recalcular: subtotal * (value / 100)
+                        const value = parseFloat(String(tax.value || '0')) || 0;
+                        const calculated = (subtotal * value) / 100;
+                        return sum + calculated;
+                    }
+                    // Se for valor fixo, usar calculated_value original
+                    return sum + (tax.calculated_value || 0);
+                },
                 0,
             );
 
             // Total de impostos = impostos dos produtos + impostos adicionais
             const totalTax = productTax + totalAdditionalTax;
 
-            const isCancelled = row.original.status === 'CANCELLED';
+            const isCancelled = order.status === 'CANCELLED';
 
             return totalTax > 0 ? (
                 <span
@@ -854,23 +844,25 @@ export const columns: ColumnDef<Order>[] = [
             label: 'Custos',
         },
         cell: ({ row }) => {
-            const totalCosts = row.original.total_costs;
-            const isCancelled = row.original.status === 'CANCELLED';
+            const order = row.original;
+            const isCancelled = order.status === 'CANCELLED';
 
-            if (totalCosts === null || totalCosts === undefined) {
-                return (
-                    <div className="text-right">
-                        <span className="text-muted-foreground">--</span>
-                    </div>
-                );
-            }
+            // IMPORTANTE: Recalcular custos baseado no SUBTOTAL (mesma lógica do card financeiro)
+            const subtotal = calculateOrderSubtotal(order);
+            const calculatedCosts = order.calculated_costs;
+            const costs = calculatedCosts?.costs || [];
 
-            const value =
-                typeof totalCosts === 'string'
-                    ? parseFloat(totalCosts)
-                    : totalCosts;
+            // Recalcular valores percentuais sobre o subtotal
+            const totalCosts = costs.reduce((sum: number, cost: any) => {
+                if (cost.type === 'percentage') {
+                    const value = parseFloat(String(cost.value || '0')) || 0;
+                    const calculated = (subtotal * value) / 100;
+                    return sum + calculated;
+                }
+                return sum + (cost.calculated_value || 0);
+            }, 0);
 
-            return value > 0 ? (
+            return totalCosts > 0 ? (
                 <div className="text-right">
                     <span
                         className={`text-sm ${
@@ -882,7 +874,7 @@ export const columns: ColumnDef<Order>[] = [
                         {new Intl.NumberFormat('pt-BR', {
                             style: 'currency',
                             currency: 'BRL',
-                        }).format(value)}
+                        }).format(totalCosts)}
                     </span>
                 </div>
             ) : (
@@ -904,23 +896,29 @@ export const columns: ColumnDef<Order>[] = [
             label: 'Comissões',
         },
         cell: ({ row }) => {
-            const totalCommissions = row.original.total_commissions;
-            const isCancelled = row.original.status === 'CANCELLED';
+            const order = row.original;
+            const isCancelled = order.status === 'CANCELLED';
 
-            if (totalCommissions === null || totalCommissions === undefined) {
-                return (
-                    <div className="text-right">
-                        <span className="text-muted-foreground">--</span>
-                    </div>
-                );
-            }
+            // IMPORTANTE: Recalcular comissões baseado no SUBTOTAL (mesma lógica do card financeiro)
+            const subtotal = calculateOrderSubtotal(order);
+            const calculatedCosts = order.calculated_costs;
+            const commissions = calculatedCosts?.commissions || [];
 
-            const value =
-                typeof totalCommissions === 'string'
-                    ? parseFloat(totalCommissions)
-                    : totalCommissions;
+            // Recalcular valores percentuais sobre o subtotal
+            const totalCommissions = commissions.reduce(
+                (sum: number, comm: any) => {
+                    if (comm.type === 'percentage') {
+                        const value =
+                            parseFloat(String(comm.value || '0')) || 0;
+                        const calculated = (subtotal * value) / 100;
+                        return sum + calculated;
+                    }
+                    return sum + (comm.calculated_value || 0);
+                },
+                0,
+            );
 
-            return value > 0 ? (
+            return totalCommissions > 0 ? (
                 <div className="text-right">
                     <span
                         className={`text-sm ${
@@ -932,7 +930,7 @@ export const columns: ColumnDef<Order>[] = [
                         {new Intl.NumberFormat('pt-BR', {
                             style: 'currency',
                             currency: 'BRL',
-                        }).format(value)}
+                        }).format(totalCommissions)}
                     </span>
                 </div>
             ) : (
@@ -954,14 +952,26 @@ export const columns: ColumnDef<Order>[] = [
             label: 'Taxa Pgto',
         },
         cell: ({ row }) => {
-            const calculatedCosts = row.original.calculated_costs;
+            const order = row.original;
+            const isCancelled = order.status === 'CANCELLED';
+
+            // IMPORTANTE: Recalcular taxas de pagamento baseado no SUBTOTAL (mesma lógica do card financeiro)
+            const subtotal = calculateOrderSubtotal(order);
+            const calculatedCosts = order.calculated_costs;
             const paymentMethodFees = calculatedCosts?.payment_methods || [];
+
+            // Recalcular valores percentuais sobre o subtotal
             const totalPaymentFee = paymentMethodFees.reduce(
-                (sum: number, fee: any) => sum + (fee.calculated_value || 0),
+                (sum: number, fee: any) => {
+                    if (fee.type === 'percentage') {
+                        const value = parseFloat(String(fee.value || '0')) || 0;
+                        const calculated = (subtotal * value) / 100;
+                        return sum + calculated;
+                    }
+                    return sum + (fee.calculated_value || 0);
+                },
                 0,
             );
-
-            const isCancelled = row.original.status === 'CANCELLED';
 
             return totalPaymentFee > 0 ? (
                 <div className="text-right">
@@ -987,6 +997,9 @@ export const columns: ColumnDef<Order>[] = [
     },
     {
         accessorKey: 'net_total',
+        meta: {
+            label: 'Total líquido',
+        },
         header: () => (
             <span>
                 <span className="hidden lg:inline">Total líquido</span>
@@ -998,16 +1011,111 @@ export const columns: ColumnDef<Order>[] = [
             const calculatedCosts = order.calculated_costs;
             const isCancelled = order.status === 'CANCELLED';
 
-            // Calcular net_revenue manualmente seguindo a mesma lógica do card financeiro
+            // IMPORTANTE: Calcular net_revenue seguindo a MESMA lógica do card financeiro
+            // Recalcular TODOS os valores percentuais sobre o subtotal
             const subtotal = calculateOrderSubtotal(order);
             const cmv = calculateOrderCMV(order.items || []);
-            const totalTax = calculatedCosts?.total_taxes ?? 0;
-            const totalCosts = calculatedCosts?.total_costs ?? 0;
-            const totalCommissions = calculatedCosts?.total_commissions ?? 0;
-            const totalPaymentMethodFee = calculatedCosts?.total_payment_methods ?? 0;
-            
+
+            // Recalcular impostos dos produtos sobre o subtotal
+            const items = order.items || [];
+            const taxCategories = new Map<
+                number,
+                { rate: number; itemsTotal: number }
+            >();
+            let totalItemsPrice = 0;
+
+            items.forEach((item) => {
+                if (item.internal_product?.tax_category?.total_tax_rate) {
+                    const quantity = item.qty || item.quantity || 0;
+                    const unitPrice = item.unit_price || item.price || 0;
+                    const itemTotal = quantity * unitPrice;
+                    totalItemsPrice += itemTotal;
+
+                    const taxCategoryId = item.internal_product.tax_category.id;
+                    const existingCategory = taxCategories.get(taxCategoryId);
+
+                    if (existingCategory) {
+                        existingCategory.itemsTotal += itemTotal;
+                    } else {
+                        taxCategories.set(taxCategoryId, {
+                            rate: item.internal_product.tax_category
+                                .total_tax_rate,
+                            itemsTotal: itemTotal,
+                        });
+                    }
+                }
+            });
+
+            let productTax = 0;
+            taxCategories.forEach((category) => {
+                const proportion =
+                    totalItemsPrice > 0
+                        ? category.itemsTotal / totalItemsPrice
+                        : 0;
+                const taxValue = (subtotal * proportion * category.rate) / 100;
+                productTax += taxValue;
+            });
+
+            // Impostos adicionais recalculados
+            const additionalTaxes = calculatedCosts?.taxes || [];
+            const totalAdditionalTax = additionalTaxes.reduce(
+                (sum: number, tax: any) => {
+                    if (tax.type === 'percentage') {
+                        const value = parseFloat(String(tax.value || '0')) || 0;
+                        return sum + (subtotal * value) / 100;
+                    }
+                    return sum + (tax.calculated_value || 0);
+                },
+                0,
+            );
+
+            const totalTax = productTax + totalAdditionalTax;
+
+            // Custos recalculados
+            const costs = calculatedCosts?.costs || [];
+            const totalCosts = costs.reduce((sum: number, cost: any) => {
+                if (cost.type === 'percentage') {
+                    const value = parseFloat(String(cost.value || '0')) || 0;
+                    return sum + (subtotal * value) / 100;
+                }
+                return sum + (cost.calculated_value || 0);
+            }, 0);
+
+            // Comissões recalculadas
+            const commissions = calculatedCosts?.commissions || [];
+            const totalCommissions = commissions.reduce(
+                (sum: number, comm: any) => {
+                    if (comm.type === 'percentage') {
+                        const value =
+                            parseFloat(String(comm.value || '0')) || 0;
+                        return sum + (subtotal * value) / 100;
+                    }
+                    return sum + (comm.calculated_value || 0);
+                },
+                0,
+            );
+
+            // Taxas de pagamento recalculadas
+            const paymentMethodFees = calculatedCosts?.payment_methods || [];
+            const totalPaymentMethodFee = paymentMethodFees.reduce(
+                (sum: number, fee: any) => {
+                    if (fee.type === 'percentage') {
+                        const value = parseFloat(String(fee.value || '0')) || 0;
+                        return sum + (subtotal * value) / 100;
+                    }
+                    return sum + (fee.calculated_value || 0);
+                },
+                0,
+            );
+
             // Líquido = Subtotal - CMV - Impostos - Custos - Comissão - Taxas de Pagamento
-            const netRevenue = subtotal - cmv - totalTax - totalCosts - totalCommissions - totalPaymentMethodFee;
+            const netRevenue =
+                subtotal -
+                cmv -
+                totalTax -
+                totalCosts -
+                totalCommissions -
+                totalPaymentMethodFee;
 
             return (
                 <span
@@ -1035,16 +1143,111 @@ export const columns: ColumnDef<Order>[] = [
 
             // Calcular subtotal seguindo a MESMA lógica do card financeiro
             const subtotal = calculateOrderSubtotal(order);
-            
-            // Calcular net_revenue manualmente (não confiar no backend)
+
+            // Calcular net_revenue manualmente recalculando os valores percentuais baseados no subtotal
             const cmv = calculateOrderCMV(order.items || []);
-            const totalTax = calculatedCosts?.total_taxes ?? 0;
-            const totalCosts = calculatedCosts?.total_costs ?? 0;
-            const totalCommissions = calculatedCosts?.total_commissions ?? 0;
-            const totalPaymentMethodFee = calculatedCosts?.total_payment_methods ?? 0;
-            
+
+            // IMPORTANTE: Recalcular impostos baseado no subtotal (mesma lógica da coluna tax e card financeiro)
+            const items = order.items || [];
+
+            // Impostos dos produtos
+            const taxCategories = new Map<
+                number,
+                { rate: number; itemsTotal: number }
+            >();
+            let totalItemsPrice = 0;
+            items.forEach((item) => {
+                if (item.internal_product?.tax_category?.total_tax_rate) {
+                    const quantity = item.qty || item.quantity || 0;
+                    const unitPrice = item.unit_price || item.price || 0;
+                    const itemTotal = quantity * unitPrice;
+                    totalItemsPrice += itemTotal;
+
+                    const taxCategoryId = item.internal_product.tax_category.id;
+                    const existingCategory = taxCategories.get(taxCategoryId);
+
+                    if (existingCategory) {
+                        existingCategory.itemsTotal += itemTotal;
+                    } else {
+                        taxCategories.set(taxCategoryId, {
+                            rate: item.internal_product.tax_category
+                                .total_tax_rate,
+                            itemsTotal: itemTotal,
+                        });
+                    }
+                }
+            });
+
+            let productTax = 0;
+            taxCategories.forEach((category) => {
+                const proportion =
+                    totalItemsPrice > 0
+                        ? category.itemsTotal / totalItemsPrice
+                        : 0;
+                const taxValue = (subtotal * proportion * category.rate) / 100;
+                productTax += taxValue;
+            });
+
+            // Impostos adicionais (recalcular percentuais)
+            const additionalTaxes = calculatedCosts?.taxes || [];
+            const totalAdditionalTax = additionalTaxes.reduce(
+                (sum: number, tax: any) => {
+                    if (tax.type === 'percentage') {
+                        const value = parseFloat(String(tax.value || '0')) || 0;
+                        return sum + (subtotal * value) / 100;
+                    }
+                    return sum + (tax.calculated_value || 0);
+                },
+                0,
+            );
+
+            const totalTax = productTax + totalAdditionalTax;
+
+            // IMPORTANTE: Recalcular custos baseado no subtotal
+            const costs = calculatedCosts?.costs || [];
+            const totalCosts = costs.reduce((sum: number, cost: any) => {
+                if (cost.type === 'percentage') {
+                    const value = parseFloat(String(cost.value || '0')) || 0;
+                    return sum + (subtotal * value) / 100;
+                }
+                return sum + (cost.calculated_value || 0);
+            }, 0);
+
+            // IMPORTANTE: Recalcular comissões baseado no subtotal
+            const commissions = calculatedCosts?.commissions || [];
+            const totalCommissions = commissions.reduce(
+                (sum: number, comm: any) => {
+                    if (comm.type === 'percentage') {
+                        const value =
+                            parseFloat(String(comm.value || '0')) || 0;
+                        return sum + (subtotal * value) / 100;
+                    }
+                    return sum + (comm.calculated_value || 0);
+                },
+                0,
+            );
+
+            // IMPORTANTE: Recalcular taxas de pagamento baseado no subtotal
+            const paymentMethodFees = calculatedCosts?.payment_methods || [];
+            const totalPaymentMethodFee = paymentMethodFees.reduce(
+                (sum: number, fee: any) => {
+                    if (fee.type === 'percentage') {
+                        const value = parseFloat(String(fee.value || '0')) || 0;
+                        return sum + (subtotal * value) / 100;
+                    }
+                    return sum + (fee.calculated_value || 0);
+                },
+                0,
+            );
+
             // Líquido = Subtotal - CMV - Impostos - Custos - Comissão - Taxas de Pagamento
-            const netRevenue = subtotal - cmv - totalTax - totalCosts - totalCommissions - totalPaymentMethodFee;
+            const netRevenue =
+                subtotal -
+                cmv -
+                totalTax -
+                totalCosts -
+                totalCommissions -
+                totalPaymentMethodFee;
 
             // Pega marginSettings do table.options.meta
             const marginSettings = (

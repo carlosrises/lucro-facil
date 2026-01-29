@@ -1,13 +1,33 @@
 import {
+    closestCenter,
+    DndContext,
+    KeyboardSensor,
+    MouseSensor,
+    TouchSensor,
+    useSensor,
+    useSensors,
+    type DragEndEvent,
+    type UniqueIdentifier,
+} from '@dnd-kit/core';
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import {
+    arrayMove,
+    SortableContext,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
     ColumnFiltersState,
     flexRender,
     getCoreRowModel,
     getFilteredRowModel,
     getPaginationRowModel,
     getSortedRowModel,
-    SortingState,
     useReactTable,
     VisibilityState,
+    type Row,
+    type SortingState,
 } from '@tanstack/react-table';
 import * as React from 'react';
 
@@ -16,7 +36,6 @@ import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -42,13 +61,14 @@ import {
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
-    Download,
+    GripVertical,
     LayoutGrid,
     Plus,
     RefreshCw,
     Upload,
 } from 'lucide-react';
-import { createColumns, type Plan } from './table-columns';
+import { toast } from 'sonner';
+import { createColumns, type Plan } from './columns';
 
 type PlansPagination = {
     currentPage: number;
@@ -72,25 +92,179 @@ interface DataTableProps {
     onEditPlan: (plan: Plan) => void;
 }
 
+// Componente para o drag handle
+function DragHandle({
+    attributes,
+    listeners,
+}: {
+    attributes: any;
+    listeners: any;
+}) {
+    return (
+        <Button
+            {...attributes}
+            {...listeners}
+            variant="ghost"
+            size="icon"
+            className="size-7 cursor-grab text-muted-foreground hover:bg-transparent active:cursor-grabbing"
+        >
+            <GripVertical className="size-4" />
+            <span className="sr-only">Arrastar para reordenar</span>
+        </Button>
+    );
+}
+
+// Componente para linha arrastável
+function DraggableRow({ row }: { row: Row<Plan> }) {
+    const {
+        transform,
+        transition,
+        setNodeRef,
+        isDragging,
+        attributes,
+        listeners,
+    } = useSortable({
+        id: row.original.id,
+    });
+
+    return (
+        <TableRow
+            data-state={row.getIsSelected() && 'selected'}
+            data-dragging={isDragging}
+            ref={setNodeRef}
+            className="relative z-0 data-[dragging=true]:z-10 data-[dragging=true]:opacity-80"
+            style={{
+                transform: CSS.Transform.toString(transform),
+                transition: transition,
+            }}
+        >
+            {row.getVisibleCells().map((cell) => (
+                <TableCell key={cell.id}>
+                    {flexRender(cell.column.columnDef.cell, {
+                        ...cell.getContext(),
+                        dragHandleAttributes: attributes,
+                        dragHandleListeners: listeners,
+                    })}
+                </TableCell>
+            ))}
+        </TableRow>
+    );
+}
+
 export function DataTable({
-    data,
+    data: initialData,
     pagination,
     filters,
     onCreatePlan,
     onEditPlan,
 }: DataTableProps) {
-    const [sorting, setSorting] = React.useState<SortingState>([
-        { id: 'price', desc: false },
-    ]);
+    const [data, setData] = React.useState(() => initialData);
     const [columnFilters, setColumnFilters] =
         React.useState<ColumnFiltersState>([]);
     const [columnVisibility, setColumnVisibility] =
         React.useState<VisibilityState>({});
     const [rowSelection, setRowSelection] = React.useState({});
+    const [sorting, setSorting] = React.useState<SortingState>([]);
+    const [localPagination, setLocalPagination] = React.useState({
+        pageIndex: 0,
+        pageSize: 10,
+    });
     const [isSyncing, setIsSyncing] = React.useState(false);
-
-    // Estado local para busca com debounce
     const [searchValue, setSearchValue] = React.useState(filters?.search || '');
+
+    const sortableId = React.useId();
+    const sensors = useSensors(
+        useSensor(MouseSensor, {}),
+        useSensor(TouchSensor, {}),
+        useSensor(KeyboardSensor, {}),
+    );
+
+    const dataIds = React.useMemo<UniqueIdentifier[]>(() => {
+        const ids = data?.map(({ id }) => id) || [];
+        console.log('DataIds:', ids);
+        return ids;
+    }, [data]);
+
+    // Atualiza data quando initialData muda
+    React.useEffect(() => {
+        setData(initialData);
+    }, [initialData]);
+
+    const columns = React.useMemo(
+        () =>
+            createColumns({
+                onEdit: onEditPlan,
+                DragHandle: ({ attributes, listeners }: any) => (
+                    <DragHandle attributes={attributes} listeners={listeners} />
+                ),
+            }),
+        [onEditPlan],
+    );
+
+    const table = useReactTable({
+        data,
+        columns,
+        state: {
+            sorting,
+            columnVisibility,
+            rowSelection,
+            columnFilters,
+            pagination: localPagination,
+        },
+        getRowId: (row) => row.id.toString(),
+        enableRowSelection: true,
+        onRowSelectionChange: setRowSelection,
+        onSortingChange: setSorting,
+        onColumnFiltersChange: setColumnFilters,
+        onColumnVisibilityChange: setColumnVisibility,
+        onPaginationChange: setLocalPagination,
+        getCoreRowModel: getCoreRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+        getPaginationRowModel: getPaginationRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+    });
+
+    function handleDragEnd(event: DragEndEvent) {
+        const { active, over } = event;
+        console.log('Drag End Event:', {
+            active,
+            over,
+            activeId: active?.id,
+            overId: over?.id,
+        });
+        if (active && over && active.id !== over.id) {
+            setData((data) => {
+                const oldIndex = dataIds.indexOf(active.id);
+                const newIndex = dataIds.indexOf(over.id);
+                console.log('Moving from', oldIndex, 'to', newIndex);
+                const newData = arrayMove(data, oldIndex, newIndex);
+
+                // Atualizar display_order no backend
+                const orderedPlans = newData.map((plan, index) => ({
+                    id: plan.id,
+                    display_order: index,
+                }));
+
+                router.post(
+                    '/admin/plans/update-order',
+                    { plans: orderedPlans },
+                    {
+                        preserveScroll: true,
+                        onSuccess: () => {
+                            toast.success('Ordem atualizada com sucesso!');
+                        },
+                        onError: () => {
+                            toast.error('Erro ao atualizar ordem');
+                            // Reverter em caso de erro
+                            setData(initialData);
+                        },
+                    },
+                );
+
+                return newData;
+            });
+        }
+    }
 
     const handleSyncFromStripe = () => {
         setIsSyncing(true);
@@ -99,7 +273,21 @@ export function DataTable({
             {},
             {
                 preserveScroll: true,
-                onFinish: () => setIsSyncing(false),
+                onSuccess: () => {
+                    toast.success('Planos sincronizados com sucesso!');
+                    setIsSyncing(false);
+                },
+                onError: (errors) => {
+                    toast.error(
+                        errors.error
+                            ? (errors.error as string)
+                            : 'Erro ao sincronizar planos',
+                    );
+                    setIsSyncing(false);
+                },
+                onFinish: () => {
+                    setIsSyncing(false);
+                },
             },
         );
     };
@@ -111,104 +299,64 @@ export function DataTable({
             {},
             {
                 preserveScroll: true,
-                onFinish: () => setIsSyncing(false),
+                onSuccess: () => {
+                    toast.success('Planos enviados para o Stripe com sucesso!');
+                    setIsSyncing(false);
+                },
+                onError: (errors) => {
+                    toast.error(
+                        errors.error
+                            ? (errors.error as string)
+                            : 'Erro ao enviar planos',
+                    );
+                    setIsSyncing(false);
+                },
+                onFinish: () => {
+                    setIsSyncing(false);
+                },
             },
         );
     };
-
-    const columns = createColumns({
-        onEdit: onEditPlan,
-    });
-
-    const table = useReactTable({
-        data,
-        columns,
-        onSortingChange: setSorting,
-        onColumnFiltersChange: setColumnFilters,
-        getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
-        getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-        onColumnVisibilityChange: setColumnVisibility,
-        onRowSelectionChange: setRowSelection,
-        state: {
-            sorting,
-            columnFilters,
-            columnVisibility,
-            rowSelection,
-        },
-    });
 
     // Debounce para busca
     React.useEffect(() => {
         const timer = setTimeout(() => {
             if (searchValue !== filters?.search) {
-                const cleanFilters = Object.fromEntries(
-                    Object.entries({ ...filters, search: searchValue }).filter(
-                        ([, value]) =>
-                            value !== '' &&
-                            value !== null &&
-                            value !== undefined,
-                    ),
+                router.get(
+                    '/admin/plans',
+                    { search: searchValue, active: filters?.active },
+                    { preserveState: true, preserveScroll: true },
                 );
-
-                router.get('/admin/plans', cleanFilters, {
-                    preserveState: true,
-                    preserveScroll: true,
-                });
             }
-        }, 500);
+        }, 300);
 
         return () => clearTimeout(timer);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchValue, filters?.search]);
+    }, [searchValue, filters?.search, filters?.active]);
 
-    const updateFilters = (newFilters: Partial<PlansFilters>) => {
-        const cleanFilters = Object.fromEntries(
-            Object.entries({ ...filters, ...newFilters }).filter(
-                ([, value]) =>
-                    value !== '' && value !== null && value !== undefined,
-            ),
-        );
-
-        router.get('/admin/plans', cleanFilters, {
-            preserveState: true,
-            preserveScroll: true,
-        });
-    };
-
-    const handlePageChange = (page: number) => {
+    const handleActiveFilterChange = (value: string) => {
         router.get(
             '/admin/plans',
-            { ...filters, page },
             {
-                preserveState: true,
-                preserveScroll: true,
+                search: filters?.search,
+                ...(value !== 'all' && { active: value }),
             },
+            { preserveState: true, preserveScroll: true },
         );
     };
 
     return (
-        <div className="flex w-full flex-col gap-4">
-            {/* 🔎 Filtros */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                    {/* Buscar */}
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <div className="flex flex-1 items-center gap-2">
                     <Input
-                        placeholder="Buscar plano..."
+                        placeholder="Buscar planos..."
                         value={searchValue}
                         onChange={(e) => setSearchValue(e.target.value)}
-                        className="h-9 w-[200px]"
+                        className="h-9 w-[250px]"
                     />
-
-                    {/* Filtro por status */}
                     <Select
-                        value={filters?.active ?? 'all'}
-                        onValueChange={(value) =>
-                            updateFilters({
-                                active: value === 'all' ? '' : value,
-                            })
-                        }
+                        value={filters?.active || 'all'}
+                        onValueChange={handleActiveFilterChange}
                     >
                         <SelectTrigger className="h-9 w-[150px]">
                             <SelectValue placeholder="Status" />
@@ -221,80 +369,39 @@ export function DataTable({
                     </Select>
                 </div>
 
-                {/* Ações à direita */}
                 <div className="flex items-center gap-2">
-                    {/* Sincronizar do Stripe */}
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isSyncing}
-                            >
-                                <RefreshCw
-                                    className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`}
-                                />
-                                <span className="ml-2">Sincronizar</span>
-                                <ChevronDown className="ml-1 h-3 w-3" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={handleSyncFromStripe}>
-                                <Download className="mr-2 h-4 w-4" />
-                                Importar do Stripe
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleSyncToStripe}>
-                                <Upload className="mr-2 h-4 w-4" />
-                                Enviar para Stripe
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    {/* className="h-9 w-[200px]"
-                    />
-
-                    {/* Filtro por status */}
-                    <Select
-                        value={filters?.active ?? 'all'}
-                        onValueChange={(value) =>
-                            updateFilters({
-                                active: value === 'all' ? '' : value,
-                            })
-                        }
-                    >
-                        <SelectTrigger className="h-9 w-[150px]">
-                            <SelectValue placeholder="Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Todos</SelectItem>
-                            <SelectItem value="true">Ativos</SelectItem>
-                            <SelectItem value="false">Inativos</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-
-                {/* Ações à direita */}
-                <div className="flex items-center gap-2">
-                    {/* Adicionar Plano */}
-                    <Button size="sm" onClick={onCreatePlan}>
-                        <Plus className="h-4 w-4" />
-                        <span className="ml-2">Novo Plano</span>
-                    </Button>
-
-                    {/* 👁️ Colunas visíveis */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" size="sm">
-                                <LayoutGrid className="h-4 w-4" />
-                                <span className="ml-2">Colunas</span>
-                                <ChevronDown className="h-4 w-4" />
+                                <LayoutGrid className="mr-2 h-4 w-4" />
+                                Colunas
+                                <ChevronDown className="ml-2 h-4 w-4" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent align="end" className="w-56">
                             {table
                                 .getAllColumns()
-                                .filter((column) => column.getCanHide())
+                                .filter(
+                                    (column) =>
+                                        typeof column.accessorFn !==
+                                            'undefined' && column.getCanHide(),
+                                )
                                 .map((column) => {
+                                    const columnLabels: Record<string, string> =
+                                        {
+                                            code: 'Código',
+                                            name: 'Nome',
+                                            description: 'Descrição',
+                                            price: 'Preço',
+                                            features: 'Recursos',
+                                            active: 'Status',
+                                            is_visible: 'Visível',
+                                            is_contact_plan: 'Sob Consulta',
+                                            is_featured: 'Destaque',
+                                            subscriptions_count: 'Assinaturas',
+                                            actions: 'Ações',
+                                        };
+
                                     return (
                                         <DropdownMenuCheckboxItem
                                             key={column.id}
@@ -304,107 +411,163 @@ export function DataTable({
                                                 column.toggleVisibility(!!value)
                                             }
                                         >
-                                            {column.id}
+                                            {columnLabels[column.id] ||
+                                                column.id}
                                         </DropdownMenuCheckboxItem>
                                     );
                                 })}
                         </DropdownMenuContent>
                     </DropdownMenu>
+
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={isSyncing}
+                            >
+                                {isSyncing ? (
+                                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                )}
+                                Sincronizar
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuCheckboxItem
+                                onSelect={handleSyncFromStripe}
+                            >
+                                <Upload className="mr-2 h-4 w-4" />
+                                Importar do Stripe
+                            </DropdownMenuCheckboxItem>
+                            <DropdownMenuCheckboxItem
+                                onSelect={handleSyncToStripe}
+                            >
+                                <Upload className="mr-2 h-4 w-4" />
+                                Enviar para Stripe
+                            </DropdownMenuCheckboxItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    <Button onClick={onCreatePlan} size="sm">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Novo Plano
+                    </Button>
                 </div>
             </div>
 
-            {/* 📋 Tabela */}
             <div className="rounded-md border">
-                <Table>
-                    <TableHeader>
-                        {table.getHeaderGroups().map((headerGroup) => (
-                            <TableRow key={headerGroup.id}>
-                                {headerGroup.headers.map((header) => {
-                                    return (
-                                        <TableHead key={header.id}>
-                                            {header.isPlaceholder
-                                                ? null
-                                                : flexRender(
-                                                      header.column.columnDef
-                                                          .header,
-                                                      header.getContext(),
-                                                  )}
-                                        </TableHead>
-                                    );
-                                })}
-                            </TableRow>
-                        ))}
-                    </TableHeader>
-                    <TableBody>
-                        {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row) => (
-                                <TableRow
-                                    key={row.id}
-                                    data-state={
-                                        row.getIsSelected() && 'selected'
-                                    }
-                                >
-                                    {row.getVisibleCells().map((cell) => (
-                                        <TableCell key={cell.id}>
-                                            {flexRender(
-                                                cell.column.columnDef.cell,
-                                                cell.getContext(),
-                                            )}
-                                        </TableCell>
-                                    ))}
+                <DndContext
+                    collisionDetection={closestCenter}
+                    modifiers={[restrictToVerticalAxis]}
+                    onDragEnd={handleDragEnd}
+                    sensors={sensors}
+                    id={sortableId}
+                >
+                    <Table>
+                        <TableHeader>
+                            {table.getHeaderGroups().map((headerGroup) => (
+                                <TableRow key={headerGroup.id}>
+                                    {headerGroup.headers.map((header) => {
+                                        return (
+                                            <TableHead
+                                                key={header.id}
+                                                colSpan={header.colSpan}
+                                            >
+                                                {header.isPlaceholder
+                                                    ? null
+                                                    : flexRender(
+                                                          header.column
+                                                              .columnDef.header,
+                                                          header.getContext(),
+                                                      )}
+                                            </TableHead>
+                                        );
+                                    })}
                                 </TableRow>
-                            ))
-                        ) : (
-                            <TableRow>
-                                <TableCell
-                                    colSpan={columns.length}
-                                    className="h-24 text-center"
+                            ))}
+                        </TableHeader>
+                        <TableBody>
+                            {table.getRowModel().rows?.length ? (
+                                <SortableContext
+                                    items={dataIds}
+                                    strategy={verticalListSortingStrategy}
                                 >
-                                    Nenhum plano encontrado.
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
+                                    {table.getRowModel().rows.map((row) => (
+                                        <DraggableRow key={row.id} row={row} />
+                                    ))}
+                                </SortableContext>
+                            ) : (
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={columns.length}
+                                        className="h-24 text-center"
+                                    >
+                                        Nenhum resultado encontrado.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </DndContext>
             </div>
 
-            {/* 📄 Paginação */}
             <div className="flex items-center justify-between px-2">
                 <div className="flex-1 text-sm text-muted-foreground">
-                    Mostrando {pagination.from ?? 0} até {pagination.to ?? 0} de{' '}
-                    {pagination.total} plano(s).
+                    {table.getFilteredSelectedRowModel().rows.length} de{' '}
+                    {table.getFilteredRowModel().rows.length} linha(s)
+                    selecionada(s).
                 </div>
                 <div className="flex items-center space-x-6 lg:space-x-8">
+                    <div className="flex items-center space-x-2">
+                        <p className="text-sm font-medium">Página</p>
+                        <p className="text-sm font-medium">
+                            {pagination.currentPage} de {pagination.lastPage}
+                        </p>
+                    </div>
                     <div className="flex items-center space-x-2">
                         <Button
                             variant="outline"
                             className="hidden h-8 w-8 p-0 lg:flex"
-                            onClick={() => handlePageChange(1)}
+                            onClick={() =>
+                                router.get(
+                                    '/admin/plans?page=1',
+                                    {},
+                                    { preserveState: true },
+                                )
+                            }
                             disabled={pagination.currentPage === 1}
                         >
-                            <span className="sr-only">Primeira página</span>
+                            <span className="sr-only">
+                                Ir para primeira página
+                            </span>
                             <ChevronsLeft className="h-4 w-4" />
                         </Button>
                         <Button
                             variant="outline"
                             className="h-8 w-8 p-0"
                             onClick={() =>
-                                handlePageChange(pagination.currentPage - 1)
+                                router.get(
+                                    `/admin/plans?page=${pagination.currentPage - 1}`,
+                                    {},
+                                    { preserveState: true },
+                                )
                             }
                             disabled={pagination.currentPage === 1}
                         >
                             <span className="sr-only">Página anterior</span>
                             <ChevronLeft className="h-4 w-4" />
                         </Button>
-                        <div className="flex w-[100px] items-center justify-center text-sm font-medium">
-                            Página {pagination.currentPage} de{' '}
-                            {pagination.lastPage}
-                        </div>
                         <Button
                             variant="outline"
                             className="h-8 w-8 p-0"
                             onClick={() =>
-                                handlePageChange(pagination.currentPage + 1)
+                                router.get(
+                                    `/admin/plans?page=${pagination.currentPage + 1}`,
+                                    {},
+                                    { preserveState: true },
+                                )
                             }
                             disabled={
                                 pagination.currentPage === pagination.lastPage
@@ -417,13 +580,19 @@ export function DataTable({
                             variant="outline"
                             className="hidden h-8 w-8 p-0 lg:flex"
                             onClick={() =>
-                                handlePageChange(pagination.lastPage)
+                                router.get(
+                                    `/admin/plans?page=${pagination.lastPage}`,
+                                    {},
+                                    { preserveState: true },
+                                )
                             }
                             disabled={
                                 pagination.currentPage === pagination.lastPage
                             }
                         >
-                            <span className="sr-only">Última página</span>
+                            <span className="sr-only">
+                                Ir para última página
+                            </span>
                             <ChevronsRight className="h-4 w-4" />
                         </Button>
                     </div>

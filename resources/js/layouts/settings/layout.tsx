@@ -5,6 +5,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 
 import { edit as appearance } from '@/routes/appearance';
+import { edit as billing } from '@/routes/billing';
 import { edit as general } from '@/routes/general';
 import { index as integrations } from '@/routes/integrations';
 import { edit as password } from '@/routes/password';
@@ -16,6 +17,7 @@ import { type PropsWithChildren } from 'react';
 
 import { Link } from '@inertiajs/react';
 import {
+    CreditCard,
     LockKeyhole,
     RectangleEllipsis,
     Settings2,
@@ -49,6 +51,11 @@ const sidebarNavItems: NavItem[] = [
         title: 'Aparência',
         href: appearance(),
         icon: SunMoon,
+    },
+    {
+        title: 'Planos e Assinatura',
+        href: billing(),
+        icon: CreditCard,
     },
     {
         title: 'Integrações',

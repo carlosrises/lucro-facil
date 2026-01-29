@@ -41,7 +41,7 @@ class PlansController extends Controller
             $query->where('active', $request->active === 'true');
         }
 
-        $plans = $query->orderBy('price_month')->paginate(15);
+        $plans = $query->with('prices')->orderBy('display_order')->orderBy('price_month')->paginate(15);
 
         return inertia('admin/plans', [
             'plans' => $plans,
@@ -61,36 +61,49 @@ class PlansController extends Controller
             'code' => 'required|string|max:255|unique:plans,code',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'price' => 'required|numeric|min:0',
+            'prices' => 'nullable|array',
+            'prices.*.key' => 'required|string|max:50',
+            'prices.*.label' => 'required|string|max:50',
+            'prices.*.amount' => 'nullable|numeric|min:0',
+            'prices.*.interval' => 'nullable|string|in:month,year',
+            'prices.*.period_label' => 'nullable|string|max:50',
+            'prices.*.is_annual' => 'nullable|boolean',
             'features' => 'nullable|array',
             'active' => 'boolean',
+            'is_visible' => 'boolean',
+            'is_contact_plan' => 'boolean',
+            'contact_url' => 'nullable|url',
         ]);
 
-        // Converter price para price_month
-        $validated['price_month'] = $validated['price'];
-        unset($validated['price']);
-
-        DB::beginTransaction();
-        try {
-            // Criar plano no banco
-            $plan = Plan::create($validated);
-
-            // Criar produto e preço no Stripe
-            $stripeIds = $this->stripe->createPlanInStripe($plan);
-            $plan->update($stripeIds);
-
-            DB::commit();
-
-            return redirect()->back()->with('success', 'Plano criado com sucesso!');
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Erro ao criar plano', [
-                'error' => $e->getMessage(),
-                'data' => $validated,
+        // Validação customizada: contact_url obrigatório se is_contact_plan
+        if (($validated['is_contact_plan'] ?? false) && empty($validated['contact_url'])) {
+            return redirect()->back()->withErrors([
+                'contact_url' => 'URL de contato é obrigatória para planos sob consulta.',
             ]);
-
-            return redirect()->back()->withErrors(['error' => 'Erro ao criar plano: '.$e->getMessage()]);
         }
+
+        $prices = collect($validated['prices'] ?? [])->filter(function ($price) {
+            return in_array($price['interval'] ?? null, ['month', 'year'], true)
+                || in_array($price['key'] ?? null, ['monthly', 'annual'], true);
+        });
+        unset($validated['prices']);
+
+        $priceMonth = $prices->firstWhere('interval', 'month')['amount'] ??
+            $prices->firstWhere('key', 'monthly')['amount'] ??
+            $prices->first()['amount'] ?? null;
+
+        $validated['price_month'] = $validated['is_contact_plan'] ? null : $priceMonth;
+
+        $plan = Plan::withoutEvents(function () use ($validated) {
+            return Plan::create($validated);
+        });
+
+        if (!$validated['is_contact_plan'] && $prices->isNotEmpty()) {
+            $plan->prices()->createMany($prices->toArray());
+            $this->stripe->createPlanWithPrices($plan->fresh('prices'));
+        }
+
+        return redirect()->back()->with('success', 'Plano criado com sucesso!');
     }
 
     /**
@@ -102,41 +115,112 @@ class PlansController extends Controller
             'code' => 'required|string|max:255|unique:plans,code,'.$plan->id,
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'price' => 'required|numeric|min:0',
+            'prices' => 'nullable|array',
+            'prices.*.id' => 'nullable|integer',
+            'prices.*.key' => 'required|string|max:50',
+            'prices.*.label' => 'required|string|max:50',
+            'prices.*.amount' => 'nullable|numeric|min:0',
+            'prices.*.interval' => 'nullable|string|in:month,year',
+            'prices.*.period_label' => 'nullable|string|max:50',
+            'prices.*.is_annual' => 'nullable|boolean',
             'features' => 'nullable|array',
             'active' => 'boolean',
+            'is_visible' => 'boolean',
+            'is_contact_plan' => 'boolean',
+            'contact_url' => 'nullable|url',
         ]);
 
-        // Converter price para price_month
-        $validated['price_month'] = $validated['price'];
-        unset($validated['price']);
+        // Validação customizada: contact_url obrigatório se is_contact_plan
+        if (($validated['is_contact_plan'] ?? false) && empty($validated['contact_url'])) {
+            return redirect()->back()->withErrors([
+                'contact_url' => 'URL de contato é obrigatória para planos sob consulta.',
+            ]);
+        }
+
+        $prices = collect($validated['prices'] ?? [])->filter(function ($price) {
+            return in_array($price['interval'] ?? null, ['month', 'year'], true)
+                || in_array($price['key'] ?? null, ['monthly', 'annual'], true);
+        });
+        unset($validated['prices']);
+
+        $priceMonth = $prices->firstWhere('interval', 'month')['amount'] ??
+            $prices->firstWhere('key', 'monthly')['amount'] ??
+            $prices->first()['amount'] ?? null;
+
+        $validated['price_month'] = $validated['is_contact_plan'] ? null : $priceMonth;
+
+        $oldStripePriceIds = $plan->prices()->pluck('stripe_price_id')->filter()->all();
+
+        $plan = Plan::withoutEvents(function () use ($plan, $validated) {
+            $plan->update($validated);
+            return $plan;
+        });
+
+        $plan->prices()->delete();
+
+        if (!$validated['is_contact_plan'] && $prices->isNotEmpty()) {
+            $plan->prices()->createMany($prices->toArray());
+
+            $plan = $plan->fresh('prices');
+
+            if (!$plan->stripe_product_id) {
+                $this->stripe->createPlanWithPrices($plan);
+            } else {
+                $this->stripe->updatePlanProduct($plan);
+                $this->stripe->syncPlanPrices($plan, $oldStripePriceIds);
+            }
+        }
+
+        return redirect()->back()->with('success', 'Plano atualizado com sucesso!');
+    }
+
+    /**
+     * Update the display order of plans.
+     */
+    public function updateOrder(Request $request)
+    {
+        $validated = $request->validate([
+            'plans' => 'required|array',
+            'plans.*.id' => 'required|exists:plans,id',
+            'plans.*.display_order' => 'required|integer|min:0',
+        ]);
 
         DB::beginTransaction();
         try {
-            // Atualizar plano no banco
-            $plan->update($validated);
-
-            // Atualizar produto/preço no Stripe
-            if ($plan->stripe_product_id) {
-                $this->stripe->updatePlanInStripe($plan);
-            } else {
-                // Se não tinha IDs do Stripe, criar agora
-                $stripeIds = $this->stripe->createPlanInStripe($plan);
-                $plan->update($stripeIds);
+            foreach ($validated['plans'] as $planData) {
+                Plan::where('id', $planData['id'])
+                    ->update(['display_order' => $planData['display_order']]);
             }
 
             DB::commit();
 
-            return redirect()->back()->with('success', 'Plano atualizado com sucesso!');
+            return back();
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Erro ao atualizar plano', [
-                'plan_id' => $plan->id,
+            Log::error('Erro ao atualizar ordem dos planos', [
                 'error' => $e->getMessage(),
-                'data' => $validated,
             ]);
 
-            return redirect()->back()->withErrors(['error' => 'Erro ao atualizar plano: '.$e->getMessage()]);
+            return back()->with('error', 'Erro ao atualizar ordem.');
+        }
+    }
+
+    /**
+     * Toggle the featured status of a plan.
+     */
+    public function toggleFeatured(Plan $plan)
+    {
+        try {
+            $plan->update(['is_featured' => !$plan->is_featured]);
+
+            return back();
+        } catch (\Exception $e) {
+            Log::error('Erro ao alternar destaque do plano', [
+                'plan_id' => $plan->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return back()->with('error', 'Erro ao atualizar plano.');
         }
     }
 
@@ -207,19 +291,17 @@ class PlansController extends Controller
             DB::beginTransaction();
 
             foreach ($products->data as $product) {
-                // Buscar preço do produto
+                // Buscar preços do produto
                 $prices = $stripe->prices->all([
                     'product' => $product->id,
                     'active' => true,
                     'type' => 'recurring',
-                    'limit' => 1,
+                    'limit' => 100,
                 ]);
 
                 if (count($prices->data) === 0) {
-                    continue; // Pular produtos sem preço recorrente
+                    continue; // Pular produtos sem preços recorrentes
                 }
-
-                $price = $prices->data[0];
 
                 // Código do plano (tentar pegar do metadata, senão usar primeiras 3 letras do nome)
                 $planCode = strtoupper($product->metadata['plan_code'] ?? substr($product->name, 0, 3));
@@ -229,25 +311,63 @@ class PlansController extends Controller
                     ->orWhere('code', $planCode)
                     ->first();
 
+                $monthlyPrice = collect($prices->data)->firstWhere('recurring.interval', 'month');
+                $fallbackPrice = $prices->data[0];
+                $priceMonth = $monthlyPrice ? ($monthlyPrice->unit_amount / 100) : ($fallbackPrice->unit_amount / 100);
+
                 $planData = [
                     'name' => $product->name,
                     'description' => $product->description ?? '',
-                    'price_month' => $price->unit_amount / 100, // Converter de centavos
+                    'price_month' => $priceMonth, // Converter de centavos
                     'stripe_product_id' => $product->id,
-                    'stripe_price_id' => $price->id,
+                    'stripe_price_id' => $fallbackPrice->id,
                     'active' => $product->active,
                 ];
 
                 if ($plan) {
                     // Atualizar plano existente (e garantir que tenha os IDs do Stripe)
-                    $plan->update($planData);
+                    Plan::withoutEvents(function () use ($plan, $planData) {
+                        $plan->update($planData);
+                    });
                     $synced++;
                 } else {
                     // Criar novo plano
                     $planData['code'] = $planCode;
-                    Plan::create($planData);
+                    $plan = Plan::withoutEvents(function () use ($planData) {
+                        return Plan::create($planData);
+                    });
                     $created++;
                 }
+
+                // Atualizar preços do plano
+                $plan->prices()->delete();
+
+                $priceRows = collect($prices->data)
+                    ->filter(function ($price) {
+                        $interval = $price->recurring->interval ?? 'month';
+                        return in_array($interval, ['month', 'year'], true);
+                    })
+                    ->map(function ($price) {
+                    $interval = $price->recurring->interval ?? 'month';
+                    $label = match ($interval) {
+                        'month' => 'Mensal',
+                        'year' => 'Anual',
+                        default => 'Outro',
+                    };
+
+                    return [
+                        'key' => $price->nickname ?: $interval,
+                        'label' => $label,
+                        'amount' => $price->unit_amount ? ($price->unit_amount / 100) : null,
+                        'interval' => $interval,
+                        'period_label' => $interval === 'year' ? 'por ano' : 'por mês',
+                        'is_annual' => $interval === 'year',
+                        'stripe_price_id' => $price->id,
+                        'active' => $price->active,
+                    ];
+                })->toArray();
+
+                $plan->prices()->createMany($priceRows);
             }
 
             // Buscar planos do sistema que têm stripe_product_id mas não existem mais no Stripe
@@ -295,8 +415,15 @@ class PlansController extends Controller
             DB::beginTransaction();
 
             foreach ($plansWithoutStripe as $plan) {
-                $stripeIds = $this->stripe->createPlanInStripe($plan);
-                $plan->update($stripeIds);
+                if ($plan->is_contact_plan) {
+                    continue;
+                }
+                if ($plan->prices()->exists()) {
+                    $this->stripe->createPlanWithPrices($plan->load('prices'));
+                } else {
+                    $stripeIds = $this->stripe->createPlanInStripe($plan);
+                    $plan->update($stripeIds);
+                }
                 $synced++;
             }
 

@@ -7,6 +7,374 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Scroll Animations */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes auroraFlow {
+    0% {
+        background-position:
+            5% 10%,
+            20% 20%,
+            0% 25%,
+            30% 15%,
+            10% 35%,
+            40% 25%,
+            0% 0%;
+        filter: hue-rotate(0deg) brightness(1);
+    }
+    25% {
+        background-position:
+            -5% 25%,
+            30% 10%,
+            -8% 18%,
+            42% 28%,
+            18% 30%,
+            32% 18%,
+            0% 0%;
+        filter: hue-rotate(20deg) brightness(1.08);
+    }
+    50% {
+        background-position:
+            15% 5%,
+            35% 32%,
+            8% 35%,
+            25% 8%,
+            5% 45%,
+            48% 35%,
+            0% 0%;
+        filter: hue-rotate(-12deg) brightness(1.05);
+    }
+    75% {
+        background-position:
+            25% 18%,
+            48% 22%,
+            18% 48%,
+            38% 15%,
+            28% 52%,
+            58% 42%,
+            0% 0%;
+        filter: hue-rotate(15deg) brightness(1.1);
+    }
+    100% {
+        background-position:
+            5% 10%,
+            20% 20%,
+            0% 25%,
+            30% 15%,
+            10% 35%,
+            40% 25%,
+            0% 0%;
+        filter: hue-rotate(0deg) brightness(1);
+    }
+}
+
+@keyframes auroraMove {
+    0% {
+        background-position:
+            0% 45%,
+            100% 35%,
+            50% 95%,
+            15% 75%,
+            85% 55%,
+            25% 85%,
+            75% 80%,
+            50% 100%;
+    }
+    25% {
+        background-position:
+            25% 25%,
+            80% 60%,
+            70% 50%,
+            35% 60%,
+            60% 75%,
+            50% 40%,
+            40% 65%,
+            50% 100%;
+    }
+    50% {
+        background-position:
+            50% 35%,
+            60% 75%,
+            85% 45%,
+            45% 55%,
+            25% 80%,
+            75% 35%,
+            35% 60%,
+            50% 100%;
+    }
+    75% {
+        background-position:
+            75% 50%,
+            30% 50%,
+            40% 20%,
+            70% 40%,
+            50% 60%,
+            60% 75%,
+            60% 85%,
+            50% 100%;
+    }
+    100% {
+        background-position:
+            0% 45%,
+            100% 35%,
+            50% 95%,
+            15% 75%,
+            85% 55%,
+            25% 85%,
+            75% 80%,
+            50% 100%;
+    }
+}
+
+.animate-on-scroll {
+    opacity: 0;
+    animation: fadeInUp 0.6s ease-out forwards;
+}
+
+.animate-delay-100 {
+    animation-delay: 0.1s;
+}
+
+.animate-delay-200 {
+    animation-delay: 0.2s;
+}
+
+.animate-delay-300 {
+    animation-delay: 0.3s;
+}
+
+.hero-aurora {
+    background-image:
+        radial-gradient(
+            circle at 10% 15%,
+            rgba(251, 146, 60, 0.25),
+            rgba(251, 146, 60, 0.1) 35%,
+            transparent 70%
+        ),
+        radial-gradient(
+            circle at 25% 25%,
+            rgba(236, 72, 153, 0.22),
+            rgba(236, 72, 153, 0.08) 38%,
+            transparent 72%
+        ),
+        radial-gradient(
+            circle at 5% 30%,
+            rgba(139, 92, 246, 0.24),
+            rgba(139, 92, 246, 0.09) 40%,
+            transparent 75%
+        ),
+        radial-gradient(
+            circle at 35% 20%,
+            rgba(59, 130, 246, 0.2),
+            rgba(59, 130, 246, 0.08) 42%,
+            transparent 78%
+        ),
+        radial-gradient(
+            circle at 15% 40%,
+            rgba(6, 182, 212, 0.19),
+            rgba(6, 182, 212, 0.07) 38%,
+            transparent 72%
+        ),
+        radial-gradient(
+            circle at 45% 30%,
+            rgba(16, 185, 129, 0.17),
+            rgba(16, 185, 129, 0.05) 40%,
+            transparent 75%
+        ),
+        linear-gradient(
+            to bottom,
+            rgba(249, 250, 251, 0) 0%,
+            rgba(249, 250, 251, 0.6) 40%,
+            rgba(249, 250, 251, 0.95) 55%,
+            #f9fafb 60%
+        );
+    background-size:
+        200% 200%,
+        190% 190%,
+        210% 210%,
+        195% 195%,
+        205% 205%,
+        188% 188%,
+        100% 100%;
+    background-position:
+        10% 15%,
+        25% 25%,
+        5% 30%,
+        35% 20%,
+        15% 40%,
+        45% 30%,
+        0% 0%;
+    background-blend-mode:
+        screen, screen, screen, screen, screen, screen, normal;
+    animation: auroraFlow 28s ease-in-out infinite;
+    opacity: 1;
+}
+
+.hero-aurora-2 {
+    background-image:
+        radial-gradient(
+            circle at 30% 20%,
+            rgba(16, 185, 129, 0.19),
+            rgba(16, 185, 129, 0.08) 38%,
+            transparent 72%
+        ),
+        radial-gradient(
+            circle at 45% 30%,
+            rgba(34, 197, 94, 0.17),
+            rgba(34, 197, 94, 0.07) 40%,
+            transparent 75%
+        ),
+        radial-gradient(
+            circle at 20% 35%,
+            rgba(6, 182, 212, 0.19),
+            rgba(6, 182, 212, 0.08) 42%,
+            transparent 78%
+        ),
+        radial-gradient(
+            circle at 35% 45%,
+            rgba(14, 165, 233, 0.16),
+            rgba(14, 165, 233, 0.07) 38%,
+            transparent 72%
+        ),
+        radial-gradient(
+            circle at 50% 25%,
+            rgba(5, 150, 105, 0.15),
+            rgba(5, 150, 105, 0.05) 40%,
+            transparent 75%
+        ),
+        linear-gradient(
+            to bottom,
+            transparent 0%,
+            transparent 50%,
+            rgba(249, 250, 251, 0.8) 65%,
+            rgba(249, 250, 251, 0.95) 75%,
+            #f9fafb 85%
+        );
+    background-size:
+        195% 195%,
+        210% 210%,
+        205% 205%,
+        192% 192%,
+        200% 200%,
+        100% 100%;
+    background-position:
+        30% 20%,
+        45% 30%,
+        20% 35%,
+        35% 45%,
+        50% 25%,
+        0% 0%;
+    background-blend-mode: screen, screen, screen, screen, screen, normal;
+    animation: auroraFlow2 24s ease-in-out infinite;
+    opacity: 1;
+}
+
+@keyframes auroraFlow2 {
+    0% {
+        background-position:
+            35% 18%,
+            50% 28%,
+            25% 32%,
+            40% 42%,
+            55% 22%,
+            0% 0%;
+        filter: hue-rotate(0deg) brightness(1);
+    }
+    25% {
+        background-position:
+            22% 28%,
+            58% 15%,
+            15% 25%,
+            52% 35%,
+            42% 32%,
+            0% 0%;
+        filter: hue-rotate(-18deg) brightness(1.07);
+    }
+    50% {
+        background-position:
+            45% 8%,
+            42% 38%,
+            32% 42%,
+            28% 48%,
+            65% 15%,
+            0% 0%;
+        filter: hue-rotate(28deg) brightness(1.11);
+    }
+    75% {
+        background-position:
+            52% 22%,
+            35% 48%,
+            42% 52%,
+            18% 55%,
+            72% 28%,
+            0% 0%;
+        filter: hue-rotate(-10deg) brightness(1.06);
+    }
+    100% {
+        background-position:
+            35% 18%,
+            50% 28%,
+            25% 32%,
+            40% 42%,
+            55% 22%,
+            0% 0%;
+        filter: hue-rotate(0deg) brightness(1);
+    }
+}
+
+@keyframes scrollDot {
+    0% {
+        transform: translate(-50%, 0);
+        opacity: 0.2;
+    }
+    50% {
+        transform: translate(-50%, 12px);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, 0);
+        opacity: 0.2;
+    }
+}
+
+.scroll-indicator {
+    position: relative;
+    width: 26px;
+    height: 42px;
+    border: 2px solid #cbd5e1;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.scroll-indicator-dot {
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: #10b981;
+    animation: scrollDot 1.6s ease-in-out infinite;
+}
+
 @theme {
     --font-sans:
         'Instrument Sans', ui-sans-serif, system-ui, sans-serif,

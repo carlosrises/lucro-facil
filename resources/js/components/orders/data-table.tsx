@@ -77,7 +77,11 @@ function calculateItemCost(item: any): number {
 }
 
 import { DateRangePicker } from '@/components/date-range-picker';
-import { columns, Order } from '@/components/orders/columns';
+import {
+    calculateOrderSubtotal,
+    columns,
+    Order,
+} from '@/components/orders/columns';
 import { OrderIndicators } from '@/components/orders/indicators';
 import { OrderExpandedDetails } from '@/components/orders/order-expanded-details';
 import { OrderFinancialCard } from '@/components/orders/order-financial-card';
@@ -94,11 +98,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useOrderLazyLoad } from '@/hooks/use-order-lazy-load';
-import {
-    calculateNetRevenue,
-    calculateOrderCMV,
-    isTakeatIfoodOrder,
-} from '@/lib/order-calculations';
+import { calculateOrderCMV } from '@/lib/order-calculations';
 import { Link, router } from '@inertiajs/react';
 import {
     AlertCircle,
@@ -309,6 +309,12 @@ export function DataTable({
     const [enrichedData, setEnrichedData] = React.useState<Order[]>(data);
     const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
 
+    // Estado para indicadores recalculados baseado em pedidos filtrados
+    const [recalculatedIndicators, setRecalculatedIndicators] = React.useState({
+        ...indicators,
+        averageMargin: 0,
+    });
+
     // Ref e state para altura dinâmica da tabela
     const containerRef = React.useRef<HTMLDivElement>(null);
     const [tableHeight, setTableHeight] = React.useState<number>(500);
@@ -316,6 +322,10 @@ export function DataTable({
     // Refs para sincronizar scroll horizontal entre header e body
     const bodyScrollRef = React.useRef<HTMLDivElement>(null);
     const headerWrapperRef = React.useRef<HTMLDivElement>(null);
+
+    // Ref para capturar larguras das células do corpo
+    const firstRowRef = React.useRef<HTMLTableRowElement>(null);
+    const [columnWidths, setColumnWidths] = React.useState<number[]>([]);
 
     React.useEffect(() => {
         setEnrichedData(data);
@@ -369,10 +379,17 @@ export function DataTable({
                     'tbody tr:first-child td',
                 );
 
+                // Capturar larguras para uso no rodapé e header
+                const widths: number[] = [];
+                bodyCells.forEach((cell) => {
+                    widths.push((cell as HTMLElement).offsetWidth);
+                });
+                setColumnWidths(widths);
+
                 headerCells.forEach((headerCell, index) => {
                     const bodyCell = bodyCells[index];
                     if (bodyCell) {
-                        const width = bodyCell.offsetWidth;
+                        const width = (bodyCell as HTMLElement).offsetWidth;
                         (headerCell as HTMLElement).style.width = `${width}px`;
                         (headerCell as HTMLElement).style.minWidth =
                             `${width}px`;
@@ -413,6 +430,54 @@ export function DataTable({
 
         return () => clearTimeout(timeoutId);
     }, []);
+
+    // Recalcular larguras das colunas quando os dados mudarem (filtros, paginação, etc)
+    React.useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            const bodyScroll = bodyScrollRef.current;
+            const headerWrapper = headerWrapperRef.current;
+
+            if (!bodyScroll || !headerWrapper) {
+                return;
+            }
+
+            const table = headerWrapper.querySelector('table');
+            const bodyTable = bodyScroll.querySelector('table');
+
+            if (!table || !bodyTable) {
+                return;
+            }
+
+            const headerCells = table.querySelectorAll('th');
+            const bodyCells = bodyTable.querySelectorAll(
+                'tbody tr:first-child td',
+            );
+
+            if (bodyCells.length === 0) {
+                return;
+            }
+
+            // Capturar larguras para uso no rodapé e header
+            const widths: number[] = [];
+            bodyCells.forEach((cell) => {
+                widths.push((cell as HTMLElement).offsetWidth);
+            });
+            setColumnWidths(widths);
+
+            // Atualizar header com as novas larguras
+            headerCells.forEach((headerCell, index) => {
+                const bodyCell = bodyCells[index];
+                if (bodyCell) {
+                    const width = (bodyCell as HTMLElement).offsetWidth;
+                    (headerCell as HTMLElement).style.width = `${width}px`;
+                    (headerCell as HTMLElement).style.minWidth = `${width}px`;
+                    (headerCell as HTMLElement).style.maxWidth = `${width}px`;
+                }
+            });
+        }, 100);
+
+        return () => clearTimeout(timeoutId);
+    }, [enrichedData, pagination.current_page]); // Recalcular quando dados ou página mudarem
 
     // Handler para expandir com lazy loading (DEFINIR ANTES de columnsWithAssociate)
     const handleRowExpand = React.useCallback(
@@ -757,6 +822,271 @@ export function DataTable({
         },
     });
 
+    // Recalcular indicadores baseado em pedidos filtrados
+    React.useEffect(() => {
+        const allFilteredRows = table.getFilteredRowModel().rows;
+        const allOrders = allFilteredRows.map((row) => row.original);
+
+        // Calcular subtotal
+        const subtotal = allOrders.reduce((sum, order) => {
+            const isCancelled = order.status === 'CANCELLED';
+            if (isCancelled) return sum;
+            return sum + calculateOrderSubtotal(order);
+        }, 0);
+
+        // Calcular CMV
+        const cmv = allOrders.reduce((sum, order) => {
+            const isCancelled = order.status === 'CANCELLED';
+            if (isCancelled) return sum;
+            return sum + calculateOrderCMV(order.items || []);
+        }, 0);
+
+        // Calcular net revenue recalculado (mesma lógica do rodapé)
+        const netRevenue = allOrders.reduce((sum, order) => {
+            const isCancelled = order.status === 'CANCELLED';
+            if (isCancelled) return sum;
+
+            const orderSubtotal = calculateOrderSubtotal(order);
+            const orderCmv = calculateOrderCMV(order.items || []);
+            const items = order.items || [];
+            const calculatedCosts = order.calculated_costs;
+
+            // Recalcular impostos
+            const taxCategories = new Map<
+                number,
+                { rate: number; itemsTotal: number }
+            >();
+            let totalItemsPrice = 0;
+
+            items.forEach((item) => {
+                if (item.internal_product?.tax_category?.total_tax_rate) {
+                    const quantity = item.qty || item.quantity || 0;
+                    const unitPrice = item.unit_price || item.price || 0;
+                    const itemTotal = quantity * unitPrice;
+                    totalItemsPrice += itemTotal;
+
+                    const taxCategoryId = item.internal_product.tax_category.id;
+                    const existingCategory = taxCategories.get(taxCategoryId);
+
+                    if (existingCategory) {
+                        existingCategory.itemsTotal += itemTotal;
+                    } else {
+                        taxCategories.set(taxCategoryId, {
+                            rate: item.internal_product.tax_category
+                                .total_tax_rate,
+                            itemsTotal: itemTotal,
+                        });
+                    }
+                }
+            });
+
+            let productTax = 0;
+            taxCategories.forEach((category) => {
+                const proportion =
+                    totalItemsPrice > 0
+                        ? category.itemsTotal / totalItemsPrice
+                        : 0;
+                const taxValue =
+                    (orderSubtotal * proportion * category.rate) / 100;
+                productTax += taxValue;
+            });
+
+            const additionalTaxes = calculatedCosts?.taxes || [];
+            const totalAdditionalTax = additionalTaxes.reduce(
+                (taxSum: number, tax: any) => {
+                    if (tax.type === 'percentage') {
+                        const value = parseFloat(String(tax.value || '0')) || 0;
+                        return taxSum + (orderSubtotal * value) / 100;
+                    }
+                    return taxSum + (tax.calculated_value || 0);
+                },
+                0,
+            );
+
+            const totalTax = productTax + totalAdditionalTax;
+
+            // Recalcular custos
+            const costs = calculatedCosts?.costs || [];
+            const totalCosts = costs.reduce((costSum: number, cost: any) => {
+                if (cost.type === 'percentage') {
+                    const value = parseFloat(String(cost.value || '0')) || 0;
+                    return costSum + (orderSubtotal * value) / 100;
+                }
+                return costSum + (cost.calculated_value || 0);
+            }, 0);
+
+            // Recalcular comissões
+            const commissions = calculatedCosts?.commissions || [];
+            const totalCommissions = commissions.reduce(
+                (commSum: number, comm: any) => {
+                    if (comm.type === 'percentage') {
+                        const value =
+                            parseFloat(String(comm.value || '0')) || 0;
+                        return commSum + (orderSubtotal * value) / 100;
+                    }
+                    return commSum + (comm.calculated_value || 0);
+                },
+                0,
+            );
+
+            // Recalcular taxas de pagamento
+            const paymentMethodFees = calculatedCosts?.payment_methods || [];
+            const totalPaymentMethodFee = paymentMethodFees.reduce(
+                (feeSum: number, fee: any) => {
+                    if (fee.type === 'percentage') {
+                        const value = parseFloat(String(fee.value || '0')) || 0;
+                        return feeSum + (orderSubtotal * value) / 100;
+                    }
+                    return feeSum + (fee.calculated_value || 0);
+                },
+                0,
+            );
+
+            const orderNetRevenue =
+                orderSubtotal -
+                orderCmv -
+                totalTax -
+                totalCosts -
+                totalCommissions -
+                totalPaymentMethodFee;
+
+            return sum + orderNetRevenue;
+        }, 0);
+
+        // Contar pedidos não cancelados
+        const orderCount = allOrders.filter(
+            (order) => order.status !== 'CANCELLED',
+        ).length;
+
+        // Calcular ticket médio
+        const averageTicket = orderCount > 0 ? subtotal / orderCount : 0;
+
+        // Calcular média aritmética das margens individuais
+        const marginsSum = allOrders.reduce((sum, order) => {
+            const isCancelled = order.status === 'CANCELLED';
+            if (isCancelled) return sum;
+
+            const orderSubtotal = calculateOrderSubtotal(order);
+            if (orderSubtotal === 0) return sum;
+
+            const orderCmv = calculateOrderCMV(order.items || []);
+            const items = order.items || [];
+            const calculatedCosts = order.calculated_costs;
+
+            // Recalcular impostos
+            const taxCategories = new Map<
+                number,
+                { rate: number; itemsTotal: number }
+            >();
+            let totalItemsPrice = 0;
+
+            items.forEach((item) => {
+                if (item.internal_product?.tax_category?.total_tax_rate) {
+                    const quantity = item.qty || item.quantity || 0;
+                    const unitPrice = item.unit_price || item.price || 0;
+                    const itemTotal = quantity * unitPrice;
+                    totalItemsPrice += itemTotal;
+
+                    const taxCategoryId = item.internal_product.tax_category.id;
+                    const existingCategory = taxCategories.get(taxCategoryId);
+
+                    if (existingCategory) {
+                        existingCategory.itemsTotal += itemTotal;
+                    } else {
+                        taxCategories.set(taxCategoryId, {
+                            rate: item.internal_product.tax_category
+                                .total_tax_rate,
+                            itemsTotal: itemTotal,
+                        });
+                    }
+                }
+            });
+
+            let productTax = 0;
+            taxCategories.forEach((category) => {
+                const proportion =
+                    totalItemsPrice > 0
+                        ? category.itemsTotal / totalItemsPrice
+                        : 0;
+                const taxValue =
+                    (orderSubtotal * proportion * category.rate) / 100;
+                productTax += taxValue;
+            });
+
+            const additionalTaxes = calculatedCosts?.taxes || [];
+            const totalAdditionalTax = additionalTaxes.reduce(
+                (taxSum: number, tax: any) => {
+                    if (tax.type === 'percentage') {
+                        const value = parseFloat(String(tax.value || '0')) || 0;
+                        return taxSum + (orderSubtotal * value) / 100;
+                    }
+                    return taxSum + (tax.calculated_value || 0);
+                },
+                0,
+            );
+
+            const totalTax = productTax + totalAdditionalTax;
+
+            const costs = calculatedCosts?.costs || [];
+            const totalCosts = costs.reduce((costSum: number, cost: any) => {
+                if (cost.type === 'percentage') {
+                    const value = parseFloat(String(cost.value || '0')) || 0;
+                    return costSum + (orderSubtotal * value) / 100;
+                }
+                return costSum + (cost.calculated_value || 0);
+            }, 0);
+
+            const commissions = calculatedCosts?.commissions || [];
+            const totalCommissions = commissions.reduce(
+                (commSum: number, comm: any) => {
+                    if (comm.type === 'percentage') {
+                        const value =
+                            parseFloat(String(comm.value || '0')) || 0;
+                        return commSum + (orderSubtotal * value) / 100;
+                    }
+                    return commSum + (comm.calculated_value || 0);
+                },
+                0,
+            );
+
+            const paymentMethodFees = calculatedCosts?.payment_methods || [];
+            const totalPaymentMethodFee = paymentMethodFees.reduce(
+                (feeSum: number, fee: any) => {
+                    if (fee.type === 'percentage') {
+                        const value = parseFloat(String(fee.value || '0')) || 0;
+                        return feeSum + (orderSubtotal * value) / 100;
+                    }
+                    return feeSum + (fee.calculated_value || 0);
+                },
+                0,
+            );
+
+            const orderNetRevenue =
+                orderSubtotal -
+                orderCmv -
+                totalTax -
+                totalCosts -
+                totalCommissions -
+                totalPaymentMethodFee;
+
+            // Calcular margem % do pedido
+            const orderMargin = (orderNetRevenue / orderSubtotal) * 100;
+
+            return sum + orderMargin;
+        }, 0);
+
+        const averageMargin = orderCount > 0 ? marginsSum / orderCount : 0;
+
+        setRecalculatedIndicators({
+            subtotal,
+            averageTicket,
+            cmv,
+            netRevenue,
+            orderCount,
+            averageMargin,
+        });
+    }, [enrichedData, columnFilters, sorting]);
+
     return (
         <div className="flex w-full flex-col gap-4 px-4 lg:px-6">
             {/* Avisos minimalistas no topo */}
@@ -853,7 +1183,7 @@ export function DataTable({
                     ))}
                 </div>
             ) : (
-                <OrderIndicators data={indicators} />
+                <OrderIndicators data={recalculatedIndicators} />
             )}
 
             {/* Filtros e busca */}
@@ -1164,94 +1494,109 @@ export function DataTable({
                             <TableHeader>
                                 {table.getHeaderGroups().map((headerGroup) => (
                                     <TableRow key={headerGroup.id}>
-                                        {headerGroup.headers.map((header) => {
-                                            const sorted =
-                                                header.column.getIsSorted();
+                                        {headerGroup.headers.map(
+                                            (header, index) => {
+                                                const sorted =
+                                                    header.column.getIsSorted();
 
-                                            // Colunas que NÃO têm order_by
-                                            const nonSortableColumns = [
-                                                'expand', // primeira (se tiver)
-                                                'provider', // Canal
-                                                'actions', // última (botões)
-                                                'status',
-                                            ];
+                                                // Colunas que NÃO têm order_by
+                                                const nonSortableColumns = [
+                                                    'expand', // primeira (se tiver)
+                                                    'provider', // Canal
+                                                    'actions', // última (botões)
+                                                    'status',
+                                                ];
 
-                                            const isSortable =
-                                                header.column.getCanSort?.() &&
-                                                !nonSortableColumns.includes(
-                                                    header.column.id,
-                                                );
+                                                const isSortable =
+                                                    header.column.getCanSort?.() &&
+                                                    !nonSortableColumns.includes(
+                                                        header.column.id,
+                                                    );
 
-                                            // Colunas numéricas que devem alinhar õ direita
-                                            const isNumeric = [
-                                                'total',
-                                                'cost',
-                                                'tax',
-                                                'extra_cost',
-                                                'total_costs',
-                                                'total_commissions',
-                                                'payment_fees',
-                                                'net_total',
-                                                'margin',
-                                            ].includes(header.column.id);
+                                                // Colunas numéricas que devem alinhar à direita
+                                                const isNumeric = [
+                                                    'total',
+                                                    'subtotal',
+                                                    'cost',
+                                                    'tax',
+                                                    'extra_cost',
+                                                    'total_costs',
+                                                    'total_commissions',
+                                                    'payment_fees',
+                                                    'net_total',
+                                                    'margin',
+                                                ].includes(header.column.id);
 
-                                            return (
-                                                <TableHead
-                                                    key={header.id}
-                                                    className={` ${isNumeric ? 'text-end' : 'text-start'} ${isSortable ? 'cursor-pointer select-none hover:bg-muted/60' : ''} `}
-                                                    onClick={
-                                                        isSortable
-                                                            ? header.column.getToggleSortingHandler()
-                                                            : undefined
-                                                    }
-                                                >
-                                                    <div
-                                                        className={`flex items-center gap-1 ${
-                                                            isNumeric
-                                                                ? 'justify-end'
-                                                                : ''
-                                                        }`}
+                                                // Aplicar largura capturada da primeira linha do corpo
+                                                const cellWidth =
+                                                    columnWidths[index];
+                                                const cellStyle = cellWidth
+                                                    ? {
+                                                          width: `${cellWidth}px`,
+                                                          minWidth: `${cellWidth}px`,
+                                                          maxWidth: `${cellWidth}px`,
+                                                      }
+                                                    : {};
+
+                                                return (
+                                                    <TableHead
+                                                        key={header.id}
+                                                        className={` ${isNumeric ? 'text-end' : 'text-start'} ${isSortable ? 'cursor-pointer select-none hover:bg-muted/60' : ''} `}
+                                                        style={cellStyle}
+                                                        onClick={
+                                                            isSortable
+                                                                ? header.column.getToggleSortingHandler()
+                                                                : undefined
+                                                        }
                                                     >
-                                                        {flexRender(
-                                                            header.column
-                                                                .columnDef
-                                                                .header,
-                                                            header.getContext(),
-                                                        )}
+                                                        <div
+                                                            className={`flex items-center gap-1 ${
+                                                                isNumeric
+                                                                    ? 'justify-end'
+                                                                    : ''
+                                                            }`}
+                                                        >
+                                                            {flexRender(
+                                                                header.column
+                                                                    .columnDef
+                                                                    .header,
+                                                                header.getContext(),
+                                                            )}
 
-                                                        {/* Ícones só aparecem se a coluna for ordenável */}
-                                                        {isSortable && (
-                                                            <>
-                                                                {sorted ===
-                                                                    'asc' && (
-                                                                    <IconArrowUp
-                                                                        size={
-                                                                            14
-                                                                        }
-                                                                    />
-                                                                )}
-                                                                {sorted ===
-                                                                    'desc' && (
-                                                                    <IconArrowDown
-                                                                        size={
-                                                                            14
-                                                                        }
-                                                                    />
-                                                                )}
-                                                                {!sorted && (
-                                                                    <IconArrowsSort
-                                                                        size={
-                                                                            14
-                                                                        }
-                                                                        className="opacity-30"
-                                                                    />
-                                                                )}
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </TableHead>
-                                            );
-                                        })}
+                                                            {/* Ícones só aparecem se a coluna for ordenável */}
+                                                            {isSortable && (
+                                                                <>
+                                                                    {sorted ===
+                                                                        'asc' && (
+                                                                        <IconArrowUp
+                                                                            size={
+                                                                                14
+                                                                            }
+                                                                        />
+                                                                    )}
+                                                                    {sorted ===
+                                                                        'desc' && (
+                                                                        <IconArrowDown
+                                                                            size={
+                                                                                14
+                                                                            }
+                                                                        />
+                                                                    )}
+                                                                    {!sorted && (
+                                                                        <IconArrowsSort
+                                                                            size={
+                                                                                14
+                                                                            }
+                                                                            className="opacity-30"
+                                                                        />
+                                                                    )}
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </TableHead>
+                                                );
+                                            },
+                                        )}
                                     </TableRow>
                                 ))}
                             </TableHeader>
@@ -2436,13 +2781,14 @@ export function DataTable({
 
                     {/* Rodapé com totais - fixo na parte inferior */}
                     <div className="border-t bg-muted">
-                        <Table className="w-full text-xs lg:text-sm">
+                        <table className="w-full caption-bottom text-xs lg:text-sm">
                             {/* Rodapé com totais */}
                             <TableFooter>
                                 <TableRow className="bg-muted hover:bg-muted">
                                     {table
-                                        .getVisibleLeafColumns()
-                                        .map((column) => {
+                                        .getHeaderGroups()[0]
+                                        ?.headers.map((header, index) => {
+                                            const column = header.column;
                                             // Colunas que devem mostrar totais
                                             const showTotal = [
                                                 'total',
@@ -2455,11 +2801,25 @@ export function DataTable({
                                                 'net_total',
                                             ].includes(column.id);
 
+                                            // Aplicar largura capturada da primeira linha do corpo
+                                            const cellWidth =
+                                                columnWidths[index];
+                                            const cellStyle = cellWidth
+                                                ? {
+                                                      width: `${cellWidth}px`,
+                                                      minWidth: `${cellWidth}px`,
+                                                      maxWidth: `${cellWidth}px`,
+                                                  }
+                                                : {};
+
                                             if (!showTotal) {
                                                 return (
                                                     <TableCell
                                                         key={column.id}
-                                                    />
+                                                        style={cellStyle}
+                                                    >
+                                                        &nbsp;
+                                                    </TableCell>
                                                 );
                                             }
 
@@ -2473,22 +2833,8 @@ export function DataTable({
                                                     (row) => row.original,
                                                 );
 
-                                            // Verificar se temos indicadores (melhor usar quando disponível)
-                                            const hasIndicators =
-                                                indicators &&
-                                                Object.keys(indicators).length >
-                                                    0;
-
-                                            if (
-                                                column.id === 'net_total' &&
-                                                hasIndicators
-                                            ) {
-                                                // Total Líquido: usar indicators
-                                                total = indicators.netRevenue;
-                                            } else if (
-                                                column.id === 'subtotal'
-                                            ) {
-                                                // Subtotal: SEMPRE calcular do frontend (lógica complexa não replicada no backend)
+                                            if (column.id === 'subtotal') {
+                                                // Subtotal: SEMPRE usar calculateOrderSubtotal (mesma lógica da coluna)
                                                 total = allOrders.reduce(
                                                     (sum, order) => {
                                                         const isCancelled =
@@ -2497,208 +2843,33 @@ export function DataTable({
                                                         if (isCancelled)
                                                             return sum;
 
-                                                        const raw = order.raw;
-                                                        const provider =
-                                                            order.provider;
-
-                                                        let grossTotal =
-                                                            parseFloat(
-                                                                String(
-                                                                    order.gross_total ||
-                                                                        '0',
-                                                                ),
-                                                            ) || 0;
-
-                                                        if (
-                                                            provider ===
-                                                            'takeat'
-                                                        ) {
-                                                            if (
-                                                                raw?.session
-                                                                    ?.total_delivery_price
-                                                            ) {
-                                                                grossTotal =
-                                                                    parseFloat(
-                                                                        String(
-                                                                            raw
-                                                                                .session
-                                                                                .total_delivery_price,
-                                                                        ),
-                                                                    ) || 0;
-                                                            } else if (
-                                                                raw?.session
-                                                                    ?.total_price
-                                                            ) {
-                                                                grossTotal =
-                                                                    parseFloat(
-                                                                        String(
-                                                                            raw
-                                                                                .session
-                                                                                .total_price,
-                                                                        ),
-                                                                    ) || 0;
-                                                            }
-                                                        }
-
-                                                        const deliveryFee =
-                                                            parseFloat(
-                                                                String(
-                                                                    order.delivery_fee ||
-                                                                        '0',
-                                                                ),
-                                                            ) || 0;
-
-                                                        let totalSubsidy = 0;
-                                                        if (
-                                                            provider ===
-                                                            'takeat'
-                                                        ) {
-                                                            const payments =
-                                                                raw?.session
-                                                                    ?.payments ||
-                                                                [];
-                                                            totalSubsidy =
-                                                                payments.reduce(
-                                                                    (
-                                                                        subsidySum: number,
-                                                                        payment: any,
-                                                                    ) => {
-                                                                        const paymentName =
-                                                                            (
-                                                                                payment
-                                                                                    .payment_method
-                                                                                    ?.name ||
-                                                                                ''
-                                                                            ).toLowerCase();
-                                                                        const paymentKeyword =
-                                                                            (
-                                                                                payment
-                                                                                    .payment_method
-                                                                                    ?.keyword ||
-                                                                                ''
-                                                                            ).toLowerCase();
-                                                                        const isSubsidy =
-                                                                            paymentName.includes(
-                                                                                'subsid',
-                                                                            ) ||
-                                                                            paymentName.includes(
-                                                                                'cupom',
-                                                                            ) ||
-                                                                            paymentKeyword.includes(
-                                                                                'subsid',
-                                                                            ) ||
-                                                                            paymentKeyword.includes(
-                                                                                'cupom',
-                                                                            );
-
-                                                                        return isSubsidy
-                                                                            ? subsidySum +
-                                                                                  parseFloat(
-                                                                                      payment.payment_value ||
-                                                                                          '0',
-                                                                                  )
-                                                                            : subsidySum;
-                                                                    },
-                                                                    0,
-                                                                );
-                                                        }
-
-                                                        const totalCashback =
-                                                            parseFloat(
-                                                                String(
-                                                                    order.cashback_total ||
-                                                                        '0',
-                                                                ),
-                                                            ) || 0;
-
-                                                        let subtotal =
-                                                            grossTotal;
-                                                        const usedTotalDeliveryPrice =
-                                                            provider ===
-                                                                'takeat' &&
-                                                            Boolean(
-                                                                raw?.session
-                                                                    ?.total_delivery_price,
-                                                            );
-
-                                                        const deliveryBy =
-                                                            raw?.session?.delivery_by?.toUpperCase() ||
-                                                            '';
-                                                        const isMarketplaceDelivery =
-                                                            [
-                                                                'IFOOD',
-                                                                'MARKETPLACE',
-                                                            ].includes(
-                                                                deliveryBy,
-                                                            );
-                                                        const skipDeliveryFeeInSubtotal =
-                                                            isTakeatIfoodOrder(
+                                                        const subtotal =
+                                                            calculateOrderSubtotal(
                                                                 order,
-                                                            ) &&
-                                                            isMarketplaceDelivery;
-
-                                                        if (
-                                                            !usedTotalDeliveryPrice
-                                                        ) {
-                                                            subtotal +=
-                                                                totalSubsidy;
-                                                            if (
-                                                                !skipDeliveryFeeInSubtotal
-                                                            ) {
-                                                                subtotal +=
-                                                                    deliveryFee;
-                                                            }
-                                                        } else if (
-                                                            skipDeliveryFeeInSubtotal &&
-                                                            deliveryFee > 0
-                                                        ) {
-                                                            subtotal -=
-                                                                deliveryFee;
-                                                        }
-
-                                                        subtotal -=
-                                                            totalCashback;
-
-                                                        const ifoodServiceFee =
-                                                            isTakeatIfoodOrder(
-                                                                order,
-                                                            )
-                                                                ? 0.99
-                                                                : 0;
-                                                        if (
-                                                            ifoodServiceFee > 0
-                                                        ) {
-                                                            subtotal -=
-                                                                ifoodServiceFee;
-                                                        }
-
+                                                            );
                                                         return sum + subtotal;
                                                     },
                                                     0,
                                                 );
                                             } else if (column.id === 'cost') {
-                                                // CMV: usar indicators se disponível, senão calcular de todos os pedidos filtrados
-                                                if (hasIndicators) {
-                                                    total = indicators.cmv;
-                                                } else {
-                                                    total = allOrders.reduce(
-                                                        (sum, order) => {
-                                                            const isCancelled =
-                                                                order.status ===
-                                                                'CANCELLED';
-                                                            if (isCancelled)
-                                                                return sum;
+                                                // CMV: calcular de todos os pedidos filtrados
+                                                total = allOrders.reduce(
+                                                    (sum, order) => {
+                                                        const isCancelled =
+                                                            order.status ===
+                                                            'CANCELLED';
+                                                        if (isCancelled)
+                                                            return sum;
 
-                                                            const cmv =
-                                                                calculateOrderCMV(
-                                                                    order.items ||
-                                                                        [],
-                                                                );
-                                                            return sum + cmv;
-                                                        },
-                                                        0,
-                                                    );
-                                                }
+                                                        const cmv =
+                                                            calculateOrderCMV(
+                                                                order.items ||
+                                                                    [],
+                                                            );
+                                                        return sum + cmv;
+                                                    },
+                                                    0,
+                                                );
                                             } else if (column.id === 'total') {
                                                 // Total do pedido: calcular de todos os pedidos filtrados
                                                 total = allOrders.reduce(
@@ -2784,6 +2955,7 @@ export function DataTable({
                                                 column.id === 'net_total'
                                             ) {
                                                 // Total Líquido: calcular de todos os pedidos filtrados (quando não usa indicators)
+                                                // IMPORTANTE: Recalcular TODOS os valores percentuais sobre o subtotal (mesma lógica da coluna)
                                                 total = allOrders.reduce(
                                                     (sum, order) => {
                                                         const isCancelled =
@@ -2792,10 +2964,270 @@ export function DataTable({
                                                         if (isCancelled)
                                                             return sum;
 
-                                                        const netRevenue =
-                                                            calculateNetRevenue(
+                                                        // Recalcular net revenue seguindo a mesma lógica da coluna
+                                                        const subtotal =
+                                                            calculateOrderSubtotal(
                                                                 order,
                                                             );
+                                                        const cmv =
+                                                            calculateOrderCMV(
+                                                                order.items ||
+                                                                    [],
+                                                            );
+                                                        const items =
+                                                            order.items || [];
+                                                        const calculatedCosts =
+                                                            order.calculated_costs;
+
+                                                        // Recalcular impostos dos produtos sobre o subtotal
+                                                        const taxCategories =
+                                                            new Map<
+                                                                number,
+                                                                {
+                                                                    rate: number;
+                                                                    itemsTotal: number;
+                                                                }
+                                                            >();
+                                                        let totalItemsPrice = 0;
+
+                                                        items.forEach(
+                                                            (item) => {
+                                                                if (
+                                                                    item
+                                                                        .internal_product
+                                                                        ?.tax_category
+                                                                        ?.total_tax_rate
+                                                                ) {
+                                                                    const quantity =
+                                                                        item.qty ||
+                                                                        item.quantity ||
+                                                                        0;
+                                                                    const unitPrice =
+                                                                        item.unit_price ||
+                                                                        item.price ||
+                                                                        0;
+                                                                    const itemTotal =
+                                                                        quantity *
+                                                                        unitPrice;
+                                                                    totalItemsPrice +=
+                                                                        itemTotal;
+
+                                                                    const taxCategoryId =
+                                                                        item
+                                                                            .internal_product
+                                                                            .tax_category
+                                                                            .id;
+                                                                    const existingCategory =
+                                                                        taxCategories.get(
+                                                                            taxCategoryId,
+                                                                        );
+
+                                                                    if (
+                                                                        existingCategory
+                                                                    ) {
+                                                                        existingCategory.itemsTotal +=
+                                                                            itemTotal;
+                                                                    } else {
+                                                                        taxCategories.set(
+                                                                            taxCategoryId,
+                                                                            {
+                                                                                rate: item
+                                                                                    .internal_product
+                                                                                    .tax_category
+                                                                                    .total_tax_rate,
+                                                                                itemsTotal:
+                                                                                    itemTotal,
+                                                                            },
+                                                                        );
+                                                                    }
+                                                                }
+                                                            },
+                                                        );
+
+                                                        let productTax = 0;
+                                                        taxCategories.forEach(
+                                                            (category) => {
+                                                                const proportion =
+                                                                    totalItemsPrice >
+                                                                    0
+                                                                        ? category.itemsTotal /
+                                                                          totalItemsPrice
+                                                                        : 0;
+                                                                const taxValue =
+                                                                    (subtotal *
+                                                                        proportion *
+                                                                        category.rate) /
+                                                                    100;
+                                                                productTax +=
+                                                                    taxValue;
+                                                            },
+                                                        );
+
+                                                        // Impostos adicionais recalculados
+                                                        const additionalTaxes =
+                                                            calculatedCosts?.taxes ||
+                                                            [];
+                                                        const totalAdditionalTax =
+                                                            additionalTaxes.reduce(
+                                                                (
+                                                                    taxSum: number,
+                                                                    tax: any,
+                                                                ) => {
+                                                                    if (
+                                                                        tax.type ===
+                                                                        'percentage'
+                                                                    ) {
+                                                                        const value =
+                                                                            parseFloat(
+                                                                                String(
+                                                                                    tax.value ||
+                                                                                        '0',
+                                                                                ),
+                                                                            ) ||
+                                                                            0;
+                                                                        return (
+                                                                            taxSum +
+                                                                            (subtotal *
+                                                                                value) /
+                                                                                100
+                                                                        );
+                                                                    }
+                                                                    return (
+                                                                        taxSum +
+                                                                        (tax.calculated_value ||
+                                                                            0)
+                                                                    );
+                                                                },
+                                                                0,
+                                                            );
+
+                                                        const totalTax =
+                                                            productTax +
+                                                            totalAdditionalTax;
+
+                                                        // Custos recalculados
+                                                        const costs =
+                                                            calculatedCosts?.costs ||
+                                                            [];
+                                                        const totalCosts =
+                                                            costs.reduce(
+                                                                (
+                                                                    costSum: number,
+                                                                    cost: any,
+                                                                ) => {
+                                                                    if (
+                                                                        cost.type ===
+                                                                        'percentage'
+                                                                    ) {
+                                                                        const value =
+                                                                            parseFloat(
+                                                                                String(
+                                                                                    cost.value ||
+                                                                                        '0',
+                                                                                ),
+                                                                            ) ||
+                                                                            0;
+                                                                        return (
+                                                                            costSum +
+                                                                            (subtotal *
+                                                                                value) /
+                                                                                100
+                                                                        );
+                                                                    }
+                                                                    return (
+                                                                        costSum +
+                                                                        (cost.calculated_value ||
+                                                                            0)
+                                                                    );
+                                                                },
+                                                                0,
+                                                            );
+
+                                                        // Comissões recalculadas
+                                                        const commissions =
+                                                            calculatedCosts?.commissions ||
+                                                            [];
+                                                        const totalCommissions =
+                                                            commissions.reduce(
+                                                                (
+                                                                    commSum: number,
+                                                                    comm: any,
+                                                                ) => {
+                                                                    if (
+                                                                        comm.type ===
+                                                                        'percentage'
+                                                                    ) {
+                                                                        const value =
+                                                                            parseFloat(
+                                                                                String(
+                                                                                    comm.value ||
+                                                                                        '0',
+                                                                                ),
+                                                                            ) ||
+                                                                            0;
+                                                                        return (
+                                                                            commSum +
+                                                                            (subtotal *
+                                                                                value) /
+                                                                                100
+                                                                        );
+                                                                    }
+                                                                    return (
+                                                                        commSum +
+                                                                        (comm.calculated_value ||
+                                                                            0)
+                                                                    );
+                                                                },
+                                                                0,
+                                                            );
+
+                                                        // Taxas de pagamento recalculadas
+                                                        const paymentMethodFees =
+                                                            calculatedCosts?.payment_methods ||
+                                                            [];
+                                                        const totalPaymentMethodFee =
+                                                            paymentMethodFees.reduce(
+                                                                (
+                                                                    feeSum: number,
+                                                                    fee: any,
+                                                                ) => {
+                                                                    if (
+                                                                        fee.type ===
+                                                                        'percentage'
+                                                                    ) {
+                                                                        const value =
+                                                                            parseFloat(
+                                                                                String(
+                                                                                    fee.value ||
+                                                                                        '0',
+                                                                                ),
+                                                                            ) ||
+                                                                            0;
+                                                                        return (
+                                                                            feeSum +
+                                                                            (subtotal *
+                                                                                value) /
+                                                                                100
+                                                                        );
+                                                                    }
+                                                                    return (
+                                                                        feeSum +
+                                                                        (fee.calculated_value ||
+                                                                            0)
+                                                                    );
+                                                                },
+                                                                0,
+                                                            );
+
+                                                        // Líquido = Subtotal - CMV - Impostos - Custos - Comissão - Taxas de Pagamento
+                                                        const netRevenue =
+                                                            subtotal -
+                                                            cmv -
+                                                            totalTax -
+                                                            totalCosts -
+                                                            totalCommissions -
+                                                            totalPaymentMethodFee;
+
                                                         return sum + netRevenue;
                                                     },
                                                     0,
@@ -2818,52 +3250,98 @@ export function DataTable({
                                                         if (
                                                             column.id === 'tax'
                                                         ) {
-                                                            // Impostos (produtos + adicionais)
-                                                            const productTax =
-                                                                items.reduce(
-                                                                    (
-                                                                        itemSum,
-                                                                        item,
-                                                                    ) => {
+                                                            // IMPORTANTE: Calcular impostos seguindo a MESMA lógica do card financeiro e colunas
+                                                            // Impostos devem ser calculados sobre o SUBTOTAL, não sobre itens individuais
+
+                                                            const subtotal =
+                                                                calculateOrderSubtotal(
+                                                                    order,
+                                                                );
+
+                                                            // Agrupar itens por tax_category
+                                                            const taxCategories =
+                                                                new Map<
+                                                                    number,
+                                                                    {
+                                                                        rate: number;
+                                                                        itemsTotal: number;
+                                                                    }
+                                                                >();
+                                                            let totalItemsPrice = 0;
+
+                                                            items.forEach(
+                                                                (item) => {
+                                                                    if (
+                                                                        item
+                                                                            .internal_product
+                                                                            ?.tax_category
+                                                                            ?.total_tax_rate
+                                                                    ) {
+                                                                        const quantity =
+                                                                            item.qty ||
+                                                                            item.quantity ||
+                                                                            0;
+                                                                        const unitPrice =
+                                                                            item.unit_price ||
+                                                                            item.price ||
+                                                                            0;
+                                                                        const itemTotal =
+                                                                            quantity *
+                                                                            unitPrice;
+                                                                        totalItemsPrice +=
+                                                                            itemTotal;
+
+                                                                        const taxCategoryId =
+                                                                            item
+                                                                                .internal_product
+                                                                                .tax_category
+                                                                                .id;
+                                                                        const existingCategory =
+                                                                            taxCategories.get(
+                                                                                taxCategoryId,
+                                                                            );
+
                                                                         if (
-                                                                            item
-                                                                                .internal_product
-                                                                                ?.tax_category
-                                                                                ?.total_tax_rate !==
-                                                                                undefined &&
-                                                                            item
-                                                                                .internal_product
-                                                                                ?.tax_category
-                                                                                ?.total_tax_rate !==
-                                                                                null
+                                                                            existingCategory
                                                                         ) {
-                                                                            const quantity =
-                                                                                item.qty ||
-                                                                                item.quantity ||
-                                                                                0;
-                                                                            const unitPrice =
-                                                                                item.unit_price ||
-                                                                                item.price ||
-                                                                                0;
-                                                                            const itemTotal =
-                                                                                quantity *
-                                                                                unitPrice;
-                                                                            const taxRate =
-                                                                                item
-                                                                                    .internal_product
-                                                                                    .tax_category
-                                                                                    .total_tax_rate /
-                                                                                100;
-                                                                            return (
-                                                                                itemSum +
-                                                                                itemTotal *
-                                                                                    taxRate
+                                                                            existingCategory.itemsTotal +=
+                                                                                itemTotal;
+                                                                        } else {
+                                                                            taxCategories.set(
+                                                                                taxCategoryId,
+                                                                                {
+                                                                                    rate: item
+                                                                                        .internal_product
+                                                                                        .tax_category
+                                                                                        .total_tax_rate,
+                                                                                    itemsTotal:
+                                                                                        itemTotal,
+                                                                                },
                                                                             );
                                                                         }
-                                                                        return itemSum;
-                                                                    },
-                                                                    0,
-                                                                );
+                                                                    }
+                                                                },
+                                                            );
+
+                                                            // Calcular impostos proporcionais ao subtotal
+                                                            let productTax = 0;
+                                                            taxCategories.forEach(
+                                                                (category) => {
+                                                                    const proportion =
+                                                                        totalItemsPrice >
+                                                                        0
+                                                                            ? category.itemsTotal /
+                                                                              totalItemsPrice
+                                                                            : 0;
+                                                                    const taxValue =
+                                                                        (subtotal *
+                                                                            proportion *
+                                                                            category.rate) /
+                                                                        100;
+                                                                    productTax +=
+                                                                        taxValue;
+                                                                },
+                                                            );
 
                                                             const calculatedCosts =
                                                                 order.calculated_costs;
@@ -2875,10 +3353,32 @@ export function DataTable({
                                                                     (
                                                                         taxSum: number,
                                                                         tax: any,
-                                                                    ) =>
-                                                                        taxSum +
-                                                                        (tax.calculated_value ||
-                                                                            0),
+                                                                    ) => {
+                                                                        if (
+                                                                            tax.type ===
+                                                                            'percentage'
+                                                                        ) {
+                                                                            const value =
+                                                                                parseFloat(
+                                                                                    String(
+                                                                                        tax.value ||
+                                                                                            '0',
+                                                                                    ),
+                                                                                ) ||
+                                                                                0;
+                                                                            return (
+                                                                                taxSum +
+                                                                                (subtotal *
+                                                                                    value) /
+                                                                                    100
+                                                                            );
+                                                                        }
+                                                                        return (
+                                                                            taxSum +
+                                                                            (tax.calculated_value ||
+                                                                                0)
+                                                                        );
+                                                                    },
                                                                     0,
                                                                 );
 
@@ -2893,87 +3393,160 @@ export function DataTable({
                                                             column.id ===
                                                             'total_costs'
                                                         ) {
-                                                            // Custos
-                                                            const totalCosts =
-                                                                order.total_costs;
-                                                            if (
-                                                                totalCosts !==
-                                                                    null &&
-                                                                totalCosts !==
-                                                                    undefined
-                                                            ) {
-                                                                const value =
-                                                                    typeof totalCosts ===
-                                                                    'string'
-                                                                        ? parseFloat(
-                                                                              totalCosts,
-                                                                          ) || 0
-                                                                        : totalCosts;
-                                                                return (
-                                                                    sum +
-                                                                    (isNaN(
-                                                                        value,
-                                                                    )
-                                                                        ? 0
-                                                                        : value)
+                                                            // IMPORTANTE: Recalcular custos baseado no SUBTOTAL
+                                                            const subtotal =
+                                                                calculateOrderSubtotal(
+                                                                    order,
                                                                 );
-                                                            }
-                                                            return sum;
+                                                            const calculatedCosts =
+                                                                order.calculated_costs;
+                                                            const costs =
+                                                                calculatedCosts?.costs ||
+                                                                [];
+
+                                                            const totalCosts =
+                                                                costs.reduce(
+                                                                    (
+                                                                        costSum: number,
+                                                                        cost: any,
+                                                                    ) => {
+                                                                        if (
+                                                                            cost.type ===
+                                                                            'percentage'
+                                                                        ) {
+                                                                            const value =
+                                                                                parseFloat(
+                                                                                    String(
+                                                                                        cost.value ||
+                                                                                            '0',
+                                                                                    ),
+                                                                                ) ||
+                                                                                0;
+                                                                            return (
+                                                                                costSum +
+                                                                                (subtotal *
+                                                                                    value) /
+                                                                                    100
+                                                                            );
+                                                                        }
+                                                                        return (
+                                                                            costSum +
+                                                                            (cost.calculated_value ||
+                                                                                0)
+                                                                        );
+                                                                    },
+                                                                    0,
+                                                                );
+
+                                                            return (
+                                                                sum + totalCosts
+                                                            );
                                                         }
 
                                                         if (
                                                             column.id ===
                                                             'total_commissions'
                                                         ) {
-                                                            // Comissões
-                                                            const totalCommissions =
-                                                                order.total_commissions;
-                                                            if (
-                                                                totalCommissions !==
-                                                                    null &&
-                                                                totalCommissions !==
-                                                                    undefined
-                                                            ) {
-                                                                const value =
-                                                                    typeof totalCommissions ===
-                                                                    'string'
-                                                                        ? parseFloat(
-                                                                              totalCommissions,
-                                                                          ) || 0
-                                                                        : totalCommissions;
-                                                                return (
-                                                                    sum +
-                                                                    (isNaN(
-                                                                        value,
-                                                                    )
-                                                                        ? 0
-                                                                        : value)
+                                                            // IMPORTANTE: Recalcular comissões baseado no SUBTOTAL
+                                                            const subtotal =
+                                                                calculateOrderSubtotal(
+                                                                    order,
                                                                 );
-                                                            }
-                                                            return sum;
+                                                            const calculatedCosts =
+                                                                order.calculated_costs;
+                                                            const commissions =
+                                                                calculatedCosts?.commissions ||
+                                                                [];
+
+                                                            const totalCommissions =
+                                                                commissions.reduce(
+                                                                    (
+                                                                        commSum: number,
+                                                                        comm: any,
+                                                                    ) => {
+                                                                        if (
+                                                                            comm.type ===
+                                                                            'percentage'
+                                                                        ) {
+                                                                            const value =
+                                                                                parseFloat(
+                                                                                    String(
+                                                                                        comm.value ||
+                                                                                            '0',
+                                                                                    ),
+                                                                                ) ||
+                                                                                0;
+                                                                            return (
+                                                                                commSum +
+                                                                                (subtotal *
+                                                                                    value) /
+                                                                                    100
+                                                                            );
+                                                                        }
+                                                                        return (
+                                                                            commSum +
+                                                                            (comm.calculated_value ||
+                                                                                0)
+                                                                        );
+                                                                    },
+                                                                    0,
+                                                                );
+
+                                                            return (
+                                                                sum +
+                                                                totalCommissions
+                                                            );
                                                         }
 
                                                         if (
                                                             column.id ===
                                                             'payment_fees'
                                                         ) {
-                                                            // Taxa Pgto
+                                                            // IMPORTANTE: Recalcular taxas de pagamento baseado no SUBTOTAL
+                                                            const subtotal =
+                                                                calculateOrderSubtotal(
+                                                                    order,
+                                                                );
                                                             const calculatedCosts =
                                                                 order.calculated_costs;
                                                             const paymentMethodFees =
                                                                 calculatedCosts?.payment_methods ||
                                                                 [];
+
                                                             const totalPaymentFee =
                                                                 paymentMethodFees.reduce(
                                                                     (
                                                                         feeSum: number,
                                                                         fee: any,
-                                                                    ) =>
-                                                                        feeSum +
-                                                                        (fee.calculated_value ||
-                                                                            0),
+                                                                    ) => {
+                                                                        if (
+                                                                            fee.type ===
+                                                                            'percentage'
+                                                                        ) {
+                                                                            const value =
+                                                                                parseFloat(
+                                                                                    String(
+                                                                                        fee.value ||
+                                                                                            '0',
+                                                                                    ),
+                                                                                ) ||
+                                                                                0;
+                                                                            return (
+                                                                                feeSum +
+                                                                                (subtotal *
+                                                                                    value) /
+                                                                                    100
+                                                                            );
+                                                                        }
+                                                                        return (
+                                                                            feeSum +
+                                                                            (fee.calculated_value ||
+                                                                                0)
+                                                                        );
+                                                                    },
                                                                     0,
                                                                 );
+
                                                             return (
                                                                 sum +
                                                                 totalPaymentFee
@@ -2986,9 +3559,10 @@ export function DataTable({
                                                 );
                                             }
 
-                                            // Alinhar õ direita se for coluna numérica
+                                            // Alinhar à direita se for coluna numérica
                                             const isNumeric = [
                                                 'total',
+                                                'subtotal',
                                                 'cost',
                                                 'tax',
                                                 'total_costs',
@@ -3000,24 +3574,32 @@ export function DataTable({
                                             return (
                                                 <TableCell
                                                     key={column.id}
-                                                    className={`font-semibold ${isNumeric ? 'text-right' : ''}`}
+                                                    style={cellStyle}
                                                 >
-                                                    {!isNaN(total)
-                                                        ? new Intl.NumberFormat(
-                                                              'pt-BR',
-                                                              {
-                                                                  style: 'currency',
-                                                                  currency:
-                                                                      'BRL',
-                                                              },
-                                                          ).format(total)
-                                                        : '--'}
+                                                    {isNumeric ? (
+                                                        <div className="text-right">
+                                                            <span className="font-semibold">
+                                                                {!isNaN(total)
+                                                                    ? new Intl.NumberFormat(
+                                                                          'pt-BR',
+                                                                          {
+                                                                              style: 'currency',
+                                                                              currency:
+                                                                                  'BRL',
+                                                                          },
+                                                                      ).format(
+                                                                          total,
+                                                                      )
+                                                                    : '--'}
+                                                            </span>
+                                                        </div>
+                                                    ) : null}
                                                 </TableCell>
                                             );
                                         })}
                                 </TableRow>
                             </TableFooter>
-                        </Table>
+                        </table>
                     </div>
                 </div>
 

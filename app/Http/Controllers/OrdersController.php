@@ -258,10 +258,10 @@ class OrdersController extends Controller
             'noPaymentInfoCount' => $noPaymentInfoCount,
             'internalProducts' => $internalProducts,
             'marginSettings' => [
-                'margin_excellent' => (float) ($tenant->margin_excellent ?? 100.00),
-                'margin_good_min' => (float) ($tenant->margin_good_min ?? 30.00),
-                'margin_good_max' => (float) ($tenant->margin_good_max ?? 99.99),
-                'margin_poor' => (float) ($tenant->margin_poor ?? 0.00),
+                'margin_excellent' => (float) ($tenant->margin_excellent ?? 30.00),
+                'margin_good_min' => (float) ($tenant->margin_good_min ?? 21.00),
+                'margin_good_max' => (float) ($tenant->margin_good_max ?? 29.00),
+                'margin_poor' => (float) ($tenant->margin_poor ?? 20.00),
             ],
         ]);
     }
@@ -710,7 +710,7 @@ class OrdersController extends Controller
         $paymentCategory = $validated['payment_category'] ?? 'payment';
 
         // Se não for "sem taxa" e não for subsídio/cashback, cost_commission_id é obrigatório
-        if (!$hasNoFee && $paymentCategory === 'payment' && empty($validated['cost_commission_id'])) {
+        if (! $hasNoFee && $paymentCategory === 'payment' && empty($validated['cost_commission_id'])) {
             return redirect()->back()->with('error', 'Taxa de pagamento é obrigatória.');
         }
 
@@ -732,7 +732,7 @@ class OrdersController extends Controller
                 }
             }
 
-            if (!$externalPaymentMethodId) {
+            if (! $externalPaymentMethodId) {
                 return redirect()->back()->with('error', 'Método de pagamento não encontrado no pedido.');
             }
 
@@ -800,7 +800,7 @@ class OrdersController extends Controller
         $paymentCategory = $validated['payment_category'] ?? 'payment';
 
         // Se não for "sem taxa" e não for subsídio/cashback, cost_commission_id é obrigatório
-        if (!$hasNoFee && $paymentCategory === 'payment' && empty($validated['cost_commission_id'])) {
+        if (! $hasNoFee && $paymentCategory === 'payment' && empty($validated['cost_commission_id'])) {
             return response()->json([
                 'success' => false,
                 'message' => 'Taxa de pagamento é obrigatória.',
@@ -825,7 +825,7 @@ class OrdersController extends Controller
                 }
             }
 
-            if (!$externalPaymentMethodId) {
+            if (! $externalPaymentMethodId) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Método de pagamento não encontrado no pedido.',

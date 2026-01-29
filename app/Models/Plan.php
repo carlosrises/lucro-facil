@@ -11,6 +11,8 @@ class Plan extends Model
         'code', 'name', 'description', 'price_month',
         'max_stores', 'retention_days', 'reports_advanced', 'features',
         'stripe_product_id', 'stripe_price_id', 'active',
+        'is_visible', 'is_contact_plan', 'contact_url',
+        'is_featured', 'display_order',
     ];
 
     protected $appends = ['price'];
@@ -19,6 +21,10 @@ class Plan extends Model
         'features' => 'array',
         'active' => 'boolean',
         'reports_advanced' => 'boolean',
+        'is_visible' => 'boolean',
+        'is_contact_plan' => 'boolean',
+        'is_featured' => 'boolean',
+        'display_order' => 'integer',
     ];
 
     // Accessor para compatibilidade com frontend
@@ -30,5 +36,10 @@ class Plan extends Model
     public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class);
+    }
+
+    public function prices(): HasMany
+    {
+        return $this->hasMany(PlanPrice::class);
     }
 }

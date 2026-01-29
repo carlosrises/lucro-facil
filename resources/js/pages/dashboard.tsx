@@ -1,5 +1,6 @@
 import { DashboardSectionCards } from '@/components/dashboard/section-cards';
 import { DashboardSectionChart } from '@/components/dashboard/section-chart';
+import { UpgradeBanner } from '@/components/dashboard/upgrade-banner';
 import { DateRangePicker } from '@/components/date-range-picker';
 import { Button } from '@/components/ui/button';
 import {
@@ -77,11 +78,17 @@ interface ChartDataPoint {
     netTotal: number;
 }
 
+interface Plan {
+    code: string;
+    name: string;
+}
+
 interface DashboardProps {
     dashboardData: DashboardData;
     chartData: ChartDataPoint[];
     stores: Store[];
     providerOptions: Provider[];
+    currentPlan?: Plan;
     filters: {
         start_date: string;
         end_date: string;
@@ -95,6 +102,7 @@ export default function Dashboard({
     chartData,
     stores,
     providerOptions,
+    currentPlan,
     filters,
 }: DashboardProps) {
     const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
@@ -217,6 +225,13 @@ export default function Dashboard({
             <div className="flex flex-1 flex-col">
                 <div className="@container/main flex flex-1 flex-col gap-2">
                     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+                        {/* Banner de Upgrade (apenas se FREE) */}
+                        {currentPlan && (
+                            <div className="px-4 lg:px-6">
+                                <UpgradeBanner currentPlan={currentPlan} />
+                            </div>
+                        )}
+
                         {/* Filtros */}
                         <div className="flex flex-col gap-4 px-4 sm:flex-row lg:px-6">
                             <DateRangePicker

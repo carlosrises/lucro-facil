@@ -14,6 +14,7 @@ import {
 import { dashboard } from '@/routes';
 import admin from '@/routes/admin';
 import { edit as appearance } from '@/routes/appearance';
+import { edit as billing } from '@/routes/billing';
 import { edit as general } from '@/routes/general';
 import { index as integrations } from '@/routes/integrations';
 import { index as orders } from '@/routes/orders';
@@ -171,6 +172,10 @@ export const mainNavItems: (NavGroup | NavItem)[] = [
             {
                 title: 'Aparência',
                 href: appearance(),
+            },
+            {
+                title: 'Planos e Assinatura',
+                href: billing(),
             },
             {
                 title: 'Integrações',

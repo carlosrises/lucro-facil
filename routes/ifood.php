@@ -25,18 +25,19 @@ Route::prefix('api/ifood')->middleware('auth')->group(function () {
     //     Route::patch('{store}/status', [MerchantController::class, 'updateStatus']);
     // });
 
-    Route::prefix('sales')->group(function () {
-        // Lista com filtros e paginação
-        Route::get('/', [SalesController::class, 'index'])->name('ifood.sales.index');
+    // TODO: Implementar SalesController
+    // Route::prefix('sales')->group(function () {
+    //     // Lista com filtros e paginação
+    //     Route::get('/', [SalesController::class, 'index'])->name('ifood.sales.index');
 
-        // Detalhe (inclui raw por padrão)
-        Route::get('{sale}', [SalesController::class, 'show'])
-            ->whereUuid('sale')
-            ->name('ifood.sales.show');
+    //     // Detalhe (inclui raw por padrão)
+    //     Route::get('{sale}', [SalesController::class, 'show'])
+    //         ->whereUuid('sale')
+    //         ->name('ifood.sales.show');
 
-        // Opcional: aciona uma sincronização assíncrona
-        Route::post('sync', [SalesController::class, 'sync'])->name('ifood.sales.sync');
-    });
+    //     // Opcional: aciona uma sincronização assíncrona
+    //     Route::post('sync', [SalesController::class, 'sync'])->name('ifood.sales.sync');
+    // });
 
     /**
      * Merchant

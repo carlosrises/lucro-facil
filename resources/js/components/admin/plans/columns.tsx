@@ -1,13 +1,321 @@
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { router } from '@inertiajs/react';
+import { ColumnDef } from '@tanstack/react-table';
+import {
+    Check,
+    Edit,
+    MoreHorizontal,
+    Power,
+    Star,
+    Trash2,
+    X,
+} from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
 export interface Plan {
     id: number;
     code: string;
     name: string;
     description: string | null;
-    price: number;
+    price?: number | null;
+    prices?: Array<{
+        id?: number;
+        key: string;
+        label: string;
+        amount: number | null;
+        interval?: string | null;
+        period_label?: string | null;
+        is_annual?: boolean | null;
+        stripe_price_id?: string | null;
+        active?: boolean | null;
+    }>;
     features: string[] | null;
     stripe_product_id: string | null;
     stripe_price_id: string | null;
     active: boolean;
+    is_visible?: boolean;
+    is_contact_plan?: boolean;
+    contact_url?: string | null;
+    is_featured?: boolean;
+    display_order?: number;
     created_at: string;
     subscriptions_count?: number;
 }
+
+interface ColumnsConfig {
+    onEdit: (plan: Plan) => void;
+    DragHandle: React.ComponentType<{ attributes: any; listeners: any }>;
+}
+
+export const createColumns = ({
+    onEdit,
+    DragHandle,
+}: ColumnsConfig): ColumnDef<Plan>[] => [
+    {
+        id: 'drag',
+        header: () => null,
+        cell: (info: any) => {
+            const { dragHandleAttributes, dragHandleListeners } = info;
+            return (
+                <DragHandle
+                    attributes={dragHandleAttributes}
+                    listeners={dragHandleListeners}
+                />
+            );
+        },
+        enableHiding: false,
+        enableSorting: false,
+    },
+    {
+        accessorKey: 'code',
+        header: 'Código',
+        cell: ({ row }) => (
+            <div className="font-medium">{row.getValue('code')}</div>
+        ),
+    },
+    {
+        accessorKey: 'name',
+        header: 'Nome',
+        cell: ({ row }) => {
+            const isFeatured = row.original.is_featured;
+            return (
+                <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                        <span className="font-medium">
+                            {row.getValue('name')}
+                        </span>
+                        {isFeatured && (
+                            <Badge
+                                variant="secondary"
+                                className="flex items-center gap-1"
+                            >
+                                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                                Destaque
+                            </Badge>
+                        )}
+                    </div>
+                    {row.original.description && (
+                        <span className="text-xs text-muted-foreground">
+                            {row.original.description}
+                        </span>
+                    )}
+                </div>
+            );
+        },
+    },
+    {
+        accessorKey: 'price',
+        header: 'Preço',
+        cell: ({ row }) => {
+            const prices = row.original.prices || [];
+
+            if (row.original.is_contact_plan) {
+                return (
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">
+                            Sob Consulta
+                        </span>
+                    </div>
+                );
+            }
+
+            if (prices.length === 0) {
+                return <div className="text-sm text-muted-foreground">—</div>;
+            }
+
+            return (
+                <div className="flex flex-wrap gap-2">
+                    {prices.map((price) => (
+                        <Badge
+                            key={price.id ?? price.key}
+                            variant="secondary"
+                            className="flex items-center gap-1"
+                        >
+                            {price.label}
+                            {price.amount !== null && (
+                                <span className="font-medium">
+                                    {new Intl.NumberFormat('pt-BR', {
+                                        style: 'currency',
+                                        currency: 'BRL',
+                                    }).format(price.amount)}
+                                </span>
+                            )}
+                        </Badge>
+                    ))}
+                </div>
+            );
+        },
+    },
+    {
+        accessorKey: 'active',
+        header: 'Status',
+        cell: ({ row }) => {
+            const isActive = row.getValue('active') as boolean;
+            return (
+                <div className="flex items-center gap-2">
+                    {isActive ? (
+                        <>
+                            <Check className="h-4 w-4 text-green-600" />
+                            <span className="text-sm">Ativo</span>
+                        </>
+                    ) : (
+                        <>
+                            <X className="h-4 w-4 text-red-600" />
+                            <span className="text-sm">Inativo</span>
+                        </>
+                    )}
+                </div>
+            );
+        },
+    },
+    {
+        accessorKey: 'subscriptions_count',
+        header: 'Assinaturas',
+        cell: ({ row }) => {
+            const count = row.getValue('subscriptions_count') as number;
+            return <div className="text-center">{count || 0}</div>;
+        },
+    },
+    {
+        id: 'actions',
+        cell: ({ row }) => {
+            const plan = row.original;
+            const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+            const handleDelete = () => {
+                router.delete(`/admin/plans/${plan.id}`, {
+                    onSuccess: () => {
+                        toast.success('Plano excluído com sucesso!');
+                    },
+                    onError: () => {
+                        toast.error('Erro ao excluir plano');
+                    },
+                });
+                setIsDeleteDialogOpen(false);
+            };
+
+            const handleToggleActive = () => {
+                router.patch(
+                    `/admin/plans/${plan.id}/toggle-active`,
+                    {},
+                    {
+                        preserveScroll: true,
+                        onSuccess: () => {
+                            toast.success(
+                                `Plano ${plan.active ? 'desativado' : 'ativado'} com sucesso!`,
+                            );
+                        },
+                        onError: () => {
+                            toast.error('Erro ao alterar status do plano');
+                        },
+                    },
+                );
+            };
+
+            const handleToggleFeatured = () => {
+                router.post(
+                    `/admin/plans/${plan.id}/toggle-featured`,
+                    {},
+                    {
+                        preserveScroll: true,
+                        onSuccess: () => {
+                            toast.success(
+                                plan.is_featured
+                                    ? 'Plano removido dos destaques'
+                                    : 'Plano destacado com sucesso!',
+                            );
+                        },
+                        onError: () => {
+                            toast.error('Erro ao destacar plano');
+                        },
+                    },
+                );
+            };
+
+            return (
+                <>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Abrir menu</span>
+                                <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => onEdit(plan)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleToggleFeatured}>
+                                <Star className="mr-2 h-4 w-4" />
+                                {plan.is_featured
+                                    ? 'Remover destaque'
+                                    : 'Destacar plano'}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={handleToggleActive}>
+                                <Power className="mr-2 h-4 w-4" />
+                                {plan.active ? 'Desativar' : 'Ativar'}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => setIsDeleteDialogOpen(true)}
+                                className="text-red-600"
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Excluir
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    <AlertDialog
+                        open={isDeleteDialogOpen}
+                        onOpenChange={setIsDeleteDialogOpen}
+                    >
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                    Confirmar exclusão
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Tem certeza que deseja excluir o plano{' '}
+                                    <strong>{plan.name}</strong>? Esta ação não
+                                    pode ser desfeita.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={handleDelete}
+                                    className="bg-red-600 hover:bg-red-700"
+                                >
+                                    Excluir
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </>
+            );
+        },
+    },
+];

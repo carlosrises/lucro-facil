@@ -25,11 +25,25 @@ interface AdminPlansProps {
             code: string;
             name: string;
             description: string | null;
-            price: number;
+            price?: number | null;
+            prices?: Array<{
+                id?: number;
+                key: string;
+                label: string;
+                amount: number | null;
+                interval?: string | null;
+                period_label?: string | null;
+                is_annual?: boolean | null;
+                stripe_price_id?: string | null;
+                active?: boolean | null;
+            }>;
             features: string[] | null;
             stripe_product_id: string | null;
             stripe_price_id: string | null;
             active: boolean;
+            is_visible?: boolean;
+            is_contact_plan?: boolean;
+            contact_url?: string | null;
             created_at: string;
             subscriptions_count?: number;
         }>;

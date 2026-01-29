@@ -8,6 +8,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -19,7 +20,15 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { router } from '@inertiajs/react';
 import { ColumnDef } from '@tanstack/react-table';
-import { Check, Edit, MoreHorizontal, Power, Trash2, X } from 'lucide-react';
+import {
+    Check,
+    Edit,
+    MoreHorizontal,
+    Power,
+    Star,
+    Trash2,
+    X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -28,20 +37,47 @@ export interface Plan {
     code: string;
     name: string;
     description: string | null;
-    price: number;
+    price?: number | null;
+    prices?: Array<{
+        id?: number;
+        key: string;
+        label: string;
+        amount: number | null;
+        interval?: string | null;
+        period_label?: string | null;
+        is_annual?: boolean | null;
+        stripe_price_id?: string | null;
+        active?: boolean | null;
+    }>;
     features: string[] | null;
     stripe_product_id: string | null;
     stripe_price_id: string | null;
     active: boolean;
+    is_visible?: boolean;
+    is_contact_plan?: boolean;
+    contact_url?: string | null;
+    is_featured?: boolean;
+    display_order?: number;
     created_at: string;
     subscriptions_count?: number;
 }
 
 interface ColumnsConfig {
     onEdit: (plan: Plan) => void;
+    DragHandle: React.ComponentType<{ id: number }>;
 }
 
-export const createColumns = ({ onEdit }: ColumnsConfig): ColumnDef<Plan>[] => [
+export const createColumns = ({
+    onEdit,
+    DragHandle,
+}: ColumnsConfig): ColumnDef<Plan>[] => [
+    {
+        id: 'drag',
+        header: () => null,
+        cell: ({ row }) => <DragHandle id={row.original.id} />,
+        enableHiding: false,
+        enableSorting: false,
+    },
     {
         accessorKey: 'code',
         header: 'Código',
@@ -53,9 +89,23 @@ export const createColumns = ({ onEdit }: ColumnsConfig): ColumnDef<Plan>[] => [
         accessorKey: 'name',
         header: 'Nome',
         cell: ({ row }) => {
+            const isFeatured = row.original.is_featured;
             return (
                 <div className="flex flex-col">
-                    <span className="font-medium">{row.getValue('name')}</span>
+                    <div className="flex items-center gap-2">
+                        <span className="font-medium">
+                            {row.getValue('name')}
+                        </span>
+                        {isFeatured && (
+                            <Badge
+                                variant="secondary"
+                                className="flex items-center gap-1"
+                            >
+                                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                                Destaque
+                            </Badge>
+                        )}
+                    </div>
                     {row.original.description && (
                         <span className="text-xs text-muted-foreground">
                             {row.original.description}
@@ -69,13 +119,41 @@ export const createColumns = ({ onEdit }: ColumnsConfig): ColumnDef<Plan>[] => [
         accessorKey: 'price',
         header: 'Preço',
         cell: ({ row }) => {
-            const price = parseFloat(row.getValue('price'));
-            const formatted = new Intl.NumberFormat('pt-BR', {
-                style: 'currency',
-                currency: 'BRL',
-            }).format(price);
+            const prices = row.original.prices || [];
 
-            return <div className="font-medium">{formatted}</div>;
+            if (row.original.is_contact_plan) {
+                return (
+                    <div className="font-medium text-muted-foreground">
+                        Sob Consulta
+                    </div>
+                );
+            }
+
+            if (prices.length === 0) {
+                return <div className="text-sm text-muted-foreground">—</div>;
+            }
+
+            return (
+                <div className="flex flex-wrap gap-2">
+                    {prices.map((price) => (
+                        <Badge
+                            key={price.id ?? price.key}
+                            variant="secondary"
+                            className="flex items-center gap-1"
+                        >
+                            {price.label}
+                            {price.amount !== null && (
+                                <span className="font-medium">
+                                    {new Intl.NumberFormat('pt-BR', {
+                                        style: 'currency',
+                                        currency: 'BRL',
+                                    }).format(price.amount)}
+                                </span>
+                            )}
+                        </Badge>
+                    ))}
+                </div>
+            );
         },
     },
     {
@@ -186,6 +264,30 @@ export const createColumns = ({ onEdit }: ColumnsConfig): ColumnDef<Plan>[] => [
             const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
             const [isToggleDialogOpen, setIsToggleDialogOpen] = useState(false);
 
+            const handleToggleFeatured = () => {
+                router.post(
+                    `/admin/plans/${plan.id}/toggle-featured`,
+                    {},
+                    {
+                        preserveScroll: true,
+                        onSuccess: () => {
+                            toast.success(
+                                plan.is_featured
+                                    ? 'Destaque removido com sucesso!'
+                                    : 'Plano destacado com sucesso!',
+                            );
+                        },
+                        onError: (errors) => {
+                            if (errors.error) {
+                                toast.error(errors.error as string);
+                            } else {
+                                toast.error('Erro ao atualizar plano.');
+                            }
+                        },
+                    },
+                );
+            };
+
             const handleToggleActive = () => {
                 router.patch(
                     `/admin/plans/${plan.id}`,
@@ -240,6 +342,14 @@ export const createColumns = ({ onEdit }: ColumnsConfig): ColumnDef<Plan>[] => [
                             <DropdownMenuItem onClick={() => onEdit(plan)}>
                                 <Edit className="mr-2 h-4 w-4" />
                                 Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleToggleFeatured}>
+                                <Star
+                                    className={`mr-2 h-4 w-4 ${plan.is_featured ? 'fill-yellow-400 text-yellow-400' : ''}`}
+                                />
+                                {plan.is_featured
+                                    ? 'Remover destaque'
+                                    : 'Destacar plano'}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem

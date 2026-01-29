@@ -14,10 +14,10 @@ class GeneralController extends Controller
 
         return Inertia::render('settings/general', [
             'settings' => [
-                'margin_excellent' => (float) ($tenant->margin_excellent ?? 100.00),
-                'margin_good_min' => (float) ($tenant->margin_good_min ?? 30.00),
-                'margin_good_max' => (float) ($tenant->margin_good_max ?? 99.99),
-                'margin_poor' => (float) ($tenant->margin_poor ?? 0.00),
+                'margin_excellent' => (float) ($tenant->margin_excellent ?? 30.00),
+                'margin_good_min' => (float) ($tenant->margin_good_min ?? 21.00),
+                'margin_good_max' => (float) ($tenant->margin_good_max ?? 29.00),
+                'margin_poor' => (float) ($tenant->margin_poor ?? 20.00),
             ],
         ]);
     }

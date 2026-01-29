@@ -74,11 +74,18 @@ class AdminClientsController extends Controller
 
             return [
                 'id' => $tenant->id,
-                'name' => $tenant->name,
-                'email' => $tenant->email,
+                // Dados do usuário principal (pessoa de contato)
+                'name' => $primaryUser?->name ?? $tenant->name,
+                'email' => $primaryUser?->email ?? $tenant->email,
                 'created_at' => $tenant->created_at->format('d/m/Y'),
                 'created_at_human' => $tenant->created_at->diffForHumans(),
                 'stores_count' => $tenant->stores_count,
+                // Dados do tenant (empresa)
+                'tenant' => [
+                    'id' => $tenant->id,
+                    'name' => $tenant->name,
+                    'email' => $tenant->email,
+                ],
                 'subscription' => $activeSubscription ? [
                     'id' => $activeSubscription->id,
                     'plan_id' => $activeSubscription->plan_id,
@@ -121,16 +128,18 @@ class AdminClientsController extends Controller
         }
 
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:tenants,email',
+            'tenant_name' => 'required|string|max:255',
+            'user_name' => 'required|string|max:255',
+            'user_email' => 'required|email|unique:users,email',
             'plan_id' => 'nullable|exists:plans,id',
         ]);
 
         // Gerar UUID para o tenant
         $tenant = Tenant::create([
             'uuid' => Str::uuid()->toString(),
-            'name' => $validated['name'],
-            'email' => $validated['email'],
+            'name' => $validated['tenant_name'],
+            'email' => $validated['user_email'], // Email do contato principal
+            'plan_id' => $validated['plan_id'] ?? null,
         ]);
 
         // Gerar senha aleatória para o usuário
@@ -138,8 +147,8 @@ class AdminClientsController extends Controller
 
         // Criar usuário principal para o tenant
         $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
+            'name' => $validated['user_name'],
+            'email' => $validated['user_email'],
             'password' => Hash::make($randomPassword),
             'tenant_id' => $tenant->id,
         ]);
@@ -177,45 +186,59 @@ class AdminClientsController extends Controller
             abort(403, 'Acesso negado.');
         }
 
-        // Buscar user_id para validação de email
-        $userId = $request->input('user_id');
-
-        // Construir regras de validação de email
-        $emailRules = [
-            'required',
-            'email',
-            Rule::unique('tenants', 'email')->ignore($tenant->id),
-        ];
-
-        // Adicionar validação de email único em users se user_id foi fornecido
-        if ($userId) {
-            $emailRules[] = Rule::unique('users', 'email')->ignore($userId);
-        }
+        // Buscar o usuário principal do tenant
+        $primaryUser = $tenant->users()->first();
+        $userId = $request->input('user_id') ?: $primaryUser?->id;
 
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => $emailRules,
+            'tenant_name' => 'required|string|max:255',
+            'user_name' => 'required|string|max:255',
+            'user_email' => [
+                'required',
+                'email',
+                // Validar que email não existe em outros usuários (ignorando o atual)
+                function ($attribute, $value, $fail) use ($userId, $tenant) {
+                    // Verificar se existe em users, exceto o usuário do tenant atual
+                    $existsInUsers = \DB::table('users')
+                        ->where('email', $value)
+                        ->where('id', '!=', $userId)
+                        ->where('tenant_id', '!=', $tenant->id)
+                        ->exists();
+
+                    if ($existsInUsers) {
+                        $fail('The email has already been taken.');
+                    }
+                },
+            ],
             'plan_id' => 'nullable|exists:plans,id',
             'user_id' => 'nullable|exists:users,id',
         ]);
 
-        // Atualizar tenant
-        $tenant->update([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-        ]);
-
-        // Atualizar usuário principal se user_id foi fornecido
-        if (! empty($validated['user_id'])) {
-            $user = User::find($validated['user_id']);
+        // Atualizar usuário principal (fonte primária de dados)
+        if ($userId) {
+            $user = User::find($userId);
 
             if ($user && $user->tenant_id === $tenant->id) {
                 $user->update([
-                    'name' => $validated['name'],
-                    'email' => $validated['email'],
+                    'name' => $validated['user_name'],
+                    'email' => $validated['user_email'],
                 ]);
             }
         }
+
+        // Atualizar tenant (dados da empresa)
+        $updateData = [
+            'name' => $validated['tenant_name'],
+            'email' => $validated['user_email'], // Sincronizar email do contato principal
+        ];
+
+        // Adicionar plan_id se fornecido
+        if (isset($validated['plan_id']) && ! empty($validated['plan_id'])) {
+            $updateData['plan_id'] = $validated['plan_id'];
+        }
+
+        // Sincronizar dados com o tenant (manter consistência)
+        $tenant->update($updateData);
 
         // Atualizar assinatura se plan_id foi fornecido
         if (isset($validated['plan_id']) && ! empty($validated['plan_id'])) {
@@ -227,9 +250,8 @@ class AdminClientsController extends Controller
                     'plan_id' => $validated['plan_id'],
                 ]);
             } else {
-                // Criar nova assinatura
-                Subscription::create([
-                    'tenant_id' => $tenant->id,
+                // Criar nova assinatura usando o relacionamento (garante tenant_id)
+                $tenant->subscriptions()->create([
                     'plan_id' => $validated['plan_id'],
                     'status' => 'active',
                     'started_on' => now(),

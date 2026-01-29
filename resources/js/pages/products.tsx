@@ -80,10 +80,10 @@ export default function Products() {
     // Garante valores padrão para marginSettings
     const safeMarginSettings = React.useMemo(
         () => ({
-            margin_excellent: marginSettings?.margin_excellent ?? 100.0,
-            margin_good_min: marginSettings?.margin_good_min ?? 30.0,
-            margin_good_max: marginSettings?.margin_good_max ?? 99.99,
-            margin_poor: marginSettings?.margin_poor ?? 0.0,
+            margin_excellent: marginSettings?.margin_excellent ?? 30.0,
+            margin_good_min: marginSettings?.margin_good_min ?? 21.0,
+            margin_good_max: marginSettings?.margin_good_max ?? 29.0,
+            margin_poor: marginSettings?.margin_poor ?? 20.0,
         }),
         [marginSettings],
     );

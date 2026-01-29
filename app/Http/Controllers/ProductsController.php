@@ -65,8 +65,8 @@ class ProductsController extends Controller
             ->get(['id', 'name', 'unit', 'unit_cost'])
             ->map(function ($product) {
                 return [
-                    'id' => 'product_' . $product->id,
-                    'name' => $product->name . ' (Produto)',
+                    'id' => 'product_'.$product->id,
+                    'name' => $product->name.' (Produto)',
                     'unit' => $product->unit,
                     'unit_price' => $product->unit_cost,
                 ];
@@ -119,10 +119,10 @@ class ProductsController extends Controller
             'taxCategories' => $taxCategories,
             'externalItems' => $externalItems,
             'marginSettings' => [
-                'margin_excellent' => (float) ($tenant->margin_excellent ?? 100.00),
-                'margin_good_min' => (float) ($tenant->margin_good_min ?? 30.00),
-                'margin_good_max' => (float) ($tenant->margin_good_max ?? 99.99),
-                'margin_poor' => (float) ($tenant->margin_poor ?? 0.00),
+                'margin_excellent' => (float) ($tenant->margin_excellent ?? 30.00),
+                'margin_good_min' => (float) ($tenant->margin_good_min ?? 21.00),
+                'margin_good_max' => (float) ($tenant->margin_good_max ?? 29.00),
+                'margin_poor' => (float) ($tenant->margin_poor ?? 20.00),
             ],
             'filters' => [
                 'search' => $request->input('search', ''),
@@ -212,13 +212,13 @@ class ProductsController extends Controller
                 return response()->json([
                     'success' => true,
                     'message' => 'Produto criado com sucesso!',
-                    'product' => $product->fresh(['costs'])
+                    'product' => $product->fresh(['costs']),
                 ]);
             }
 
             return back()->with([
                 'success' => 'Produto criado com sucesso!',
-                'product' => $product->fresh(['costs'])
+                'product' => $product->fresh(['costs']),
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -226,7 +226,7 @@ class ProductsController extends Controller
             if (request()->wantsJson() || request()->ajax()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Erro ao criar produto: '.$e->getMessage()
+                    'message' => 'Erro ao criar produto: '.$e->getMessage(),
                 ], 500);
             }
 
@@ -312,10 +312,10 @@ class ProductsController extends Controller
             'product' => $product,
             'ingredients' => $ingredients,
             'marginSettings' => [
-                'margin_excellent' => (float) ($tenant->margin_excellent ?? 100.00),
-                'margin_good_min' => (float) ($tenant->margin_good_min ?? 30.00),
-                'margin_good_max' => (float) ($tenant->margin_good_max ?? 99.99),
-                'margin_poor' => (float) ($tenant->margin_poor ?? 0.00),
+                'margin_excellent' => (float) ($tenant->margin_excellent ?? 30.00),
+                'margin_good_min' => (float) ($tenant->margin_good_min ?? 21.00),
+                'margin_good_max' => (float) ($tenant->margin_good_max ?? 29.00),
+                'margin_poor' => (float) ($tenant->margin_poor ?? 20.00),
             ],
         ]);
     }
@@ -473,7 +473,7 @@ class ProductsController extends Controller
                 return response()->json([
                     'success' => true,
                     'message' => $message,
-                    'product' => $product->fresh(['costs'])
+                    'product' => $product->fresh(['costs']),
                 ]);
             }
 
@@ -484,7 +484,7 @@ class ProductsController extends Controller
             if (request()->wantsJson() || request()->ajax()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Erro ao atualizar produto: '.$e->getMessage()
+                    'message' => 'Erro ao atualizar produto: '.$e->getMessage(),
                 ], 500);
             }
 
