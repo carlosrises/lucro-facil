@@ -15,9 +15,9 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         try {
-            // Aumentar limite de memória e timeout
-            ini_set('memory_limit', '512M');
-            ini_set('max_execution_time', '120'); // 2 minutos
+            // Aumentar limite de memória e timeout (mitigação temporária para evitar timeouts durante investigação)
+            ini_set('memory_limit', '1024M');
+            ini_set('max_execution_time', '300'); // 5 minutos
 
             $tenantId = $request->user()->tenant_id;
 
@@ -49,7 +49,8 @@ class DashboardController extends Controller
                 ->selectRaw('
                 COUNT(*) as total_orders,
                 SUM(total_commissions) as sum_total_commissions
-            ');
+            ')
+                ->first();
 
             // Buscar pedidos para processamento detalhado
             $orders = $baseQuery
@@ -83,6 +84,16 @@ class DashboardController extends Controller
             $totalCmv = (float) ($cmvData->total_cmv ?? 0);
 
             $totalSubsidies = $this->sumSubsidies(clone $baseQuery);
+
+            // Total de receita do período (fallback para soma dos pedidos caso agregação não exista)
+            $totalRevenue = (float) collect($orders)->sum(function ($o) {
+                return (float) ($o->gross_total ?? 0);
+            });
+
+            // Total de taxas de pagamento (usar valores recalculados como padrão)
+            // Garantir inicialização antes do uso
+            $totalRecalculatedPaymentFees = 0;
+            $totalPaymentMethodFees = (float) $totalRecalculatedPaymentFees;
 
             // Calcular impostos dos produtos recalculados proporcionalmente ao subtotal
             // Mesma lógica da página de pedidos

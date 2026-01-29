@@ -67,24 +67,27 @@ class FinancialSummaryController extends Controller
             $totalCashback = collect($sessionPayments)->filter(function ($payment) {
                 $paymentName = strtolower($payment['payment_method']['name'] ?? '');
                 $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
+
                 return str_contains($paymentName, 'cashback') || str_contains($paymentKeyword, 'clube');
-            })->sum(fn($p) => (float) ($p['payment_value'] ?? 0));
+            })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
 
             $subsidies = collect($sessionPayments)->filter(function ($payment) {
                 $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+
                 return str_contains($paymentName, 'subsid') || str_contains($paymentName, 'cupom');
-            })->sum(fn($p) => (float) ($p['payment_value'] ?? 0));
+            })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
 
             $realPayments = collect($sessionPayments)
                 ->filter(function ($payment) {
                     $paymentName = strtolower($payment['payment_method']['name'] ?? '');
                     $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-                    return !str_contains($paymentName, 'cashback')
-                        && !str_contains($paymentKeyword, 'clube')
-                        && !str_contains($paymentName, 'subsid')
-                        && !str_contains($paymentName, 'cupom');
+
+                    return ! str_contains($paymentName, 'cashback')
+                        && ! str_contains($paymentKeyword, 'clube')
+                        && ! str_contains($paymentName, 'subsid')
+                        && ! str_contains($paymentName, 'cupom');
                 })
-                ->sum(fn($p) => (float) ($p['payment_value'] ?? 0));
+                ->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
 
             if ($realPayments == 0 && count($sessionPayments) == 0) {
                 if ($order->provider === 'takeat' && isset($raw['session']['total_price'])) {
@@ -98,7 +101,7 @@ class FinancialSummaryController extends Controller
             $isMarketplaceDelivery = in_array($deliveryBy, ['IFOOD', 'MARKETPLACE']);
 
             $orderSubtotal = $realPayments + $subsidies;
-            if (!$isMarketplaceDelivery && $deliveryFee > 0) {
+            if (! $isMarketplaceDelivery && $deliveryFee > 0) {
                 $orderSubtotal += $deliveryFee;
             }
 
@@ -142,24 +145,27 @@ class FinancialSummaryController extends Controller
             $totalCashback = collect($sessionPayments)->filter(function ($payment) {
                 $paymentName = strtolower($payment['payment_method']['name'] ?? '');
                 $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
+
                 return str_contains($paymentName, 'cashback') || str_contains($paymentKeyword, 'clube');
-            })->sum(fn($p) => (float) ($p['payment_value'] ?? 0));
+            })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
 
             $subsidies = collect($sessionPayments)->filter(function ($payment) {
                 $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+
                 return str_contains($paymentName, 'subsid') || str_contains($paymentName, 'cupom');
-            })->sum(fn($p) => (float) ($p['payment_value'] ?? 0));
+            })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
 
             $realPayments = collect($sessionPayments)
                 ->filter(function ($payment) {
                     $paymentName = strtolower($payment['payment_method']['name'] ?? '');
                     $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-                    return !str_contains($paymentName, 'cashback')
-                        && !str_contains($paymentKeyword, 'clube')
-                        && !str_contains($paymentName, 'subsid')
-                        && !str_contains($paymentName, 'cupom');
+
+                    return ! str_contains($paymentName, 'cashback')
+                        && ! str_contains($paymentKeyword, 'clube')
+                        && ! str_contains($paymentName, 'subsid')
+                        && ! str_contains($paymentName, 'cupom');
                 })
-                ->sum(fn($p) => (float) ($p['payment_value'] ?? 0));
+                ->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
 
             $paidByClient = $realPayments + $totalCashback;
             if ($paidByClient == 0 && count($sessionPayments) == 0) {
@@ -170,12 +176,12 @@ class FinancialSummaryController extends Controller
 
             $orderSubtotal = $paidByClient + $subsidies;
             $isMarketplaceDelivery = in_array($order->provider, ['ifood', '99food', 'takeat']) && $order->delivery_mode === 'marketplace';
-            if (!$isMarketplaceDelivery && $deliveryFee > 0) {
+            if (! $isMarketplaceDelivery && $deliveryFee > 0) {
                 $orderSubtotal += $deliveryFee;
             }
 
             // Calcular soma de preços originais dos itens para proporção
-            $originalTotalPrice = $order->items->sum(fn($item) => (float)$item->unit_price * (float)$item->qty);
+            $originalTotalPrice = $order->items->sum(fn ($item) => (float) $item->unit_price * (float) $item->qty);
 
             if ($originalTotalPrice > 0 && $orderSubtotal > 0) {
                 $proportion = $orderSubtotal / $originalTotalPrice;
@@ -186,7 +192,7 @@ class FinancialSummaryController extends Controller
 
                 foreach ($order->items as $item) {
                     $internalProduct = $item->internalProduct;
-                    if (!$internalProduct || !$internalProduct->taxCategory) {
+                    if (! $internalProduct || ! $internalProduct->taxCategory) {
                         continue;
                     }
 
@@ -234,12 +240,12 @@ class FinancialSummaryController extends Controller
             }
 
             // DEBUG: Logar valores de impostos por pedido
-            logger()->info('DEBUG_IMPOSTOS_DRE', [
-                'pedido_id' => $order->id,
-                'subtotal' => $orderSubtotal,
-                'impostos_produto' => $impostosProdutoDoPedido,
-                'impostos_adicionais' => $impostosAdicionaisDoPedido,
-            ]);
+            // logger()->info('DEBUG_IMPOSTOS_DRE', [
+            //     'pedido_id' => $order->id,
+            //     'subtotal' => $orderSubtotal,
+            //     'impostos_produto' => $impostosProdutoDoPedido,
+            //     'impostos_adicionais' => $impostosAdicionaisDoPedido,
+            // ]);
 
             // Custos recalculados sobre o subtotal
             $costs = $calculatedCosts['costs'] ?? [];
@@ -352,24 +358,27 @@ class FinancialSummaryController extends Controller
                 $totalCashback = collect($sessionPayments)->filter(function ($payment) {
                     $paymentName = strtolower($payment['payment_method']['name'] ?? '');
                     $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
+
                     return str_contains($paymentName, 'cashback') || str_contains($paymentKeyword, 'clube');
-                })->sum(fn($p) => (float) ($p['payment_value'] ?? 0));
+                })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
 
                 $subsidies = collect($sessionPayments)->filter(function ($payment) {
                     $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+
                     return str_contains($paymentName, 'subsid') || str_contains($paymentName, 'cupom');
-                })->sum(fn($p) => (float) ($p['payment_value'] ?? 0));
+                })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
 
                 $realPayments = collect($sessionPayments)
                     ->filter(function ($payment) {
                         $paymentName = strtolower($payment['payment_method']['name'] ?? '');
                         $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-                        return !str_contains($paymentName, 'cashback')
-                            && !str_contains($paymentKeyword, 'clube')
-                            && !str_contains($paymentName, 'subsid')
-                            && !str_contains($paymentName, 'cupom');
+
+                        return ! str_contains($paymentName, 'cashback')
+                            && ! str_contains($paymentKeyword, 'clube')
+                            && ! str_contains($paymentName, 'subsid')
+                            && ! str_contains($paymentName, 'cupom');
                     })
-                    ->sum(fn($p) => (float) ($p['payment_value'] ?? 0));
+                    ->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
 
                 if ($realPayments == 0 && count($sessionPayments) == 0) {
                     if ($order->provider === 'takeat' && isset($raw['session']['total_price'])) {
@@ -383,7 +392,7 @@ class FinancialSummaryController extends Controller
                 $isMarketplaceDelivery = in_array($deliveryBy, ['IFOOD', 'MARKETPLACE']);
 
                 $orderSubtotal = $realPayments + $subsidies;
-                if (!$isMarketplaceDelivery && $deliveryFee > 0) {
+                if (! $isMarketplaceDelivery && $deliveryFee > 0) {
                     $orderSubtotal += $deliveryFee;
                 }
 
@@ -407,7 +416,7 @@ class FinancialSummaryController extends Controller
 
                     // Recalcular valor baseado no subtotal
                     if (($cost['type'] ?? '') === 'percentage') {
-                        $costValue = ($orderSubtotal * (float)($cost['value'] ?? 0)) / 100;
+                        $costValue = ($orderSubtotal * (float) ($cost['value'] ?? 0)) / 100;
                     } else {
                         $costValue = (float) ($cost['calculated_value'] ?? 0);
                     }
@@ -426,7 +435,7 @@ class FinancialSummaryController extends Controller
 
                     // Recalcular valor baseado no subtotal
                     if (($commission['type'] ?? '') === 'percentage') {
-                        $commissionValue = ($orderSubtotal * (float)($commission['value'] ?? 0)) / 100;
+                        $commissionValue = ($orderSubtotal * (float) ($commission['value'] ?? 0)) / 100;
                     } else {
                         $commissionValue = (float) ($commission['calculated_value'] ?? 0);
                     }
@@ -448,7 +457,7 @@ class FinancialSummaryController extends Controller
 
                     // Recalcular valor baseado no subtotal
                     if (($payment['type'] ?? '') === 'percentage') {
-                        $methodValue = ($orderSubtotal * (float)($payment['value'] ?? 0)) / 100;
+                        $methodValue = ($orderSubtotal * (float) ($payment['value'] ?? 0)) / 100;
                     } else {
                         $methodValue = (float) ($payment['calculated_value'] ?? 0);
                     }
@@ -469,7 +478,7 @@ class FinancialSummaryController extends Controller
 
                     // Recalcular valor baseado no subtotal
                     if (($tax['type'] ?? '') === 'percentage') {
-                        $taxValue = ($orderSubtotal * (float)($tax['value'] ?? 0)) / 100;
+                        $taxValue = ($orderSubtotal * (float) ($tax['value'] ?? 0)) / 100;
                     } else {
                         $taxValue = (float) ($tax['calculated_value'] ?? 0);
                     }
@@ -631,11 +640,13 @@ class FinancialSummaryController extends Controller
 
         if ($value instanceof \JsonSerializable) {
             $decoded = $value->jsonSerialize();
+
             return is_array($decoded) ? $decoded : [];
         }
 
         if (is_string($value) && $value !== '') {
             $decoded = json_decode($value, true);
+
             return is_array($decoded) ? $decoded : [];
         }
 
@@ -736,19 +747,21 @@ class FinancialSummaryController extends Controller
 
             $subsidies = collect($sessionPayments)->filter(function ($payment) {
                 $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+
                 return str_contains($paymentName, 'subsid') || str_contains($paymentName, 'cupom');
-            })->sum(fn($p) => (float) ($p['payment_value'] ?? 0));
+            })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
 
             $realPayments = collect($sessionPayments)
                 ->filter(function ($payment) {
                     $paymentName = strtolower($payment['payment_method']['name'] ?? '');
                     $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-                    return !str_contains($paymentName, 'cashback')
-                        && !str_contains($paymentKeyword, 'clube')
-                        && !str_contains($paymentName, 'subsid')
-                        && !str_contains($paymentName, 'cupom');
+
+                    return ! str_contains($paymentName, 'cashback')
+                        && ! str_contains($paymentKeyword, 'clube')
+                        && ! str_contains($paymentName, 'subsid')
+                        && ! str_contains($paymentName, 'cupom');
                 })
-                ->sum(fn($p) => (float) ($p['payment_value'] ?? 0));
+                ->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
 
             if ($realPayments == 0 && count($sessionPayments) == 0) {
                 if ($order->provider === 'takeat' && isset($raw['session']['total_price'])) {
@@ -762,7 +775,7 @@ class FinancialSummaryController extends Controller
             $isMarketplaceDelivery = in_array($deliveryBy, ['IFOOD', 'MARKETPLACE']);
 
             $orderSubtotal = $realPayments + $subsidies;
-            if (!$isMarketplaceDelivery && $deliveryFee > 0) {
+            if (! $isMarketplaceDelivery && $deliveryFee > 0) {
                 $orderSubtotal += $deliveryFee;
             }
 
