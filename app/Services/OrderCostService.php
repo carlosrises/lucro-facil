@@ -187,6 +187,14 @@ class OrderCostService
     }
 
     /**
+     * Compatibilidade retroativa: alias para calculateCosts()
+     */
+    public function calculateOrderCosts(Order $order): array
+    {
+        return $this->calculateCosts($order);
+    }
+
+    /**
      * Detectar providers a partir dos métodos de pagamento
      */
     private function detectPaymentProviders(Order $order): array

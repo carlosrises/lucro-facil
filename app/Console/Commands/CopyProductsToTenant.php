@@ -17,8 +17,11 @@ class CopyProductsToTenant extends Command
     protected $description = 'Copia insumos, produtos e categorias de um tenant para outro';
 
     private array $categoryMap = [];
+
     private array $taxCategoryMap = [];
+
     private array $ingredientMap = [];
+
     private array $productMap = [];
 
     public function handle(): int
@@ -27,14 +30,15 @@ class CopyProductsToTenant extends Command
         $targetTenantId = (int) $this->argument('targetTenantId');
         $force = $this->option('force');
 
-        $this->info("═══════════════════════════════════════════════════════════════");
-        $this->info("📦 CÓPIA DE PRODUTOS ENTRE TENANTS");
-        $this->info("═══════════════════════════════════════════════════════════════");
+        $this->info('═══════════════════════════════════════════════════════════════');
+        $this->info('📦 CÓPIA DE PRODUTOS ENTRE TENANTS');
+        $this->info('═══════════════════════════════════════════════════════════════');
         $this->newLine();
 
         // Validar tenants
         if ($sourceTenantId === $targetTenantId) {
-            $this->error("❌ Tenant de origem e destino não podem ser iguais!");
+            $this->error('❌ Tenant de origem e destino não podem ser iguais!');
+
             return 1;
         }
 
@@ -44,7 +48,7 @@ class CopyProductsToTenant extends Command
 
         // Contar registros na origem
         $sourceCounts = $this->getSourceCounts($sourceTenantId);
-        $this->info("📊 Registros na ORIGEM:");
+        $this->info('📊 Registros na ORIGEM:');
         $this->line("   • Categorias: {$sourceCounts['categories']}");
         $this->line("   • Categorias Fiscais: {$sourceCounts['tax_categories']}");
         $this->line("   • Insumos: {$sourceCounts['ingredients']}");
@@ -54,7 +58,7 @@ class CopyProductsToTenant extends Command
 
         // Contar registros no destino
         $targetCounts = $this->getSourceCounts($targetTenantId);
-        $this->info("📊 Registros no DESTINO (antes):");
+        $this->info('📊 Registros no DESTINO (antes):');
         $this->line("   • Categorias: {$targetCounts['categories']}");
         $this->line("   • Categorias Fiscais: {$targetCounts['tax_categories']}");
         $this->line("   • Insumos: {$targetCounts['ingredients']}");
@@ -63,24 +67,26 @@ class CopyProductsToTenant extends Command
         $this->newLine();
 
         if ($sourceCounts['products'] === 0 && $sourceCounts['ingredients'] === 0) {
-            $this->warn("⚠️  Não há produtos ou insumos para copiar!");
+            $this->warn('⚠️  Não há produtos ou insumos para copiar!');
+
             return 0;
         }
 
         // Confirmação
-        if (!$force) {
-            $this->warn("⚠️  Os dados serão ADICIONADOS ao tenant destino.");
-            $this->warn("⚠️  Se já existirem categorias/insumos/produtos com mesmo nome, serão criados duplicados.");
+        if (! $force) {
+            $this->warn('⚠️  Os dados serão ADICIONADOS ao tenant destino.');
+            $this->warn('⚠️  Se já existirem categorias/insumos/produtos com mesmo nome, serão criados duplicados.');
             $this->newLine();
 
-            if (!$this->confirm("Deseja continuar?", false)) {
-                $this->info("❌ Operação cancelada.");
+            if (! $this->confirm('Deseja continuar?', false)) {
+                $this->info('❌ Operação cancelada.');
+
                 return 1;
             }
         }
 
         $this->newLine();
-        $this->info("🔄 Iniciando cópia...");
+        $this->info('🔄 Iniciando cópia...');
         $this->newLine();
 
         DB::beginTransaction();
@@ -104,19 +110,19 @@ class CopyProductsToTenant extends Command
             DB::commit();
 
             $this->newLine();
-            $this->info("═══════════════════════════════════════════════════════════════");
-            $this->info("✅ Cópia concluída com sucesso!");
-            $this->info("═══════════════════════════════════════════════════════════════");
+            $this->info('═══════════════════════════════════════════════════════════════');
+            $this->info('✅ Cópia concluída com sucesso!');
+            $this->info('═══════════════════════════════════════════════════════════════');
 
             // Mostrar contagem após
             $this->newLine();
             $targetCountsAfter = $this->getSourceCounts($targetTenantId);
-            $this->info("📊 Registros no DESTINO (depois):");
-            $this->line("   • Categorias: {$targetCountsAfter['categories']} (+" . ($targetCountsAfter['categories'] - $targetCounts['categories']) . ")");
-            $this->line("   • Categorias Fiscais: {$targetCountsAfter['tax_categories']} (+" . ($targetCountsAfter['tax_categories'] - $targetCounts['tax_categories']) . ")");
-            $this->line("   • Insumos: {$targetCountsAfter['ingredients']} (+" . ($targetCountsAfter['ingredients'] - $targetCounts['ingredients']) . ")");
-            $this->line("   • Produtos: {$targetCountsAfter['products']} (+" . ($targetCountsAfter['products'] - $targetCounts['products']) . ")");
-            $this->line("   • Relações: {$targetCountsAfter['product_costs']} (+" . ($targetCountsAfter['product_costs'] - $targetCounts['product_costs']) . ")");
+            $this->info('📊 Registros no DESTINO (depois):');
+            $this->line("   • Categorias: {$targetCountsAfter['categories']} (+".($targetCountsAfter['categories'] - $targetCounts['categories']).')');
+            $this->line("   • Categorias Fiscais: {$targetCountsAfter['tax_categories']} (+".($targetCountsAfter['tax_categories'] - $targetCounts['tax_categories']).')');
+            $this->line("   • Insumos: {$targetCountsAfter['ingredients']} (+".($targetCountsAfter['ingredients'] - $targetCounts['ingredients']).')');
+            $this->line("   • Produtos: {$targetCountsAfter['products']} (+".($targetCountsAfter['products'] - $targetCounts['products']).')');
+            $this->line("   • Relações: {$targetCountsAfter['product_costs']} (+".($targetCountsAfter['product_costs'] - $targetCounts['product_costs']).')');
 
             return 0;
 
@@ -124,23 +130,61 @@ class CopyProductsToTenant extends Command
             DB::rollBack();
             $this->error("❌ Erro durante a cópia: {$e->getMessage()}");
             $this->error("Stack trace: {$e->getTraceAsString()}");
+
             return 1;
         }
     }
 
     private function copyCategories(int $sourceTenantId, int $targetTenantId): void
     {
-        $this->info("📁 Copiando Categorias...");
+        $this->info('📁 Copiando Categorias...');
 
         $categories = Category::where('tenant_id', $sourceTenantId)->get();
 
         foreach ($categories as $category) {
+            // Evitar duplicados: comparar por nome normalizado (trim + lowercase) e tipo
+            $normalizedName = mb_strtolower(trim($category->name));
+
+            $existing = Category::where('tenant_id', $targetTenantId)
+                ->whereRaw('LOWER(TRIM(name)) = ?', [$normalizedName])
+                ->where('type', $category->type)
+                ->first();
+
+            if ($existing) {
+                $this->categoryMap[$category->id] = $existing->id;
+                $this->line("   ⚠️  {$category->name} já existe no destino → ID {$existing->id}");
+
+                continue;
+            }
+
+            // Replicar e garantir nome limpo antes de salvar
             $newCategory = $category->replicate();
             $newCategory->tenant_id = $targetTenantId;
-            $newCategory->save();
+            $newCategory->name = trim($category->name);
+
+            try {
+                $newCategory->save();
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Em caso de race ou constraint, tentar buscar o registro existente e reutilizar
+                if (str_contains($e->getMessage(), 'Integrity constraint violation')) {
+                    $found = Category::where('tenant_id', $targetTenantId)
+                        ->where('type', $category->type)
+                        ->whereRaw('LOWER(TRIM(name)) = ?', [$normalizedName])
+                        ->first();
+
+                    if ($found) {
+                        $this->categoryMap[$category->id] = $found->id;
+                        $this->line("   ⚠️  {$category->name} já existe no destino (resolvido) → ID {$found->id}");
+
+                        continue;
+                    }
+                }
+
+                throw $e;
+            }
 
             $this->categoryMap[$category->id] = $newCategory->id;
-            $this->line("   ✅ {$category->name} → ID {$newCategory->id}");
+            $this->line("   ✅ {$newCategory->name} → ID {$newCategory->id}");
         }
 
         $this->info("   📊 Total: {$categories->count()} categorias copiadas");
@@ -149,7 +193,7 @@ class CopyProductsToTenant extends Command
 
     private function copyTaxCategories(int $sourceTenantId, int $targetTenantId): void
     {
-        $this->info("💰 Copiando Categorias Fiscais...");
+        $this->info('💰 Copiando Categorias Fiscais...');
 
         $taxCategories = TaxCategory::where('tenant_id', $sourceTenantId)->get();
 
@@ -168,7 +212,7 @@ class CopyProductsToTenant extends Command
 
     private function copyIngredients(int $sourceTenantId, int $targetTenantId): void
     {
-        $this->info("🥕 Copiando Insumos...");
+        $this->info('🥕 Copiando Insumos...');
 
         $ingredients = Ingredient::where('tenant_id', $sourceTenantId)->get();
 
@@ -187,7 +231,7 @@ class CopyProductsToTenant extends Command
 
     private function copyProducts(int $sourceTenantId, int $targetTenantId): void
     {
-        $this->info("📦 Copiando Produtos...");
+        $this->info('📦 Copiando Produtos...');
 
         $products = InternalProduct::where('tenant_id', $sourceTenantId)->get();
 
@@ -217,31 +261,53 @@ class CopyProductsToTenant extends Command
 
     private function copyProductCosts(int $sourceTenantId, int $targetTenantId): void
     {
-        $this->info("🔗 Copiando Relações Produto-Insumo...");
+        $this->info('🔗 Copiando Relações Produto-Insumo...');
 
         $productCosts = ProductCost::where('tenant_id', $sourceTenantId)->get();
 
         foreach ($productCosts as $productCost) {
             // Verificar se temos os mapeamentos necessários
-            if (!isset($this->productMap[$productCost->internal_product_id])) {
+            if (! isset($this->productMap[$productCost->internal_product_id])) {
                 $this->warn("   ⚠️  Produto ID {$productCost->internal_product_id} não encontrado no mapa");
+
                 continue;
             }
 
-            if (!isset($this->ingredientMap[$productCost->ingredient_id])) {
-                $this->warn("   ⚠️  Insumo ID {$productCost->ingredient_id} não encontrado no mapa");
+            // Determinar mapeamento para ingredient_id: pode ser um Insumo (Ingredient) ou um Produto (InternalProduct)
+            $mappedIngredientId = null;
+
+            if (isset($this->ingredientMap[$productCost->ingredient_id])) {
+                $mappedIngredientId = $this->ingredientMap[$productCost->ingredient_id];
+                $ingredientIsProduct = false;
+            } elseif (isset($this->productMap[$productCost->ingredient_id])) {
+                // O ingrediente original era um InternalProduct; mapear para o novo InternalProduct id
+                $mappedIngredientId = $this->productMap[$productCost->ingredient_id];
+                $ingredientIsProduct = true;
+            } else {
+                $this->warn("   ⚠️  Insumo/Produto ID {$productCost->ingredient_id} não encontrado no mapa");
+
                 continue;
             }
 
             $newProductCost = $productCost->replicate();
             $newProductCost->tenant_id = $targetTenantId;
             $newProductCost->internal_product_id = $this->productMap[$productCost->internal_product_id];
-            $newProductCost->ingredient_id = $this->ingredientMap[$productCost->ingredient_id];
+            $newProductCost->ingredient_id = $mappedIngredientId;
             $newProductCost->save();
 
             $product = InternalProduct::find($this->productMap[$productCost->internal_product_id]);
-            $ingredient = Ingredient::find($this->ingredientMap[$productCost->ingredient_id]);
-            $this->line("   ✅ {$product->name} → {$ingredient->name} ({$productCost->qty} {$ingredient->unit})");
+
+            if ($ingredientIsProduct) {
+                $ingredient = InternalProduct::find($mappedIngredientId);
+                $ingredientName = $ingredient ? $ingredient->name : "ID {$mappedIngredientId}";
+                $ingredientUnit = $ingredient ? ($ingredient->unit ?? '') : '';
+            } else {
+                $ingredient = Ingredient::find($mappedIngredientId);
+                $ingredientName = $ingredient ? $ingredient->name : "ID {$mappedIngredientId}";
+                $ingredientUnit = $ingredient ? ($ingredient->unit ?? '') : '';
+            }
+
+            $this->line("   ✅ {$product->name} → {$ingredientName} ({$productCost->qty} {$ingredientUnit})");
         }
 
         $this->info("   📊 Total: {$productCosts->count()} relações copiadas");
