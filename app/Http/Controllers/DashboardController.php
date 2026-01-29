@@ -151,6 +151,17 @@ class DashboardController extends Controller
                     $orderSubtotal += $deliveryFee;
                 }
 
+                // Ajuste: pedidos iFood/Takeat cobram taxa fixa de R$0,99 que deve
+                // ser subtraída do subtotal para cálculos financeiros.
+                $providerName = strtolower($order->provider ?? '');
+                if (in_array($providerName, ['ifood', 'takeat'], true)) {
+                    $orderSubtotal -= 0.99;
+                }
+
+                if ($orderSubtotal < 0) {
+                    $orderSubtotal = 0;
+                }
+
                 // Buscar itens do pedido com categorias de imposto
                 $items = $order->items ?? [];
                 $taxCategories = [];
