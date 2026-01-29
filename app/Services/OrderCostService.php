@@ -21,7 +21,7 @@ class OrderCostService
     public function calculateCosts(Order $order): array
     {
         // Primeiro, vincular automaticamente taxas de pagamento se ainda não estiver vinculado
-        if (!$this->linkService->hasLinkedPaymentFees($order)) {
+        if (! $this->linkService->hasLinkedPaymentFees($order)) {
             $this->linkService->linkPaymentFeesToOrder($order);
         }
 
@@ -327,13 +327,13 @@ class OrderCostService
                 ->where('provider', 'takeat')
                 ->first();
 
-            if (!$mapping) {
+            if (! $mapping) {
                 continue; // Sem mapping = sem taxa
             }
 
             // Se não tem taxa vinculada ou tem has_no_fee, pular cálculo
             // Os marcadores "sem taxa" serão adicionados após o loop principal (evita duplicação)
-            if (!$mapping->cost_commission_id || $mapping->has_no_fee) {
+            if (! $mapping->cost_commission_id || $mapping->has_no_fee) {
                 continue;
             }
 
@@ -861,7 +861,7 @@ class OrderCostService
         $calculatedCosts = $order->calculated_costs ?? [];
 
         // Determinar em qual categoria essa comissão se encaixa
-        $categoryKey = match($commission->category) {
+        $categoryKey = match ($commission->category) {
             'cost' => 'costs',
             'commission' => 'commissions',
             'tax' => 'taxes',
@@ -870,7 +870,7 @@ class OrderCostService
         };
 
         // Inicializar a categoria se não existir
-        if (!isset($calculatedCosts[$categoryKey])) {
+        if (! isset($calculatedCosts[$categoryKey])) {
             $calculatedCosts[$categoryKey] = [];
         }
 
@@ -890,7 +890,7 @@ class OrderCostService
         }
 
         // Se não encontrou e o valor é maior que zero, adicionar
-        if (!$found && $calculatedValue > 0) {
+        if (! $found && $calculatedValue > 0) {
             $calculatedCosts[$categoryKey][] = [
                 'id' => $commissionId,
                 'name' => $commission->name,
@@ -905,7 +905,7 @@ class OrderCostService
         if ($calculatedValue == 0) {
             $calculatedCosts[$categoryKey] = array_values(array_filter(
                 $calculatedCosts[$categoryKey],
-                fn($item) => ($item['id'] ?? null) !== $commissionId
+                fn ($item) => ($item['id'] ?? null) !== $commissionId
             ));
         }
 
@@ -965,7 +965,7 @@ class OrderCostService
             if (isset($calculatedCosts[$categoryKey])) {
                 $calculatedCosts[$categoryKey] = array_values(array_filter(
                     $calculatedCosts[$categoryKey],
-                    fn($item) => ($item['id'] ?? null) !== $commissionId
+                    fn ($item) => ($item['id'] ?? null) !== $commissionId
                 ));
             }
         }
@@ -1050,59 +1050,22 @@ class OrderCostService
     private function resolveTakeatSubtotal(Order $order): ?float
     {
         $session = $order->raw['session'] ?? [];
-
-        // Pegar o desconto aplicado pela loja
-        $discountTotal = (float) ($session['discount_total'] ?? 0);
-
-        // Identificar subsídios e cashback nos pagamentos
-        $totalSubsidy = 0;
-        $totalCashback = 0;
         $payments = $session['payments'] ?? [];
 
-        foreach ($payments as $payment) {
-            $paymentValue = (float) ($payment['payment_value'] ?? 0);
-            $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-            $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-
-            // Identificar cashback
-            $isCashback = str_contains($paymentName, 'cashback') ||
-                          str_contains($paymentKeyword, 'clube');
-
-            // Identificar subsídios
-            $isSubsidy = str_contains($paymentName, 'subsid') ||
-                         str_contains($paymentName, 'cupom') ||
-                         str_contains($paymentKeyword, 'subsid') ||
-                         str_contains($paymentKeyword, 'cupom');
-
-            if ($isCashback) {
-                $totalCashback += $paymentValue;
-            } elseif ($isSubsidy) {
-                $totalSubsidy += $paymentValue;
-            }
-        }
-
-        // Calcular desconto da loja (descontos pagos pela loja, não subsídios)
-        $storeDiscount = $discountTotal - $totalSubsidy + $totalCashback;
-
-        // Usar total_price ou total_delivery_price como base (já incluem descontos)
-        $subtotal = null;
-
-        if (isset($session['total_delivery_price'])) {
-            $subtotal = (float) $session['total_delivery_price'];
-        } elseif (isset($session['total_price'])) {
-            $subtotal = (float) $session['total_price'];
-        } elseif (isset($session['old_total_price'])) {
-            $subtotal = (float) $session['old_total_price'];
-        }
-
-        if ($subtotal === null) {
+        if (empty($payments)) {
             return null;
         }
 
-        // Aplicar desconto da loja
-        $subtotal -= $storeDiscount;
+        // Somar TODOS os pagamentos (valor pago pelo cliente + subsídios)
+        // Subsídios são incluídos pois são receita para a loja mesmo que o cliente não pague
+        $subtotal = 0;
 
-        // Subtrair taxa de serviço iFood
+        foreach ($payments as $payment) {
+            $paymentValue = (float) ($payment['payment_value'] ?? 0);
+            $subtotal += $paymentValue;
+        }
+
+        // Subtrair taxa de serviço iFood (R$ 0,99)
         return $this->subtractIfoodServiceFee($order, $subtotal);
     }
 
@@ -1124,7 +1087,7 @@ class OrderCostService
     private function shouldExcludeDeliveryFeeFromSubtotal(Order $order): bool
     {
         // Só excluir taxa de entrega se for pedido Takeat do iFood E a entrega for feita pelo iFood
-        if (!$this->isTakeatIfoodOrder($order)) {
+        if (! $this->isTakeatIfoodOrder($order)) {
             return false;
         }
 
