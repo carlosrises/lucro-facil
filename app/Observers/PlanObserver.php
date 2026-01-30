@@ -155,8 +155,20 @@ class PlanObserver
                 'plan_id' => $plan->id,
                 'stripe_product_id' => $plan->stripe_product_id,
             ]);
+        } catch (\Stripe\Exception\InvalidRequestException $e) {
+            // Produto não existe na Stripe, apenas logar e continuar
+            Log::warning('[PlanObserver] Produto não encontrado na Stripe ao arquivar (ignorado)', [
+                'plan_id' => $plan->id,
+                'stripe_product_id' => $plan->stripe_product_id,
+                'error' => $e->getMessage(),
+            ]);
         } catch (\Exception $e) {
-            Log::error('[PlanObserver] Erro ao arquivar plano no Stripe: ' . $e->getMessage());
+            // Outros erros também não devem impedir a exclusão
+            Log::error('[PlanObserver] Erro ao arquivar plano no Stripe (ignorado)', [
+                'plan_id' => $plan->id,
+                'stripe_product_id' => $plan->stripe_product_id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
