@@ -121,9 +121,10 @@ class StripeWebhookController extends Controller
                 return;
             }
 
-            // Atualizar tenant com plan_id e customer_id
+            // Atualizar tenant com plan_id e marcar onboarding como completo
             $tenant->update([
                 'plan_id' => $plan->id,
+                'onboarding_completed_at' => $tenant->onboarding_completed_at ?? now(),
             ]);
 
             // Buscar subscription do Stripe
@@ -140,6 +141,7 @@ class StripeWebhookController extends Controller
                 Subscription::create([
                     'tenant_id' => $tenant->id,
                     'plan_id' => $plan->id,
+                    'price_interval' => $session->metadata->price_interval ?? 'month',
                     'status' => $stripeSubscription->status,
                     'stripe_subscription_id' => $stripeSubscription->id,
                     'stripe_customer_id' => $session->customer,
