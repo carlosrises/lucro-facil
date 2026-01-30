@@ -23,4 +23,9 @@ class Subscription extends Model
     {
         return $this->belongsTo(Plan::class);
     }
+
+    public function tenant()
+    {
+        return $this->belongsTo(Tenant::class);
+    }
 }
