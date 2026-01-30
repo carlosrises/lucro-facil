@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\FinanceEntry;
 use App\Models\Order;
+use App\Services\FinancialAggregationService;
 use App\Services\OrderCostService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Support\Arrayable;
@@ -13,7 +14,7 @@ use Inertia\Inertia;
 
 class FinancialSummaryController extends Controller
 {
-    public function index(Request $request, OrderCostService $orderCostService)
+    public function index(Request $request, FinancialAggregationService $financialAggregation, OrderCostService $orderCostService)
     {
         $tenantId = $request->user()->tenant_id;
 
@@ -33,148 +34,23 @@ class FinancialSummaryController extends Controller
         $endDateUtc = $endDateLocal->copy()->setTimezone('UTC')->toDateTimeString();
 
         $baseQuery = Order::where('tenant_id', $tenantId)
-            ->whereBetween('placed_at', [$startDateUtc, $endDateUtc]);
+            ->whereBetween('placed_at', [$startDateUtc, $endDateUtc])
+            ->whereNotIn('status', ['CANCELLED', 'CANCELLATION_REQUESTED']);
 
-        $simpleTotals = (clone $baseQuery)
-            ->selectRaw('
-                SUM(discount_total) as sum_discount_total,
-                SUM(total_commissions) as sum_total_commissions,
-                SUM(total_costs) as sum_total_costs,
-                SUM(
-                    COALESCE(
-                        CAST(JSON_UNQUOTE(JSON_EXTRACT(calculated_costs, "$.total_payment_methods")) AS DECIMAL(18, 4)),
-                        0
-                    )
-                ) as sum_payment_fees,
-                SUM(
-                    COALESCE(
-                        CAST(JSON_UNQUOTE(JSON_EXTRACT(calculated_costs, "$.total_taxes")) AS DECIMAL(18, 4)),
-                        0
-                    )
-                ) as sum_additional_taxes
-            ')
-            ->first();
+        // Usar FinancialAggregationService - FONTE ÚNICA DE VERDADE
+        $totals = $financialAggregation->calculatePeriodTotals($baseQuery, $tenantId, $startDateUtc, $endDateUtc);
 
-        // Calcular subtotal usando OrderCostService - FONTE ÚNICA DE VERDADE
-        $orders = (clone $baseQuery)->get();
-        $grossRevenue = 0;
-
-        foreach ($orders as $order) {
-            // USAR ORDERCOSTSERVICE em vez de lógica duplicada
-            $grossRevenue += $orderCostService->getOrderSubtotal($order);
-        }
-
-        // Buscar pedidos novamente com relacionamentos para cálculo de impostos
-        $ordersWithRelations = (clone $baseQuery)
-            ->with(['items.internalProduct.taxCategory'])
-            ->get();
-
-        $totalProductTax = 0;
-        $totalAdditionalTaxes = 0;
-        $totalRecalculatedCosts = 0;
-
-        foreach ($ordersWithRelations as $order) {
-            $orderSubtotal = $orderCostService->getOrderSubtotal($order);
-            $raw = is_array($order->raw) ? $order->raw : ($order->raw ? json_decode($order->raw, true) : []);
-
-            // Buscar itens do pedido com categorias de imposto
-            $items = $order->items ?? [];
-            $taxCategories = [];
-            $totalItemsPrice = 0;
-
-            foreach ($items as $item) {
-                $internalProduct = $item->internalProduct;
-                if (! $internalProduct || ! $internalProduct->taxCategory) {
-                    continue;
-                }
-
-                $quantity = $item->qty ?? $item->quantity ?? 0;
-                $unitPrice = $item->unit_price ?? $item->price ?? 0;
-                $itemTotal = $quantity * $unitPrice;
-                $totalItemsPrice += $itemTotal;
-
-                $taxCategoryId = $internalProduct->taxCategory->id;
-
-                if (isset($taxCategories[$taxCategoryId])) {
-                    $taxCategories[$taxCategoryId]['itemsTotal'] += $itemTotal;
-                } else {
-                    $taxCategories[$taxCategoryId] = [
-                        'rate' => $internalProduct->taxCategory->total_tax_rate,
-                        'itemsTotal' => $itemTotal,
-                    ];
-                }
-            }
-
-            // Calcular imposto proporcional ao subtotal
-            foreach ($taxCategories as $category) {
-                $proportion = $totalItemsPrice > 0 ? ($category['itemsTotal'] / $totalItemsPrice) : 0;
-                $taxValue = ($orderSubtotal * $proportion * $category['rate']) / 100;
-                $totalProductTax += $taxValue;
-            }
-
-            // Impostos adicionais e custos recalculados sobre o subtotal
-            $calculatedCosts = is_array($order->calculated_costs) ? $order->calculated_costs : ($order->calculated_costs ? json_decode($order->calculated_costs, true) : []);
-
-            $additionalTaxes = $calculatedCosts['taxes'] ?? [];
-            $impostosAdicionaisDoPedido = 0;
-            foreach ($additionalTaxes as $tax) {
-                if (($tax['type'] ?? '') === 'percentage') {
-                    $value = (float) ($tax['value'] ?? 0);
-                    $totalAdditionalTaxes += ($orderSubtotal * $value) / 100;
-                    $impostosAdicionaisDoPedido += ($orderSubtotal * $value) / 100;
-                } else {
-                    $totalAdditionalTaxes += (float) ($tax['calculated_value'] ?? 0);
-                    $impostosAdicionaisDoPedido += (float) ($tax['calculated_value'] ?? 0);
-                }
-            }
-
-            // DEBUG: Logar valores de impostos por pedido
-            // logger()->info('DEBUG_IMPOSTOS_DRE', [
-            //     'pedido_id' => $order->id,
-            //     'subtotal' => $orderSubtotal,
-            //     'impostos_produto' => $impostosProdutoDoPedido,
-            //     'impostos_adicionais' => $impostosAdicionaisDoPedido,
-            // ]);
-
-            // Custos recalculados sobre o subtotal
-            $costs = $calculatedCosts['costs'] ?? [];
-            foreach ($costs as $cost) {
-                if (($cost['type'] ?? '') === 'percentage') {
-                    $value = (float) ($cost['value'] ?? 0);
-                    $totalRecalculatedCosts += ($orderSubtotal * $value) / 100;
-                } else {
-                    $totalRecalculatedCosts += (float) ($cost['calculated_value'] ?? 0);
-                }
-            }
-        }
-
-        $totalDiscounts = (float) ($simpleTotals->sum_discount_total ?? 0);
-        $totalCommissions = (float) ($simpleTotals->sum_total_commissions ?? 0);
-        $totalCosts = (float) ($simpleTotals->sum_total_costs ?? 0);
-        $totalPaymentFees = (float) ($simpleTotals->sum_payment_fees ?? 0);
-        $totalAdditionalTax = (float) ($simpleTotals->sum_additional_taxes ?? 0);
-
-        // CMV agregado via SQL
-        $cmvData = \DB::table('orders')
-            ->join('order_items', 'order_items.order_id', '=', 'orders.id')
-            ->join('order_item_mappings', 'order_item_mappings.order_item_id', '=', 'order_items.id')
-            ->join('internal_products', 'internal_products.id', '=', 'order_item_mappings.internal_product_id')
-            ->where('orders.tenant_id', $tenantId)
-            ->whereBetween('orders.placed_at', [$startDateUtc, $endDateUtc])
-            ->selectRaw('
-                SUM(
-                    order_items.qty * order_item_mappings.quantity *
-                    COALESCE(order_item_mappings.unit_cost_override, internal_products.unit_cost)
-                ) as total_cmv
-            ')
-            ->first();
-
-        $totalCmv = (float) ($cmvData->total_cmv ?? 0);
+        $grossRevenue = $totals['total_revenue'];
+        $totalCmv = $totals['total_cmv'];
+        $totalProductTax = $totals['total_product_tax'];
+        $totalAdditionalTaxes = $totals['total_additional_taxes'];
+        $totalTaxes = $totals['total_taxes'];
+        $totalRecalculatedCosts = $totals['total_recalculated_costs'];
+        $totalRecalculatedCommissions = $totals['total_recalculated_commissions'];
+        $totalRecalculatedPaymentFees = $totals['total_recalculated_payment_fees'];
 
         $totalSubsidies = $this->sumSubsidies(clone $baseQuery);
-        $totalDiscounts = max($totalDiscounts - $totalSubsidies, 0);
-
-        $totalTaxes = $totalProductTax + $totalAdditionalTaxes;
+        $totalDiscounts = 0; // Descontos já estão no subtotal
 
         $financeStart = $startDateLocal->copy();
         $financeEnd = $endDateLocal->copy();
@@ -215,11 +91,7 @@ class FinancialSummaryController extends Controller
 
         $extraIncome = (float) $extraIncomeEntries->sum('amount');
 
-        // Inicializar totais recalculados ANTES de usar
-        $totalRecalculatedPaymentFees = 0;
-        $totalRecalculatedCommissions = 0;
-        $totalRecalculatedCosts = 0;
-
+        // Inicializar aggregations para breakdown
         $paymentFeesAggregation = [];
         $commissionsAggregation = [];
         $discountsAggregation = [];
@@ -255,61 +127,17 @@ class FinancialSummaryController extends Controller
             &$subsidiesAggregation,
             &$additionalTaxesAggregation,
             &$orderCostsAggregation,
-            &$totalRecalculatedPaymentFees,
-            &$totalRecalculatedCommissions,
-            &$totalRecalculatedCosts
+            $orderCostService
         ) {
             foreach ($orders as $order) {
                 $label = $this->formatMarketplaceLabel($order->provider, $order->origin);
 
-                // Calcular subtotal do pedido (mesma lógica do grossRevenue)
-                $deliveryFee = (float) $order->delivery_fee;
-                $raw = $this->normalizeArray($order->raw);
-                $sessionPayments = $raw['session']['payments'] ?? [];
-
-                $totalCashback = collect($sessionPayments)->filter(function ($payment) {
-                    $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                    $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-
-                    return str_contains($paymentName, 'cashback') || str_contains($paymentKeyword, 'clube');
-                })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
-
-                $subsidies = collect($sessionPayments)->filter(function ($payment) {
-                    $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-
-                    return str_contains($paymentName, 'subsid') || str_contains($paymentName, 'cupom');
-                })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
-
-                $realPayments = collect($sessionPayments)
-                    ->filter(function ($payment) {
-                        $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                        $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-
-                        return ! str_contains($paymentName, 'cashback')
-                            && ! str_contains($paymentKeyword, 'clube')
-                            && ! str_contains($paymentName, 'subsid')
-                            && ! str_contains($paymentName, 'cupom');
-                    })
-                    ->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
-
-                if ($realPayments == 0 && count($sessionPayments) == 0) {
-                    if ($order->provider === 'takeat' && isset($raw['session']['total_price'])) {
-                        $realPayments = (float) $raw['session']['total_price'];
-                    } else {
-                        $realPayments = (float) $order->gross_total;
-                    }
-                }
-
-                $deliveryBy = strtoupper($raw['session']['delivery_by'] ?? '');
-                $isMarketplaceDelivery = in_array($deliveryBy, ['IFOOD', 'MARKETPLACE']);
-
-                $orderSubtotal = $realPayments + $subsidies;
-                if (! $isMarketplaceDelivery && $deliveryFee > 0) {
-                    $orderSubtotal += $deliveryFee;
-                }
+                // USAR OrderCostService para breakdown - consistente com totais
+                $orderSubtotal = $orderCostService->getOrderSubtotal($order);
 
                 $this->accumulateValue($revenueAggregation, $label, $orderSubtotal);
 
+                $raw = $this->normalizeArray($order->raw);
                 $subsidy = $this->extractSubsidyValue($raw);
                 $this->accumulateValue($subsidiesAggregation, $label, $subsidy);
 
@@ -318,7 +146,7 @@ class FinancialSummaryController extends Controller
 
                 $calculatedCosts = $this->normalizeArray($order->calculated_costs);
 
-                // Recalcular custos proporcionalmente ao subtotal
+                // Agregar custos para breakdown (totais já calculados pelo serviço)
                 foreach (($calculatedCosts['costs'] ?? []) as $cost) {
                     if (! is_array($cost)) {
                         continue;
@@ -326,18 +154,16 @@ class FinancialSummaryController extends Controller
 
                     $costLabel = $cost['name'] ?? 'Custo não identificado';
 
-                    // Recalcular valor baseado no subtotal
                     if (($cost['type'] ?? '') === 'percentage') {
                         $costValue = ($orderSubtotal * (float) ($cost['value'] ?? 0)) / 100;
                     } else {
                         $costValue = (float) ($cost['calculated_value'] ?? 0);
                     }
 
-                    $totalRecalculatedCosts += $costValue;
                     $this->accumulateValue($orderCostsAggregation, $costLabel, $costValue);
                 }
 
-                // Recalcular comissões proporcionalmente ao subtotal
+                // Agregar comissões para breakdown (totais já calculados pelo serviço)
                 foreach (($calculatedCosts['commissions'] ?? []) as $commission) {
                     if (! is_array($commission)) {
                         continue;
@@ -345,18 +171,16 @@ class FinancialSummaryController extends Controller
 
                     $commissionLabel = $commission['name'] ?? 'Comissão não identificada';
 
-                    // Recalcular valor baseado no subtotal
                     if (($commission['type'] ?? '') === 'percentage') {
                         $commissionValue = ($orderSubtotal * (float) ($commission['value'] ?? 0)) / 100;
                     } else {
                         $commissionValue = (float) ($commission['calculated_value'] ?? 0);
                     }
 
-                    $totalRecalculatedCommissions += $commissionValue;
                     $this->accumulateValue($commissionsAggregation, $commissionLabel, $commissionValue);
                 }
 
-                // Recalcular taxas de pagamento proporcionalmente ao subtotal
+                // Agregar taxas de pagamento para breakdown (totais já calculados pelo serviço)
                 foreach (($calculatedCosts['payment_methods'] ?? []) as $payment) {
                     if (! is_array($payment)) {
                         continue;
@@ -367,17 +191,16 @@ class FinancialSummaryController extends Controller
                         ?? data_get($payment, 'payment_method.name')
                         ?? 'Taxa de pagamento';
 
-                    // Recalcular valor baseado no subtotal
                     if (($payment['type'] ?? '') === 'percentage') {
                         $methodValue = ($orderSubtotal * (float) ($payment['value'] ?? 0)) / 100;
                     } else {
                         $methodValue = (float) ($payment['calculated_value'] ?? 0);
                     }
 
-                    $totalRecalculatedPaymentFees += $methodValue;
                     $this->accumulateValue($paymentFeesAggregation, $methodLabel, $methodValue);
                 }
 
+                // Agregar impostos adicionais para breakdown (totais já calculados pelo serviço)
                 foreach (($calculatedCosts['taxes'] ?? []) as $tax) {
                     if (! is_array($tax)) {
                         continue;
@@ -388,7 +211,6 @@ class FinancialSummaryController extends Controller
                         ?? $tax['title']
                         ?? 'Imposto adicional';
 
-                    // Recalcular valor baseado no subtotal
                     if (($tax['type'] ?? '') === 'percentage') {
                         $taxValue = ($orderSubtotal * (float) ($tax['value'] ?? 0)) / 100;
                     } else {
@@ -440,8 +262,8 @@ class FinancialSummaryController extends Controller
 
             return $item;
         }, $revenueByStore);
-        $paymentFeesBreakdown = $this->formatBreakdownResponse($paymentFeesAggregation, $totalPaymentFees);
-        $commissionsBreakdown = $this->formatBreakdownResponse($commissionsAggregation, $totalCommissions);
+        $paymentFeesBreakdown = $this->formatBreakdownResponse($paymentFeesAggregation, $totalRecalculatedPaymentFees);
+        $commissionsBreakdown = $this->formatBreakdownResponse($commissionsAggregation, $totalRecalculatedCommissions);
         $discountsBreakdown = $this->formatBreakdownResponse($discountsAggregation, $totalDiscounts);
         $subsidiesBreakdown = $this->formatBreakdownResponse($subsidiesAggregation, $totalSubsidies);
 

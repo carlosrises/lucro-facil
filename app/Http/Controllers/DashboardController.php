@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\FinanceEntry;
 use App\Models\Order;
 use App\Models\Store;
+use App\Services\FinancialAggregationService;
 use App\Services\OrderCostService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -13,7 +14,7 @@ use Inertia\Inertia;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request, OrderCostService $orderCostService)
+    public function index(Request $request, FinancialAggregationService $financialAggregation)
     {
         try {
             // Aumentar limite de memória e timeout (mitigação temporária para evitar timeouts durante investigação)
@@ -35,6 +36,7 @@ class DashboardController extends Controller
             // Base query para reutilizar
             $baseQuery = Order::where('tenant_id', $tenantId)
                 ->whereBetween('placed_at', [$startDateUtc, $endDateUtc])
+                ->whereNotIn('status', ['CANCELLED', 'CANCELLATION_REQUESTED'])
                 ->when($storeId, fn ($q) => $q->where('store_id', $storeId))
                 ->when($providerFilter, function ($q, $providerFilter) {
                     if (str_contains($providerFilter, ':')) {
@@ -45,157 +47,23 @@ class DashboardController extends Controller
                     }
                 });
 
-            // Agregação SQL: totais básicos dos pedidos
-            $simpleTotals = (clone $baseQuery)
-                ->selectRaw('
-                COUNT(*) as total_orders,
-                SUM(total_commissions) as sum_total_commissions
-            ')
-                ->first();
+            // Usar serviço de agregação financeira - FONTE ÚNICA DE VERDADE
+            $totals = $financialAggregation->calculatePeriodTotals(
+                $baseQuery,
+                $tenantId,
+                $startDateUtc,
+                $endDateUtc
+            );
 
-            // Buscar pedidos para processamento detalhado
-            $orders = $baseQuery
-                ->with(['items.internalProduct.taxCategory'])
-                ->get();
-
-            // Agregação SQL: CMV via mappings
-            $cmvData = \DB::table('orders')
-                ->join('order_items', 'order_items.order_id', '=', 'orders.id')
-                ->join('order_item_mappings', 'order_item_mappings.order_item_id', '=', 'order_items.id')
-                ->join('internal_products', 'internal_products.id', '=', 'order_item_mappings.internal_product_id')
-                ->where('orders.tenant_id', $tenantId)
-                ->whereBetween('orders.placed_at', [$startDateUtc, $endDateUtc])
-                ->when($storeId, fn ($q) => $q->where('orders.store_id', $storeId))
-                ->when($providerFilter, function ($q, $providerFilter) {
-                    if (str_contains($providerFilter, ':')) {
-                        [$provider, $origin] = explode(':', $providerFilter, 2);
-                        $q->where('orders.provider', $provider)->where('orders.origin', $origin);
-                    } else {
-                        $q->where('orders.provider', $providerFilter);
-                    }
-                })
-                ->selectRaw('
-                SUM(
-                    order_items.qty * order_item_mappings.quantity *
-                    COALESCE(order_item_mappings.unit_cost_override, internal_products.unit_cost)
-                ) as total_cmv
-            ')
-                ->first();
-
-            $totalCmv = (float) ($cmvData->total_cmv ?? 0);
+            $totalRevenue = $totals['total_revenue'];
+            $totalCmv = $totals['total_cmv'];
+            $totalTaxes = $totals['total_taxes'];
+            $totalRecalculatedCosts = $totals['total_recalculated_costs'];
+            $totalRecalculatedCommissions = $totals['total_recalculated_commissions'];
+            $totalRecalculatedPaymentFees = $totals['total_recalculated_payment_fees'];
+            $totalOrders = $totals['total_orders'];
 
             $totalSubsidies = $this->sumSubsidies(clone $baseQuery);
-
-            // Total de receita do período (fallback para soma dos pedidos caso agregação não exista)
-            $totalRevenue = (float) collect($orders)->sum(function ($o) {
-                return (float) ($o->gross_total ?? 0);
-            });
-
-            // Total de taxas de pagamento (usar valores recalculados como padrão)
-            // Garantir inicialização antes do uso
-            $totalRecalculatedPaymentFees = 0;
-            $totalPaymentMethodFees = (float) $totalRecalculatedPaymentFees;
-
-            // Calcular impostos dos produtos recalculados proporcionalmente ao subtotal
-            // Mesma lógica da página de pedidos
-            $totalProductTax = 0;
-            $totalAdditionalTaxes = 0;
-            $totalRecalculatedCosts = 0;
-            $totalRecalculatedCommissions = 0;
-            $totalRecalculatedPaymentFees = 0;
-
-            foreach ($orders as $order) {
-                // USAR ORDERC OSTSERVICE - FONTE ÚNICA DE VERDADE
-                $orderSubtotal = $orderCostService->getOrderSubtotal($order);
-                $raw = is_array($order->raw) ? $order->raw : ($order->raw ? json_decode($order->raw, true) : []);
-
-                // Buscar itens do pedido com categorias de imposto
-                $items = $order->items ?? [];
-                $taxCategories = [];
-                $totalItemsPrice = 0;
-
-                foreach ($items as $item) {
-                    $internalProduct = $item->internalProduct;
-                    if (! $internalProduct || ! $internalProduct->taxCategory) {
-                        continue;
-                    }
-
-                    $quantity = $item->qty ?? $item->quantity ?? 0;
-                    $unitPrice = $item->unit_price ?? $item->price ?? 0;
-                    $itemTotal = $quantity * $unitPrice;
-                    $totalItemsPrice += $itemTotal;
-
-                    $taxCategoryId = $internalProduct->taxCategory->id;
-
-                    if (isset($taxCategories[$taxCategoryId])) {
-                        $taxCategories[$taxCategoryId]['itemsTotal'] += $itemTotal;
-                    } else {
-                        $taxCategories[$taxCategoryId] = [
-                            'rate' => $internalProduct->taxCategory->total_tax_rate,
-                            'itemsTotal' => $itemTotal,
-                        ];
-                    }
-                }
-
-                // Calcular imposto proporcional ao subtotal
-                foreach ($taxCategories as $category) {
-                    $proportion = $totalItemsPrice > 0 ? ($category['itemsTotal'] / $totalItemsPrice) : 0;
-                    $taxValue = ($orderSubtotal * $proportion * $category['rate']) / 100;
-                    $totalProductTax += $taxValue;
-                }
-
-                // Impostos adicionais recalculados sobre o subtotal
-                $calculatedCosts = is_array($order->calculated_costs) ? $order->calculated_costs : ($order->calculated_costs ? json_decode($order->calculated_costs, true) : []);
-                $additionalTaxes = $calculatedCosts['taxes'] ?? [];
-
-                foreach ($additionalTaxes as $tax) {
-                    if (($tax['type'] ?? '') === 'percentage') {
-                        $value = (float) ($tax['value'] ?? 0);
-                        $totalAdditionalTaxes += ($orderSubtotal * $value) / 100;
-                    } else {
-                        $totalAdditionalTaxes += (float) ($tax['calculated_value'] ?? 0);
-                    }
-                }
-
-                // Custos recalculados sobre o subtotal
-                $costs = $calculatedCosts['costs'] ?? [];
-                foreach ($costs as $cost) {
-                    if (($cost['type'] ?? '') === 'percentage') {
-                        $value = (float) ($cost['value'] ?? 0);
-                        $totalRecalculatedCosts += ($orderSubtotal * $value) / 100;
-                    } else {
-                        $totalRecalculatedCosts += (float) ($cost['calculated_value'] ?? 0);
-                    }
-                }
-
-                // Comissões recalculadas sobre o subtotal
-                $commissions = $calculatedCosts['commissions'] ?? [];
-                foreach ($commissions as $commission) {
-                    if (($commission['type'] ?? '') === 'percentage') {
-                        $value = (float) ($commission['value'] ?? 0);
-                        $totalRecalculatedCommissions += ($orderSubtotal * $value) / 100;
-                    } else {
-                        $totalRecalculatedCommissions += (float) ($commission['calculated_value'] ?? 0);
-                    }
-                }
-
-                // Taxas de pagamento recalculadas sobre o subtotal
-                $paymentMethods = $calculatedCosts['payment_methods'] ?? [];
-                foreach ($paymentMethods as $paymentMethod) {
-                    if (($paymentMethod['type'] ?? '') === 'percentage') {
-                        $value = (float) ($paymentMethod['value'] ?? 0);
-                        $totalRecalculatedPaymentFees += ($orderSubtotal * $value) / 100;
-                    } else {
-                        $totalRecalculatedPaymentFees += (float) ($paymentMethod['calculated_value'] ?? 0);
-                    }
-                }
-            }
-
-            // Total de impostos
-            $totalTaxes = $totalProductTax + $totalAdditionalTaxes;
-
-            // Contar pedidos
-            $totalOrders = (int) ($simpleTotals->total_orders ?? 0);
 
             // Buscar movimentações financeiras do período
             $startDateParsed = Carbon::parse($startDate);
@@ -225,15 +93,15 @@ class DashboardController extends Controller
             // Subsídio já está incluso no Subtotal, descontos já estão aplicados no Subtotal
             $revenueAfterDeductions = $totalRevenue - $totalRecalculatedPaymentFees - $totalRecalculatedCommissions;
 
-            // 2. Margem de Contribuição (Lucro Bruto) = Total Líquido do Período
-            // Subtotal - CMV - Impostos - Custos - Comissões - Taxas Pgto
-            $contributionMargin = $totalRevenue - $totalCmv - $totalTaxes - $totalRecalculatedCosts - $totalRecalculatedCommissions - $totalRecalculatedPaymentFees;
+            // 2. Margem de Contribuição (Lucro Bruto)
+            // Receita após deduções - CMV - Custos Operacionais - Impostos
+            $contributionMargin = $revenueAfterDeductions - $totalCmv - $totalRecalculatedCosts - $totalTaxes;
 
             // 3. Custos Fixos = Movimentações Financeiras (despesas)
             $fixedCosts = $extraExpenses;
 
-            // 4. Lucro Líquido = mesmo que Lucro Bruto (MC)
-            $netProfit = $contributionMargin;
+            // 4. Lucro Líquido = Margem de Contribuição - Custos Fixos + Receitas Extras
+            $netProfit = $contributionMargin - $extraExpenses + $extraIncome;
 
             // Margem líquida %
             $marginPercent = $totalRevenue > 0 ? ($netProfit / $totalRevenue) * 100 : 0;
@@ -250,6 +118,7 @@ class DashboardController extends Controller
             // Mesma lógica do período atual, mas com datas anteriores
             $previousBaseQuery = Order::where('tenant_id', $tenantId)
                 ->whereBetween('placed_at', [$previousStartDateUtc, $previousEndDateUtc])
+                ->whereNotIn('status', ['CANCELLED', 'CANCELLATION_REQUESTED'])
                 ->when($storeId, fn ($q) => $q->where('store_id', $storeId))
                 ->when($providerFilter, function ($q, $providerFilter) {
                     if (str_contains($providerFilter, ':')) {
@@ -382,7 +251,7 @@ class DashboardController extends Controller
                 ->sum('amount');
 
             // Cálculos do período anterior (mesma lógica do DRE)
-            $previousRevenueAfterDeductions = $previousRevenue - $previousPaymentFees - $previousCommissions - $previousDiscounts;
+            $previousRevenueAfterDeductions = $previousRevenue - $previousPaymentFees - $previousCommissions;
             $previousContributionMargin = $previousRevenueAfterDeductions - $previousCmv - $previousCosts - $previousTaxes;
             $previousFixedCosts = $previousExtraExpenses;
             $previousNetProfit = $previousContributionMargin - $previousExtraExpenses + $previousExtraIncome;
@@ -444,7 +313,7 @@ class DashboardController extends Controller
                     // Distribuir proporcionalmente os valores que não estão agregados por dia
                     $dayCmv = $totalCmv * $proportion;
                     $dayTaxes = $totalTaxes * $proportion;
-                    $dayPaymentFees = $totalPaymentMethodFees * $proportion;
+                    $dayPaymentFees = $totalRecalculatedPaymentFees * $proportion;
 
                     $dayNetTotal = $dayRevenue - $dayCommissions - $dayCosts - $dayCmv - $dayTaxes - $dayPaymentFees;
                 } else {
