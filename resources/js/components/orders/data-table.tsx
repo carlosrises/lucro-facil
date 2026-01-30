@@ -309,11 +309,20 @@ export function DataTable({
     const [enrichedData, setEnrichedData] = React.useState<Order[]>(data);
     const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
 
-    // Estado para indicadores recalculados baseado em pedidos filtrados
-    const [recalculatedIndicators, setRecalculatedIndicators] = React.useState({
-        ...indicators,
-        averageMargin: 0,
-    });
+    // Calcular margem média para os indicadores
+    const averageMargin =
+        indicators.subtotal > 0
+            ? (indicators.netRevenue / indicators.subtotal) * 100
+            : 0;
+
+    // Usar indicadores do backend (já calculados para TODO o período filtrado)
+    const displayIndicators = React.useMemo(
+        () => ({
+            ...indicators,
+            averageMargin,
+        }),
+        [indicators, averageMargin],
+    );
 
     // Ref e state para altura dinâmica da tabela
     const containerRef = React.useRef<HTMLDivElement>(null);
@@ -822,271 +831,6 @@ export function DataTable({
         },
     });
 
-    // Recalcular indicadores baseado em pedidos filtrados
-    React.useEffect(() => {
-        const allFilteredRows = table.getFilteredRowModel().rows;
-        const allOrders = allFilteredRows.map((row) => row.original);
-
-        // Calcular subtotal
-        const subtotal = allOrders.reduce((sum, order) => {
-            const isCancelled = order.status === 'CANCELLED';
-            if (isCancelled) return sum;
-            return sum + calculateOrderSubtotal(order);
-        }, 0);
-
-        // Calcular CMV
-        const cmv = allOrders.reduce((sum, order) => {
-            const isCancelled = order.status === 'CANCELLED';
-            if (isCancelled) return sum;
-            return sum + calculateOrderCMV(order.items || []);
-        }, 0);
-
-        // Calcular net revenue recalculado (mesma lógica do rodapé)
-        const netRevenue = allOrders.reduce((sum, order) => {
-            const isCancelled = order.status === 'CANCELLED';
-            if (isCancelled) return sum;
-
-            const orderSubtotal = calculateOrderSubtotal(order);
-            const orderCmv = calculateOrderCMV(order.items || []);
-            const items = order.items || [];
-            const calculatedCosts = order.calculated_costs;
-
-            // Recalcular impostos
-            const taxCategories = new Map<
-                number,
-                { rate: number; itemsTotal: number }
-            >();
-            let totalItemsPrice = 0;
-
-            items.forEach((item) => {
-                if (item.internal_product?.tax_category?.total_tax_rate) {
-                    const quantity = item.qty || item.quantity || 0;
-                    const unitPrice = item.unit_price || item.price || 0;
-                    const itemTotal = quantity * unitPrice;
-                    totalItemsPrice += itemTotal;
-
-                    const taxCategoryId = item.internal_product.tax_category.id;
-                    const existingCategory = taxCategories.get(taxCategoryId);
-
-                    if (existingCategory) {
-                        existingCategory.itemsTotal += itemTotal;
-                    } else {
-                        taxCategories.set(taxCategoryId, {
-                            rate: item.internal_product.tax_category
-                                .total_tax_rate,
-                            itemsTotal: itemTotal,
-                        });
-                    }
-                }
-            });
-
-            let productTax = 0;
-            taxCategories.forEach((category) => {
-                const proportion =
-                    totalItemsPrice > 0
-                        ? category.itemsTotal / totalItemsPrice
-                        : 0;
-                const taxValue =
-                    (orderSubtotal * proportion * category.rate) / 100;
-                productTax += taxValue;
-            });
-
-            const additionalTaxes = calculatedCosts?.taxes || [];
-            const totalAdditionalTax = additionalTaxes.reduce(
-                (taxSum: number, tax: any) => {
-                    if (tax.type === 'percentage') {
-                        const value = parseFloat(String(tax.value || '0')) || 0;
-                        return taxSum + (orderSubtotal * value) / 100;
-                    }
-                    return taxSum + (tax.calculated_value || 0);
-                },
-                0,
-            );
-
-            const totalTax = productTax + totalAdditionalTax;
-
-            // Recalcular custos
-            const costs = calculatedCosts?.costs || [];
-            const totalCosts = costs.reduce((costSum: number, cost: any) => {
-                if (cost.type === 'percentage') {
-                    const value = parseFloat(String(cost.value || '0')) || 0;
-                    return costSum + (orderSubtotal * value) / 100;
-                }
-                return costSum + (cost.calculated_value || 0);
-            }, 0);
-
-            // Recalcular comissões
-            const commissions = calculatedCosts?.commissions || [];
-            const totalCommissions = commissions.reduce(
-                (commSum: number, comm: any) => {
-                    if (comm.type === 'percentage') {
-                        const value =
-                            parseFloat(String(comm.value || '0')) || 0;
-                        return commSum + (orderSubtotal * value) / 100;
-                    }
-                    return commSum + (comm.calculated_value || 0);
-                },
-                0,
-            );
-
-            // Recalcular taxas de pagamento
-            const paymentMethodFees = calculatedCosts?.payment_methods || [];
-            const totalPaymentMethodFee = paymentMethodFees.reduce(
-                (feeSum: number, fee: any) => {
-                    if (fee.type === 'percentage') {
-                        const value = parseFloat(String(fee.value || '0')) || 0;
-                        return feeSum + (orderSubtotal * value) / 100;
-                    }
-                    return feeSum + (fee.calculated_value || 0);
-                },
-                0,
-            );
-
-            const orderNetRevenue =
-                orderSubtotal -
-                orderCmv -
-                totalTax -
-                totalCosts -
-                totalCommissions -
-                totalPaymentMethodFee;
-
-            return sum + orderNetRevenue;
-        }, 0);
-
-        // Contar pedidos não cancelados
-        const orderCount = allOrders.filter(
-            (order) => order.status !== 'CANCELLED',
-        ).length;
-
-        // Calcular ticket médio
-        const averageTicket = orderCount > 0 ? subtotal / orderCount : 0;
-
-        // Calcular média aritmética das margens individuais
-        const marginsSum = allOrders.reduce((sum, order) => {
-            const isCancelled = order.status === 'CANCELLED';
-            if (isCancelled) return sum;
-
-            const orderSubtotal = calculateOrderSubtotal(order);
-            if (orderSubtotal === 0) return sum;
-
-            const orderCmv = calculateOrderCMV(order.items || []);
-            const items = order.items || [];
-            const calculatedCosts = order.calculated_costs;
-
-            // Recalcular impostos
-            const taxCategories = new Map<
-                number,
-                { rate: number; itemsTotal: number }
-            >();
-            let totalItemsPrice = 0;
-
-            items.forEach((item) => {
-                if (item.internal_product?.tax_category?.total_tax_rate) {
-                    const quantity = item.qty || item.quantity || 0;
-                    const unitPrice = item.unit_price || item.price || 0;
-                    const itemTotal = quantity * unitPrice;
-                    totalItemsPrice += itemTotal;
-
-                    const taxCategoryId = item.internal_product.tax_category.id;
-                    const existingCategory = taxCategories.get(taxCategoryId);
-
-                    if (existingCategory) {
-                        existingCategory.itemsTotal += itemTotal;
-                    } else {
-                        taxCategories.set(taxCategoryId, {
-                            rate: item.internal_product.tax_category
-                                .total_tax_rate,
-                            itemsTotal: itemTotal,
-                        });
-                    }
-                }
-            });
-
-            let productTax = 0;
-            taxCategories.forEach((category) => {
-                const proportion =
-                    totalItemsPrice > 0
-                        ? category.itemsTotal / totalItemsPrice
-                        : 0;
-                const taxValue =
-                    (orderSubtotal * proportion * category.rate) / 100;
-                productTax += taxValue;
-            });
-
-            const additionalTaxes = calculatedCosts?.taxes || [];
-            const totalAdditionalTax = additionalTaxes.reduce(
-                (taxSum: number, tax: any) => {
-                    if (tax.type === 'percentage') {
-                        const value = parseFloat(String(tax.value || '0')) || 0;
-                        return taxSum + (orderSubtotal * value) / 100;
-                    }
-                    return taxSum + (tax.calculated_value || 0);
-                },
-                0,
-            );
-
-            const totalTax = productTax + totalAdditionalTax;
-
-            const costs = calculatedCosts?.costs || [];
-            const totalCosts = costs.reduce((costSum: number, cost: any) => {
-                if (cost.type === 'percentage') {
-                    const value = parseFloat(String(cost.value || '0')) || 0;
-                    return costSum + (orderSubtotal * value) / 100;
-                }
-                return costSum + (cost.calculated_value || 0);
-            }, 0);
-
-            const commissions = calculatedCosts?.commissions || [];
-            const totalCommissions = commissions.reduce(
-                (commSum: number, comm: any) => {
-                    if (comm.type === 'percentage') {
-                        const value =
-                            parseFloat(String(comm.value || '0')) || 0;
-                        return commSum + (orderSubtotal * value) / 100;
-                    }
-                    return commSum + (comm.calculated_value || 0);
-                },
-                0,
-            );
-
-            const paymentMethodFees = calculatedCosts?.payment_methods || [];
-            const totalPaymentMethodFee = paymentMethodFees.reduce(
-                (feeSum: number, fee: any) => {
-                    if (fee.type === 'percentage') {
-                        const value = parseFloat(String(fee.value || '0')) || 0;
-                        return feeSum + (orderSubtotal * value) / 100;
-                    }
-                    return feeSum + (fee.calculated_value || 0);
-                },
-                0,
-            );
-
-            const orderNetRevenue =
-                orderSubtotal -
-                orderCmv -
-                totalTax -
-                totalCosts -
-                totalCommissions -
-                totalPaymentMethodFee;
-
-            // Calcular margem % do pedido
-            const orderMargin = (orderNetRevenue / orderSubtotal) * 100;
-
-            return sum + orderMargin;
-        }, 0);
-
-        const averageMargin = orderCount > 0 ? marginsSum / orderCount : 0;
-
-        setRecalculatedIndicators({
-            subtotal,
-            averageTicket,
-            cmv,
-            netRevenue,
-            orderCount,
-            averageMargin,
-        });
-    }, [enrichedData, columnFilters, sorting]);
-
     return (
         <div className="flex w-full flex-col gap-4 px-4 lg:px-6">
             {/* Avisos minimalistas no topo */}
@@ -1183,7 +927,7 @@ export function DataTable({
                     ))}
                 </div>
             ) : (
-                <OrderIndicators data={recalculatedIndicators} />
+                <OrderIndicators data={displayIndicators} />
             )}
 
             {/* Filtros e busca */}

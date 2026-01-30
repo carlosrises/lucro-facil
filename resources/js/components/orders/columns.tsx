@@ -46,24 +46,14 @@ export function calculateOrderSubtotal(order: Order): number {
             return sum + value;
         }, 0);
 
-        // Se for Takeat + iFood, subtrair taxa de R$0,99
+        // Se for Takeat + iFood, subtrair taxa FIXA de R$0,99
         const origin = order?.origin?.toLowerCase() || '';
         const sessionChannel =
             order?.raw?.session?.sales_channel?.toLowerCase() || '';
         const isIfoodOrder = origin === 'ifood' || sessionChannel === 'ifood';
 
         if (isIfoodOrder && subtotal > 0) {
-            const rawSessionServiceFee =
-                parseFloat(
-                    String(
-                        order?.raw?.session?.service_fee ??
-                            order?.raw?.session?.serviceFee ??
-                            0,
-                    ),
-                ) || 0;
-            const ifoodFee =
-                rawSessionServiceFee > 0 ? rawSessionServiceFee : 0.99;
-            subtotal = Math.max(subtotal - ifoodFee, 0);
+            subtotal = Math.max(subtotal - 0.99, 0);
         }
 
         return subtotal;
