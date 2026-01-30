@@ -141,7 +141,9 @@ export default function PaymentTriage({
             return;
         }
 
-        const channel = window.Echo.private(`tenant.${auth.user.tenant_id}`);
+        const channel = window.Echo.channel(
+            `orders.tenant.${auth.user.tenant_id}`,
+        );
 
         channel.listen(
             '.payment-method-linked',

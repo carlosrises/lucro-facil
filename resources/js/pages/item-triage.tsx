@@ -180,10 +180,12 @@ export default function ItemTriage({
 
     // Listener WebSocket para atualizar quando items são vinculados
     useEffect(() => {
-        const channel = window.Echo?.private(`tenant.${auth.user.tenant_id}`);
+        const channel = window.Echo?.channel(
+            `orders.tenant.${auth.user.tenant_id}`,
+        );
 
         if (channel) {
-            channel.listen('ItemTriaged', (event: any) => {
+            channel.listen('.item.triaged', (event: any) => {
                 // Mostrar toast de sucesso
                 if (event.action === 'mapped') {
                     toast.success(`${event.itemName} vinculado com sucesso!`);
@@ -197,7 +199,7 @@ export default function ItemTriage({
         }
 
         return () => {
-            channel?.stopListening('ItemTriaged');
+            channel?.stopListening('.item.triaged');
         };
     }, [auth.user.tenant_id]);
 
