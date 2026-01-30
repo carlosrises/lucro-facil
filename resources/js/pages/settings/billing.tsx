@@ -40,6 +40,7 @@ interface Plan {
 interface Subscription {
     id: number;
     plan_id: number;
+    price_interval: string;
     status: string;
     started_on: string;
     ends_on: string | null;
@@ -129,22 +130,76 @@ export default function Billing() {
                                             ? `Plano Atual: ${currentPlan.name}`
                                             : 'Plano Atual: Free'}
                                     </h3>
-                                    {currentPlan &&
-                                    currentPlan.price_month !== null ? (
-                                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                            R${' '}
-                                            {currentPlan.price_month.toLocaleString(
-                                                'pt-BR',
-                                                {
-                                                    minimumFractionDigits: 2,
-                                                    maximumFractionDigits: 2,
-                                                },
-                                            )}{' '}
-                                            /mês
-                                        </p>
+                                    {currentPlan && subscription ? (
+                                        (() => {
+                                            const priceInfo =
+                                                getPlanPrice(currentPlan);
+                                            const actualInterval =
+                                                subscription.price_interval ||
+                                                'month';
+                                            const actualPrice =
+                                                currentPlan.prices?.find(
+                                                    (p) =>
+                                                        p.interval ===
+                                                        actualInterval,
+                                                );
+
+                                            if (
+                                                actualPrice &&
+                                                actualPrice.amount !== null
+                                            ) {
+                                                return (
+                                                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                                        R${' '}
+                                                        {Number(
+                                                            actualPrice.amount,
+                                                        ).toLocaleString(
+                                                            'pt-BR',
+                                                            {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 2,
+                                                            },
+                                                        )}{' '}
+                                                        /
+                                                        {actualInterval ===
+                                                        'year'
+                                                            ? 'ano'
+                                                            : 'mês'}
+                                                    </p>
+                                                );
+                                            }
+
+                                            if (
+                                                currentPlan.price_month !== null
+                                            ) {
+                                                return (
+                                                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                                        R${' '}
+                                                        {Number(
+                                                            currentPlan.price_month,
+                                                        ).toLocaleString(
+                                                            'pt-BR',
+                                                            {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 2,
+                                                            },
+                                                        )}{' '}
+                                                        /mês
+                                                    </p>
+                                                );
+                                            }
+
+                                            return (
+                                                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                                    Plano gratuito
+                                                </p>
+                                            );
+                                        })()
                                     ) : (
                                         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                            Plano gratuito
+                                            {currentPlan
+                                                ? 'Sem assinatura ativa'
+                                                : 'Plano gratuito'}
                                         </p>
                                     )}
                                     {subscription && subscription.ends_on && (
