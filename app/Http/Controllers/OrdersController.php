@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\IfoodOrderStatus;
 use App\Models\Order;
 use App\Models\Store;
+use App\Services\FinancialAggregationService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -933,141 +934,119 @@ class OrdersController extends Controller
     }
 
     /**
-     * Calcular indicadores do período (Subtotal, Ticket Médio, CMV, Total Líquido)
+     * Calcular indicadores do período filtrado
+     * IMPORTANTE: Deve usar EXATAMENTE os mesmos filtros da listagem principal
      */
     private function calculatePeriodIndicators(Request $request): array
     {
-        // Construir query base com os mesmos filtros da listagem
-        $query = Order::query()
-            ->where('orders.tenant_id', tenant_id())
-            ->where('orders.status', '!=', 'CANCELLED') // Excluir cancelados dos indicadores
-            ->when($request->input('store_id'), fn ($q, $storeId) => $q->where('orders.store_id', $storeId))
+        $financialAggregation = app(FinancialAggregationService::class);
+
+        // Construir query base com os MESMOS filtros da listagem principal
+        $baseQuery = Order::query()
+            ->where('tenant_id', tenant_id())
+            // Filtro de status (igual linha 42-48 da listagem)
+            ->when($request->input('status'), function ($q, $status) {
+                if ($status !== 'all') {
+                    $q->where('status', $status);
+                }
+            }, function ($q) {
+                // Se não tem filtro de status, excluir apenas cancelados (padrão)
+                $q->whereNotIn('status', ['CANCELLED', 'CANCELLATION_REQUESTED']);
+            })
+            // Filtro de loja
+            ->when($request->input('store_id'), fn ($q, $storeId) => $q->where('store_id', $storeId))
+            // Filtro de provider
             ->when($request->input('provider'), function ($q, $providerFilter) {
                 if (str_contains($providerFilter, ':')) {
                     [$provider, $origin] = explode(':', $providerFilter, 2);
-                    $q->where('orders.provider', $provider)->where('orders.origin', $origin);
+                    $q->where('provider', $provider)->where('origin', $origin);
                 } else {
-                    $q->where('orders.provider', $providerFilter);
+                    $q->where('provider', $providerFilter);
                 }
             })
-            ->when(true, function ($q) use ($request) {
-                $startDate = $request->input('start_date', now()->startOfMonth()->format('Y-m-d'));
-                $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
-
-                $startDateUtc = \Carbon\Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
-                $endDateUtc = \Carbon\Carbon::parse($endDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
-
-                return $q->whereBetween('orders.placed_at', [$startDateUtc, $endDateUtc]);
-            })
+            // Filtro de tipo de pedido
             ->when($request->input('order_type'), function ($q, $orderType) {
                 $normalizedType = strtoupper($orderType);
                 $q->where(function ($query) use ($normalizedType) {
                     $query->where(function ($q) use ($normalizedType) {
-                        $q->where('orders.provider', 'takeat')
-                            ->whereRaw("UPPER(JSON_UNQUOTE(JSON_EXTRACT(orders.raw, '$.session.table.table_type'))) = ?", [$normalizedType]);
+                        $q->where('provider', 'takeat')
+                            ->whereRaw("UPPER(JSON_UNQUOTE(JSON_EXTRACT(raw, '$.session.table.table_type'))) = ?", [$normalizedType]);
                     })
-                        ->orWhereRaw("UPPER(JSON_UNQUOTE(JSON_EXTRACT(orders.raw, '$.orderType'))) = ?", [$normalizedType]);
+                        ->orWhereRaw("UPPER(JSON_UNQUOTE(JSON_EXTRACT(raw, '$.orderType'))) = ?", [$normalizedType]);
+                });
+            })
+            // Filtro de produtos não mapeados
+            ->when($request->input('unmapped_only'), function ($q) {
+                $q->whereHas('items', function ($query) {
+                    $query->whereDoesntHave('internalProduct');
+                });
+            })
+            // Filtro de sem taxa de pagamento
+            ->when($request->input('no_payment_method'), function ($q) {
+                $q->where(function ($query) {
+                    $query->whereRaw("JSON_LENGTH(JSON_EXTRACT(calculated_costs, '$.payment_methods')) = 0 OR JSON_EXTRACT(calculated_costs, '$.payment_methods') IS NULL");
+                })
+                    ->where(function ($query) {
+                        $query->where('provider', '!=', 'takeat')
+                            ->orWhereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) > 0");
+                    });
+            })
+            // Filtro de sem informação de pagamento
+            ->when($request->input('no_payment_info'), function ($q) {
+                $q->where('provider', 'takeat')
+                    ->whereRaw("JSON_LENGTH(JSON_EXTRACT(raw, '$.session.payments')) = 0 OR JSON_EXTRACT(raw, '$.session.payments') IS NULL");
+            })
+            // Filtro de busca
+            ->when($request->input('search'), function ($q, $search) {
+                $q->where(function ($query) use ($search) {
+                    $query->where('id', 'like', "%{$search}%")
+                        ->orWhere('code', 'like', "%{$search}%")
+                        ->orWhere('short_reference', 'like', "%{$search}%");
+                });
+            })
+            // Filtro de método de pagamento
+            ->when($request->input('payment_method'), function ($q, $paymentMethod) {
+                $methods = is_array($paymentMethod) ? $paymentMethod : explode(',', $paymentMethod);
+                $q->where(function ($query) use ($methods) {
+                    foreach ($methods as $method) {
+                        $method = trim(strtoupper($method));
+                        $query->orWhereRaw("JSON_SEARCH(JSON_EXTRACT(raw, '$.session.payments[*].payment_method.method'), 'one', ?) IS NOT NULL", [$method]);
+                    }
                 });
             });
 
-        // Buscar os pedidos para cálculo detalhado do subtotal (mesma lógica do frontend)
-        $orders = $query->get();
-        $orderCount = $orders->count();
-        $netRevenue = $orders->sum('net_revenue');
+        // Obter datas do filtro (sempre aplicado)
+        $startDate = $request->input('start_date', now()->startOfMonth()->format('Y-m-d'));
+        $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
 
-        // Calcular subtotal usando a mesma lógica complexa do frontend
-        $subtotal = 0;
-        foreach ($orders as $order) {
-            $raw = $order->raw;
-            $provider = $order->provider;
+        $startDateUtc = \Carbon\Carbon::parse($startDate.' 00:00:00', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
+        $endDateUtc = \Carbon\Carbon::parse($endDate.' 23:59:59', 'America/Sao_Paulo')->setTimezone('UTC')->toDateTimeString();
 
-            // Começar com gross_total
-            $grossTotal = (float) ($order->gross_total ?? 0);
-
-            // Para Takeat, priorizar total_delivery_price ou total_price
-            if ($provider === 'takeat') {
-                if (isset($raw['session']['total_delivery_price'])) {
-                    $grossTotal = (float) $raw['session']['total_delivery_price'];
-                } elseif (isset($raw['session']['total_price'])) {
-                    $grossTotal = (float) $raw['session']['total_price'];
-                }
-            }
-
-            $deliveryFee = (float) ($order->delivery_fee ?? 0);
-
-            // Calcular subsídios (apenas para Takeat)
-            $totalSubsidy = 0;
-            if ($provider === 'takeat' && isset($raw['session']['payments'])) {
-                foreach ($raw['session']['payments'] as $payment) {
-                    $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                    $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-
-                    $isSubsidy = str_contains($paymentName, 'subsid') ||
-                                 str_contains($paymentName, 'cupom') ||
-                                 str_contains($paymentKeyword, 'subsid') ||
-                                 str_contains($paymentKeyword, 'cupom');
-
-                    if ($isSubsidy) {
-                        $totalSubsidy += (float) ($payment['payment_value'] ?? 0);
-                    }
-                }
-            }
-
-            $totalCashback = (float) ($order->cashback_total ?? 0);
-
-            // Calcular subtotal do pedido
-            $orderSubtotal = $grossTotal;
-            $usedTotalDeliveryPrice = $provider === 'takeat' && isset($raw['session']['total_delivery_price']);
-
-            // Verificar se deve excluir taxa de entrega (pedidos Takeat-iFood com entrega do marketplace)
-            $deliveryBy = strtoupper($raw['session']['delivery_by'] ?? '');
-            $isMarketplaceDelivery = in_array($deliveryBy, ['IFOOD', 'MARKETPLACE']);
-            $isTakeatIfood = $provider === 'takeat' && $order->origin === 'ifood';
-            $skipDeliveryFeeInSubtotal = $isTakeatIfood && $isMarketplaceDelivery;
-
-            if (! $usedTotalDeliveryPrice) {
-                $orderSubtotal += $totalSubsidy;
-                if (! $skipDeliveryFeeInSubtotal) {
-                    $orderSubtotal += $deliveryFee;
-                }
-            } elseif ($skipDeliveryFeeInSubtotal && $deliveryFee > 0) {
-                $orderSubtotal -= $deliveryFee;
-            }
-
-            // Descontar cashback
-            $orderSubtotal -= $totalCashback;
-
-            // Taxa de serviço iFood (R$ 0,99 para pedidos Takeat-iFood)
-            if ($isTakeatIfood) {
-                $orderSubtotal -= 0.99;
-            }
-
-            $subtotal += $orderSubtotal;
-        }
-
-        // Calcular CMV dos produtos (não incluir custos variáveis)
-        $cmvQuery = clone $query;
-        $cmvData = $cmvQuery
-            ->join('order_items', 'order_items.order_id', '=', 'orders.id')
-            ->join('order_item_mappings', 'order_item_mappings.order_item_id', '=', 'order_items.id')
-            ->join('internal_products', 'internal_products.id', '=', 'order_item_mappings.internal_product_id')
-            ->selectRaw('
-                SUM(
-                    order_items.qty * order_item_mappings.quantity *
-                    COALESCE(order_item_mappings.unit_cost_override, internal_products.unit_cost)
-                ) as total_cmv
-            ')
-            ->first();
-
-        $cmv = (float) ($cmvData->total_cmv ?? 0);
+        // Calcular totais usando o serviço (otimizado com chunks)
+        $totals = $financialAggregation->calculatePeriodTotals(
+            $baseQuery,
+            tenant_id(),
+            $startDateUtc,
+            $endDateUtc
+        );
 
         // Calcular ticket médio
+        $orderCount = $totals['total_orders'];
+        $subtotal = $totals['total_revenue'];
         $averageTicket = $orderCount > 0 ? $subtotal / $orderCount : 0;
+
+        // Calcular Lucro Bruto (MC) = Subtotal - CMV - Impostos - Custos - Comissões - Taxas de Pagamento
+        $netRevenue = $subtotal
+            - $totals['total_cmv']
+            - $totals['total_taxes']
+            - $totals['total_recalculated_costs']
+            - $totals['total_recalculated_commissions']
+            - $totals['total_recalculated_payment_fees'];
 
         return [
             'subtotal' => $subtotal,
             'averageTicket' => $averageTicket,
-            'cmv' => $cmv,
+            'cmv' => $totals['total_cmv'],
             'netRevenue' => $netRevenue,
             'orderCount' => $orderCount,
         ];
