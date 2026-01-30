@@ -19,6 +19,7 @@ Route::prefix('admin')->middleware(['auth', 'role:admin|admin:system'])->name('a
     Route::post('plans/sync-to-stripe', [PlansController::class, 'syncToStripe'])->name('plans.syncToStripe');
     Route::post('plans/update-order', [PlansController::class, 'updateOrder'])->name('plans.updateOrder');
     Route::post('plans/{plan}/toggle-featured', [PlansController::class, 'toggleFeatured'])->name('plans.toggleFeatured');
+    Route::post('plans/{plan}/toggle-active', [PlansController::class, 'toggleActive'])->name('plans.toggleActive');
 
     Route::get('/payments', function () {
         return inertia('admin/payments');
