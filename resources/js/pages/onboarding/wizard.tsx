@@ -328,17 +328,19 @@ export default function OnboardingWizard() {
                                                     <h3 className="font-bold">
                                                         {plan.name}
                                                     </h3>
-                                                    {priceInfo && (
-                                                        <p className="text-sm text-muted-foreground">
-                                                            R${' '}
-                                                            {priceInfo.amount.toFixed(
-                                                                2,
-                                                            )}{' '}
-                                                            {
-                                                                priceInfo.periodLabel
-                                                            }
-                                                        </p>
-                                                    )}
+                                                    {priceInfo &&
+                                                        priceInfo.amount !==
+                                                            null && (
+                                                            <p className="text-sm text-muted-foreground">
+                                                                R${' '}
+                                                                {priceInfo.amount.toFixed(
+                                                                    2,
+                                                                )}{' '}
+                                                                {
+                                                                    priceInfo.periodLabel
+                                                                }
+                                                            </p>
+                                                        )}
                                                 </div>
                                                 <Button
                                                     onClick={() =>
