@@ -189,6 +189,37 @@ export const createColumns = ({
         },
     },
     {
+        accessorKey: 'stripe_product_id',
+        header: 'Stripe',
+        cell: ({ row }) => {
+            const productId = row.getValue('stripe_product_id') as
+                | string
+                | null;
+            const priceId = row.original.stripe_price_id;
+
+            if (!productId) {
+                return (
+                    <span className="text-xs text-muted-foreground">
+                        Não sincronizado
+                    </span>
+                );
+            }
+
+            return (
+                <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+                    <span title={`Product: ${productId}`}>
+                        {productId.substring(0, 15)}...
+                    </span>
+                    {priceId && (
+                        <span title={`Price: ${priceId}`}>
+                            {priceId.substring(0, 15)}...
+                        </span>
+                    )}
+                </div>
+            );
+        },
+    },
+    {
         accessorKey: 'subscriptions_count',
         header: 'Assinaturas',
         cell: ({ row }) => {
@@ -214,8 +245,9 @@ export const createColumns = ({
                 setIsDeleteDialogOpen(false);
             };
 
+            // Toggle active status (POST method)
             const handleToggleActive = () => {
-                router.patch(
+                router.post(
                     `/admin/plans/${plan.id}/toggle-active`,
                     {},
                     {

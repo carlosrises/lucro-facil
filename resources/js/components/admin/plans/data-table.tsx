@@ -61,6 +61,7 @@ import {
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
+    Download,
     GripVertical,
     LayoutGrid,
     Plus,
@@ -274,14 +275,14 @@ export function DataTable({
             {
                 preserveScroll: true,
                 onSuccess: () => {
-                    toast.success('Planos sincronizados com sucesso!');
+                    toast.success('Planos importados do Stripe com sucesso!');
                     setIsSyncing(false);
                 },
                 onError: (errors) => {
                     toast.error(
                         errors.error
                             ? (errors.error as string)
-                            : 'Erro ao sincronizar planos',
+                            : 'Erro ao importar planos',
                     );
                     setIsSyncing(false);
                 },
@@ -438,7 +439,7 @@ export function DataTable({
                             <DropdownMenuCheckboxItem
                                 onSelect={handleSyncFromStripe}
                             >
-                                <Upload className="mr-2 h-4 w-4" />
+                                <Download className="mr-2 h-4 w-4" />
                                 Importar do Stripe
                             </DropdownMenuCheckboxItem>
                             <DropdownMenuCheckboxItem
