@@ -46,6 +46,7 @@ interface Plan {
     prices?: PlanPrice[];
     features: string[];
     is_contact_plan?: boolean;
+    contact_url?: string;
 }
 
 interface OnboardingProps {
@@ -120,18 +121,36 @@ export default function OnboardingWizard() {
         const targetInterval = isAnnual ? 'year' : 'month';
         const price = plan.prices?.find((p) => p.interval === targetInterval);
 
-        if (price && price.amount !== null) {
-            return {
-                amount: price.amount,
-                periodLabel:
-                    price.period_label || (isAnnual ? 'por ano' : 'por mês'),
-            };
+        if (price && price.amount !== null && price.amount !== undefined) {
+            const amount =
+                typeof price.amount === 'number'
+                    ? price.amount
+                    : parseFloat(String(price.amount));
+            if (!isNaN(amount)) {
+                return {
+                    amount,
+                    periodLabel:
+                        price.period_label ||
+                        (isAnnual ? 'por ano' : 'por mês'),
+                };
+            }
         }
 
-        return {
-            amount: plan.price_month,
-            periodLabel: 'por mês',
-        };
+        // Fallback para price_month
+        if (plan.price_month !== null && plan.price_month !== undefined) {
+            const amount =
+                typeof plan.price_month === 'number'
+                    ? plan.price_month
+                    : parseFloat(String(plan.price_month));
+            if (!isNaN(amount)) {
+                return {
+                    amount,
+                    periodLabel: 'por mês',
+                };
+            }
+        }
+
+        return null;
     };
 
     return (
@@ -280,8 +299,8 @@ export default function OnboardingWizard() {
                                 Escolha seu plano
                             </h2>
                             <p className="mb-6 text-muted-foreground">
-                                Você está no plano FREE. Que tal experimentar 7
-                                dias grátis?
+                                Você ainda não escolheu um plano. Que tal
+                                experimentar 7 dias grátis?
                             </p>
 
                             <div className="mb-6 flex items-center justify-center gap-3">
@@ -344,16 +363,25 @@ export default function OnboardingWizard() {
                                                 </div>
                                                 <Button
                                                     onClick={() =>
-                                                        handleSelectPlan(
-                                                            plan.id,
-                                                        )
+                                                        plan.is_contact_plan &&
+                                                        plan.contact_url
+                                                            ? window.open(
+                                                                  plan.contact_url,
+                                                                  '_blank',
+                                                              )
+                                                            : handleSelectPlan(
+                                                                  plan.id,
+                                                              )
                                                     }
                                                     disabled={
+                                                        !plan.is_contact_plan &&
                                                         loadingPlanId !== null
                                                     }
                                                 >
-                                                    {loadingPlanId ===
-                                                    plan.id ? (
+                                                    {plan.is_contact_plan ? (
+                                                        'Entrar em contato'
+                                                    ) : loadingPlanId ===
+                                                      plan.id ? (
                                                         <>
                                                             <Loader2 className="h-4 w-4 animate-spin" />
                                                             Carregando...
