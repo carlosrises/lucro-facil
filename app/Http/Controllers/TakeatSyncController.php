@@ -16,10 +16,10 @@ class TakeatSyncController extends Controller
         try {
             $tenantId = $request->user()->tenant_id;
 
-            Log::info("Sincronização rápida Takeat iniciada (em background)", [
-                'tenant_id' => $tenantId,
-                'user_id' => $request->user()->id,
-            ]);
+            // Log::info("Sincronização rápida Takeat iniciada (em background)", [
+            //     'tenant_id' => $tenantId,
+            //     'user_id' => $request->user()->id,
+            // ]);
 
             // Usar timezone BRT explicitamente
             $todayBRT = now('America/Sao_Paulo')->format('Y-m-d');
@@ -35,7 +35,7 @@ class TakeatSyncController extends Controller
                 'message' => 'Sincronização iniciada! Os pedidos serão processados em segundo plano.',
             ]);
         } catch (\Exception $e) {
-            Log::error("Erro na sincronização rápida Takeat", [
+            Log::error('Erro na sincronização rápida Takeat', [
                 'tenant_id' => $request->user()->tenant_id,
                 'error' => $e->getMessage(),
             ]);
@@ -60,11 +60,11 @@ class TakeatSyncController extends Controller
             $tenantId = $request->user()->tenant_id;
             $date = $request->input('date');
 
-            Log::info("Sincronização Takeat por data iniciada (em background)", [
-                'tenant_id' => $tenantId,
-                'user_id' => $request->user()->id,
-                'date' => $date,
-            ]);
+            // Log::info('Sincronização Takeat por data iniciada (em background)', [
+            //     'tenant_id' => $tenantId,
+            //     'user_id' => $request->user()->id,
+            //     'date' => $date,
+            // ]);
 
             // Despachar job em background para não bloquear a requisição HTTP
             \Artisan::queue('takeat:sync-orders', [
@@ -77,7 +77,7 @@ class TakeatSyncController extends Controller
                 'message' => 'Sincronização iniciada! Os pedidos serão processados em segundo plano.',
             ]);
         } catch (\Exception $e) {
-            Log::error("Erro na sincronização Takeat por data", [
+            Log::error('Erro na sincronização Takeat por data', [
                 'tenant_id' => $request->user()->tenant_id,
                 'date' => $request->input('date'),
                 'error' => $e->getMessage(),

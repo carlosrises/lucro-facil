@@ -67,29 +67,29 @@ class OnboardingController extends Controller
      */
     public function setBusinessType(Request $request)
     {
-        \Log::info('setBusinessType chamado', ['data' => $request->all()]);
+        // \Log::info('setBusinessType chamado', ['data' => $request->all()]);
 
-        $request->validate([
-            'business_type' => 'required|string|in:pizzaria,hamburgueria,restaurante,lanchonete',
-        ]);
+        // $request->validate([
+        //     'business_type' => 'required|string|in:pizzaria,hamburgueria,restaurante,lanchonete',
+        // ]);
 
         $user = Auth::user();
         $tenant = $user->tenant;
 
-        \Log::info('Tenant atual', ['tenant_id' => $tenant->id, 'business_type_atual' => $tenant->business_type]);
+        // \Log::info('Tenant atual', ['tenant_id' => $tenant->id, 'business_type_atual' => $tenant->business_type]);
 
         // Salvar tipo de negócio
         $tenant->update([
             'business_type' => $request->business_type,
         ]);
 
-        \Log::info('Tenant atualizado', ['tenant_id' => $tenant->id, 'novo_business_type' => $tenant->business_type]);
+        // \Log::info('Tenant atualizado', ['tenant_id' => $tenant->id, 'novo_business_type' => $tenant->business_type]);
 
         // Aplicar presets
         try {
             $stats = $this->presetsService->applyPreset($tenant, $request->business_type);
 
-            \Log::info('Preset aplicado com sucesso', ['stats' => $stats]);
+            // \Log::info('Preset aplicado com sucesso', ['stats' => $stats]);
 
             return redirect()
                 ->route('onboarding', ['step' => 2])

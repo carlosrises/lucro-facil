@@ -14,7 +14,8 @@ import {
 } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
+import axios from 'axios';
 import {
     Box,
     CheckCircle2,
@@ -49,6 +50,7 @@ interface ItemMapping {
     internal_product_id: number | null;
     internal_product_name: string | null;
     internal_product_cost: number | null;
+    is_linking: boolean;
 }
 
 interface Item {
@@ -155,6 +157,7 @@ export default function ItemTriage({
     stats,
     filters,
 }: ItemTriageProps) {
+    const { auth } = usePage<{ auth: { user: { tenant_id: number } } }>().props;
     const [selectedItem, setSelectedItem] = useState<Item | null>(null);
     const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
     const [selectedType, setSelectedType] = useState<string>('');
@@ -174,6 +177,29 @@ export default function ItemTriage({
     const [isClassifying, setIsClassifying] = useState(false);
     const [classifyingCount, setClassifyingCount] = useState(0);
     const classifyButtonRef = useRef<HTMLButtonElement>(null);
+
+    // Listener WebSocket para atualizar quando items são vinculados
+    useEffect(() => {
+        const channel = window.Echo?.private(`tenant.${auth.user.tenant_id}`);
+
+        if (channel) {
+            channel.listen('ItemTriaged', (event: any) => {
+                // Mostrar toast de sucesso
+                if (event.action === 'mapped') {
+                    toast.success(`${event.itemName} vinculado com sucesso!`);
+                } else if (event.action === 'classified') {
+                    toast.info(`${event.itemName} classificado com sucesso!`);
+                }
+
+                // Recarregar apenas os items quando receber evento
+                router.reload({ only: ['items'], preserveScroll: true });
+            });
+        }
+
+        return () => {
+            channel?.stopListening('ItemTriaged');
+        };
+    }, [auth.user.tenant_id]);
 
     const bulkSelectedItems = items.filter((item) =>
         selectedSkus.has(item.sku),
@@ -351,7 +377,7 @@ export default function ItemTriage({
     };
 
     // Classificar item (individual ou em lote)
-    const handleClassify = () => {
+    const handleClassify = async () => {
         if (!selectedType || isClassifying) return;
 
         const targets = classificationTargets;
@@ -371,79 +397,36 @@ export default function ItemTriage({
         setIsClassifying(true);
         setClassifyingCount(targets.length);
 
-        router.post(
-            '/item-triage/classify',
-            {
+        try {
+            const response = await axios.post('/item-triage/classify', {
                 items: targets.map((item) => ({
                     sku: item.sku,
                     name: item.name,
                 })),
                 item_type: selectedType,
                 internal_product_id: selectedProduct || null,
-            },
-            {
-                preserveScroll: true,
-                onSuccess: (page) => {
-                    const processedCount = processedSkus.length;
-                    toast.success(
-                        processedCount > 1
-                            ? `${processedCount} itens processados com sucesso!`
-                            : 'Item classificado com sucesso!',
-                    );
+            });
 
-                    setLastClassifiedType(currentType);
-                    setSelectedSkus(new Set());
+            const processedCount = processedSkus.length;
+            toast.success(
+                response.data.message ||
+                    (processedCount > 1
+                        ? `${processedCount} itens vinculados! Processando em segundo plano...`
+                        : 'Item vinculado! Processando em segundo plano...'),
+            );
 
-                    const updatedItems = page.props.items as Item[];
-                    const currentIndex = updatedItems.findIndex(
-                        (item) => item.sku === anchorSku,
-                    );
+            setLastClassifiedType(currentType);
+            setSelectedSkus(new Set());
 
-                    const findNextAfterCurrent = () =>
-                        updatedItems.find(
-                            (item, idx) => idx > currentIndex && !item.mapping,
-                        );
-
-                    const nextUnclassified = findNextAfterCurrent();
-
-                    if (nextUnclassified) {
-                        setTimeout(() => {
-                            handleSelectItem(nextUnclassified);
-                            setSelectedType(currentType);
-                        }, 0);
-                        return;
-                    }
-
-                    const firstUnclassified = updatedItems.find(
-                        (item) => !item.mapping,
-                    );
-
-                    if (firstUnclassified) {
-                        setTimeout(() => {
-                            handleSelectItem(firstUnclassified);
-                            setSelectedType(currentType);
-                        }, 0);
-                        return;
-                    }
-
-                    if (updatedItems.length > 0) {
-                        handleSelectItem(updatedItems[0]);
-                        return;
-                    }
-
-                    setSelectedItem(null);
-                    setSelectedType('');
-                    setSelectedProduct('');
-                },
-                onError: () => {
-                    toast.error('Erro ao classificar item');
-                },
-                onFinish: () => {
-                    setIsClassifying(false);
-                    setClassifyingCount(0);
-                },
-            },
-        );
+            // Recarregar IMEDIATAMENTE para mostrar badge "Vinculando..."
+            router.reload({ preserveScroll: true, preserveState: false });
+        } catch (error) {
+            console.error('Erro ao classificar item:', error);
+            toast.error('Erro ao classificar item');
+        } finally {
+            setIsClassifying(false);
+            setClassifyingCount(0);
+        }
     };
 
     // Aplicar filtros
@@ -859,47 +842,61 @@ export default function ItemTriage({
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {item.mapping ? (
                                                                         <>
-                                                                            <Badge
-                                                                                className={
-                                                                                    itemTypes.find(
-                                                                                        (
-                                                                                            t,
-                                                                                        ) =>
-                                                                                            t.value ===
-                                                                                            item
-                                                                                                .mapping
-                                                                                                ?.item_type,
-                                                                                    )
-                                                                                        ?.color ||
-                                                                                    'bg-gray-100 text-gray-900'
-                                                                                }
-                                                                            >
-                                                                                {itemTypes.find(
-                                                                                    (
-                                                                                        t,
-                                                                                    ) =>
-                                                                                        t.value ===
-                                                                                        item
-                                                                                            .mapping
-                                                                                            ?.item_type,
-                                                                                )
-                                                                                    ?.label ||
-                                                                                    'Classificado'}
-                                                                            </Badge>
                                                                             {item
                                                                                 .mapping
-                                                                                ?.internal_product_name && (
+                                                                                .is_linking ? (
                                                                                 <Badge
-                                                                                    variant="outline"
-                                                                                    className="border-green-200 bg-green-50 text-green-700"
+                                                                                    variant="default"
+                                                                                    className="bg-orange-600"
                                                                                 >
-                                                                                    CMV:{' '}
-                                                                                    {
-                                                                                        item
-                                                                                            .mapping
-                                                                                            ?.internal_product_name
-                                                                                    }
+                                                                                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                                                                    Vinculando...
                                                                                 </Badge>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <Badge
+                                                                                        className={
+                                                                                            itemTypes.find(
+                                                                                                (
+                                                                                                    t,
+                                                                                                ) =>
+                                                                                                    t.value ===
+                                                                                                    item
+                                                                                                        .mapping
+                                                                                                        ?.item_type,
+                                                                                            )
+                                                                                                ?.color ||
+                                                                                            'bg-gray-100 text-gray-900'
+                                                                                        }
+                                                                                    >
+                                                                                        {itemTypes.find(
+                                                                                            (
+                                                                                                t,
+                                                                                            ) =>
+                                                                                                t.value ===
+                                                                                                item
+                                                                                                    .mapping
+                                                                                                    ?.item_type,
+                                                                                        )
+                                                                                            ?.label ||
+                                                                                            'Classificado'}
+                                                                                    </Badge>
+                                                                                    {item
+                                                                                        .mapping
+                                                                                        ?.internal_product_name && (
+                                                                                        <Badge
+                                                                                            variant="outline"
+                                                                                            className="border-green-200 bg-green-50 text-green-700"
+                                                                                        >
+                                                                                            CMV:{' '}
+                                                                                            {
+                                                                                                item
+                                                                                                    .mapping
+                                                                                                    ?.internal_product_name
+                                                                                            }
+                                                                                        </Badge>
+                                                                                    )}
+                                                                                </>
                                                                             )}
                                                                         </>
                                                                     ) : (

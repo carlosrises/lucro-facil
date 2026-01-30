@@ -431,12 +431,12 @@ class ProductsController extends Controller
 
             // Se o unit_cost mudou, verificar se este produto é usado como insumo em outros produtos
             if ($oldUnitCost != $product->unit_cost) {
-                \Log::info('Produto atualizado - verificando dependentes', [
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
-                    'old_cost' => $oldUnitCost,
-                    'new_cost' => $product->unit_cost,
-                ]);
+                // \Log::info('Produto atualizado - verificando dependentes', [
+                //     'product_id' => $product->id,
+                //     'product_name' => $product->name,
+                //     'old_cost' => $oldUnitCost,
+                //     'new_cost' => $product->unit_cost,
+                // ]);
 
                 // Verificar se existe algum produto que usa este como ingrediente
                 $isUsedAsIngredient = ProductCost::where('tenant_id', tenant_id())
@@ -444,9 +444,9 @@ class ProductsController extends Controller
                     ->exists();
 
                 if ($isUsedAsIngredient) {
-                    \Log::info('Produto é usado como insumo - disparando evento', [
-                        'product_id' => $product->id,
-                    ]);
+                    // \Log::info('Produto é usado como insumo - disparando evento', [
+                    //     'product_id' => $product->id,
+                    // ]);
 
                     event(new \App\Events\ProductCostChanged(
                         $product->id,
@@ -455,9 +455,9 @@ class ProductsController extends Controller
                         $product->unit_cost
                     ));
                 } else {
-                    \Log::info('Produto não é usado como insumo - evento não disparado', [
-                        'product_id' => $product->id,
-                    ]);
+                    // \Log::info('Produto não é usado como insumo - evento não disparado', [
+                    //     'product_id' => $product->id,
+                    // ]);
                 }
             }
 

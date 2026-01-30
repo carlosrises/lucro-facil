@@ -108,11 +108,11 @@ class UsersController extends Controller
         }
 
         // Debug: verificar se o user está sendo injetado corretamente
-        \Log::info('Update User', [
-            'user_id' => $user->id,
-            'user_email' => $user->email,
-            'request_email' => $request->input('email'),
-        ]);
+        // \Log::info('Update User', [
+        //     'user_id' => $user->id,
+        //     'user_email' => $user->email,
+        //     'request_email' => $request->input('email'),
+        // ]);
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
