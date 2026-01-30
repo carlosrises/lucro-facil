@@ -222,6 +222,11 @@ export function AppSidebar() {
             icon: ClipboardList,
         },
         {
+            title: 'Assinaturas',
+            href: admin.subscriptions.index(),
+            icon: CreditCard,
+        },
+        {
             title: 'Pagamentos',
             href: admin.payments(),
             icon: CreditCard,

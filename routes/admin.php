@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AdminClientsController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\PlansController;
+use App\Http\Controllers\Admin\SubscriptionsController;
 use Illuminate\Support\Facades\Route;
 
 // Aceita usuários com role 'admin' ou qualquer role que comece com 'admin:' (ex: 'admin:system')
@@ -20,6 +21,8 @@ Route::prefix('admin')->middleware(['auth', 'role:admin|admin:system'])->name('a
     Route::post('plans/update-order', [PlansController::class, 'updateOrder'])->name('plans.updateOrder');
     Route::post('plans/{plan}/toggle-featured', [PlansController::class, 'toggleFeatured'])->name('plans.toggleFeatured');
     Route::post('plans/{plan}/toggle-active', [PlansController::class, 'toggleActive'])->name('plans.toggleActive');
+
+    Route::get('/subscriptions', [SubscriptionsController::class, 'index'])->name('subscriptions.index');
 
     Route::get('/payments', function () {
         return inertia('admin/payments');
