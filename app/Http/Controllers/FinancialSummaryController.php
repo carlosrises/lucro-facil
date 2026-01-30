@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\FinanceEntry;
 use App\Models\Order;
+use App\Services\OrderCostService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\Builder;
@@ -12,7 +13,7 @@ use Inertia\Inertia;
 
 class FinancialSummaryController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, OrderCostService $orderCostService)
     {
         $tenantId = $request->user()->tenant_id;
 
@@ -54,173 +55,61 @@ class FinancialSummaryController extends Controller
             ')
             ->first();
 
-        // Calcular subtotal (mesma lógica da Dashboard)
+        // Calcular subtotal usando OrderCostService - FONTE ÚNICA DE VERDADE
         $orders = (clone $baseQuery)->get();
         $grossRevenue = 0;
 
         foreach ($orders as $order) {
-            $deliveryFee = (float) $order->delivery_fee;
-            $raw = is_array($order->raw) ? $order->raw : ($order->raw ? json_decode($order->raw, true) : []);
-
-            $sessionPayments = $raw['session']['payments'] ?? [];
-
-            $totalCashback = collect($sessionPayments)->filter(function ($payment) {
-                $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-
-                return str_contains($paymentName, 'cashback') || str_contains($paymentKeyword, 'clube');
-            })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
-
-            $subsidies = collect($sessionPayments)->filter(function ($payment) {
-                $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-
-                return str_contains($paymentName, 'subsid') || str_contains($paymentName, 'cupom');
-            })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
-
-            $realPayments = collect($sessionPayments)
-                ->filter(function ($payment) {
-                    $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                    $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-
-                    return ! str_contains($paymentName, 'cashback')
-                        && ! str_contains($paymentKeyword, 'clube')
-                        && ! str_contains($paymentName, 'subsid')
-                        && ! str_contains($paymentName, 'cupom');
-                })
-                ->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
-
-            if ($realPayments == 0 && count($sessionPayments) == 0) {
-                if ($order->provider === 'takeat' && isset($raw['session']['total_price'])) {
-                    $realPayments = (float) $raw['session']['total_price'];
-                } else {
-                    $realPayments = (float) $order->gross_total;
-                }
-            }
-
-            $deliveryBy = strtoupper($raw['session']['delivery_by'] ?? '');
-            $isMarketplaceDelivery = in_array($deliveryBy, ['IFOOD', 'MARKETPLACE']);
-
-            $orderSubtotal = $realPayments + $subsidies;
-            if (! $isMarketplaceDelivery && $deliveryFee > 0) {
-                $orderSubtotal += $deliveryFee;
-            }
-
-            $grossRevenue += $orderSubtotal;
+            // USAR ORDERCOSTSERVICE em vez de lógica duplicada
+            $grossRevenue += $orderCostService->getOrderSubtotal($order);
         }
 
-        $totalDiscounts = (float) ($simpleTotals->sum_discount_total ?? 0);
-        $totalCommissions = (float) ($simpleTotals->sum_total_commissions ?? 0);
-        $totalCosts = (float) ($simpleTotals->sum_total_costs ?? 0);
-        $totalPaymentFees = (float) ($simpleTotals->sum_payment_fees ?? 0);
-        $totalAdditionalTax = (float) ($simpleTotals->sum_additional_taxes ?? 0);
+        // Buscar pedidos novamente com relacionamentos para cálculo de impostos
+        $ordersWithRelations = (clone $baseQuery)
+            ->with(['items.internalProduct.taxCategory'])
+            ->get();
 
-        $cmvData = \DB::table('orders')
-            ->join('order_items', 'order_items.order_id', '=', 'orders.id')
-            ->join('order_item_mappings', 'order_item_mappings.order_item_id', '=', 'order_items.id')
-            ->join('internal_products', 'internal_products.id', '=', 'order_item_mappings.internal_product_id')
-            ->where('orders.tenant_id', $tenantId)
-            ->whereBetween('orders.placed_at', [$startDateUtc, $endDateUtc])
-            ->selectRaw('
-                SUM(
-                    order_items.qty * order_item_mappings.quantity *
-                    COALESCE(order_item_mappings.unit_cost_override, internal_products.unit_cost)
-                ) as total_cmv
-            ')
-            ->first();
-
-        $totalCmv = (float) ($cmvData->total_cmv ?? 0);
-
-        // Recalcular impostos e custos proporcionalmente ao subtotal (mesma lógica da Dashboard)
-        $ordersForRecalc = (clone $baseQuery)->with(['items.internalProduct.taxCategory'])->get();
         $totalProductTax = 0;
         $totalAdditionalTaxes = 0;
         $totalRecalculatedCosts = 0;
 
-        foreach ($ordersForRecalc as $order) {
-            // Calcular subtotal do pedido
-            $deliveryFee = (float) $order->delivery_fee;
+        foreach ($ordersWithRelations as $order) {
+            $orderSubtotal = $orderCostService->getOrderSubtotal($order);
             $raw = is_array($order->raw) ? $order->raw : ($order->raw ? json_decode($order->raw, true) : []);
-            $sessionPayments = $raw['session']['payments'] ?? [];
 
-            $totalCashback = collect($sessionPayments)->filter(function ($payment) {
-                $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
+            // Buscar itens do pedido com categorias de imposto
+            $items = $order->items ?? [];
+            $taxCategories = [];
+            $totalItemsPrice = 0;
 
-                return str_contains($paymentName, 'cashback') || str_contains($paymentKeyword, 'clube');
-            })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
+            foreach ($items as $item) {
+                $internalProduct = $item->internalProduct;
+                if (! $internalProduct || ! $internalProduct->taxCategory) {
+                    continue;
+                }
 
-            $subsidies = collect($sessionPayments)->filter(function ($payment) {
-                $paymentName = strtolower($payment['payment_method']['name'] ?? '');
+                $quantity = $item->qty ?? $item->quantity ?? 0;
+                $unitPrice = $item->unit_price ?? $item->price ?? 0;
+                $itemTotal = $quantity * $unitPrice;
+                $totalItemsPrice += $itemTotal;
 
-                return str_contains($paymentName, 'subsid') || str_contains($paymentName, 'cupom');
-            })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
+                $taxCategoryId = $internalProduct->taxCategory->id;
 
-            $realPayments = collect($sessionPayments)
-                ->filter(function ($payment) {
-                    $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                    $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-
-                    return ! str_contains($paymentName, 'cashback')
-                        && ! str_contains($paymentKeyword, 'clube')
-                        && ! str_contains($paymentName, 'subsid')
-                        && ! str_contains($paymentName, 'cupom');
-                })
-                ->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
-
-            $paidByClient = $realPayments + $totalCashback;
-            if ($paidByClient == 0 && count($sessionPayments) == 0) {
-                if ($order->provider === 'takeat' && isset($raw['session']['total_price'])) {
-                    $paidByClient = (float) $raw['session']['total_price'];
+                if (isset($taxCategories[$taxCategoryId])) {
+                    $taxCategories[$taxCategoryId]['itemsTotal'] += $itemTotal;
+                } else {
+                    $taxCategories[$taxCategoryId] = [
+                        'rate' => $internalProduct->taxCategory->total_tax_rate,
+                        'itemsTotal' => $itemTotal,
+                    ];
                 }
             }
 
-            $orderSubtotal = $paidByClient + $subsidies;
-            $isMarketplaceDelivery = in_array($order->provider, ['ifood', '99food', 'takeat']) && $order->delivery_mode === 'marketplace';
-            if (! $isMarketplaceDelivery && $deliveryFee > 0) {
-                $orderSubtotal += $deliveryFee;
-            }
-
-            // Calcular soma de preços originais dos itens para proporção
-            $originalTotalPrice = $order->items->sum(fn ($item) => (float) $item->unit_price * (float) $item->qty);
-
-            if ($originalTotalPrice > 0 && $orderSubtotal > 0) {
-                $proportion = $orderSubtotal / $originalTotalPrice;
-
-                // Agrupar itens por categoria fiscal para calcular proporcionalmente
-                $taxCategories = [];
-                $totalItemsPrice = 0;
-
-                foreach ($order->items as $item) {
-                    $internalProduct = $item->internalProduct;
-                    if (! $internalProduct || ! $internalProduct->taxCategory) {
-                        continue;
-                    }
-
-                    $quantity = $item->qty ?? $item->quantity ?? 0;
-                    $unitPrice = $item->unit_price ?? $item->price ?? 0;
-                    $itemTotal = $quantity * $unitPrice;
-                    $totalItemsPrice += $itemTotal;
-
-                    $taxCategoryId = $internalProduct->taxCategory->id;
-
-                    if (isset($taxCategories[$taxCategoryId])) {
-                        $taxCategories[$taxCategoryId]['itemsTotal'] += $itemTotal;
-                    } else {
-                        $taxCategories[$taxCategoryId] = [
-                            'rate' => $internalProduct->taxCategory->total_tax_rate,
-                            'itemsTotal' => $itemTotal,
-                        ];
-                    }
-                }
-
-                // Calcular imposto proporcional ao subtotal
-                $impostosProdutoDoPedido = 0;
-                foreach ($taxCategories as $category) {
-                    $proportion = $totalItemsPrice > 0 ? ($category['itemsTotal'] / $totalItemsPrice) : 0;
-                    $taxValue = ($orderSubtotal * $proportion * $category['rate']) / 100;
-                    $totalProductTax += $taxValue;
-                    $impostosProdutoDoPedido += $taxValue;
-                }
+            // Calcular imposto proporcional ao subtotal
+            foreach ($taxCategories as $category) {
+                $proportion = $totalItemsPrice > 0 ? ($category['itemsTotal'] / $totalItemsPrice) : 0;
+                $taxValue = ($orderSubtotal * $proportion * $category['rate']) / 100;
+                $totalProductTax += $taxValue;
             }
 
             // Impostos adicionais e custos recalculados sobre o subtotal
@@ -258,6 +147,29 @@ class FinancialSummaryController extends Controller
                 }
             }
         }
+
+        $totalDiscounts = (float) ($simpleTotals->sum_discount_total ?? 0);
+        $totalCommissions = (float) ($simpleTotals->sum_total_commissions ?? 0);
+        $totalCosts = (float) ($simpleTotals->sum_total_costs ?? 0);
+        $totalPaymentFees = (float) ($simpleTotals->sum_payment_fees ?? 0);
+        $totalAdditionalTax = (float) ($simpleTotals->sum_additional_taxes ?? 0);
+
+        // CMV agregado via SQL
+        $cmvData = \DB::table('orders')
+            ->join('order_items', 'order_items.order_id', '=', 'orders.id')
+            ->join('order_item_mappings', 'order_item_mappings.order_item_id', '=', 'order_items.id')
+            ->join('internal_products', 'internal_products.id', '=', 'order_item_mappings.internal_product_id')
+            ->where('orders.tenant_id', $tenantId)
+            ->whereBetween('orders.placed_at', [$startDateUtc, $endDateUtc])
+            ->selectRaw('
+                SUM(
+                    order_items.qty * order_item_mappings.quantity *
+                    COALESCE(order_item_mappings.unit_cost_override, internal_products.unit_cost)
+                ) as total_cmv
+            ')
+            ->first();
+
+        $totalCmv = (float) ($cmvData->total_cmv ?? 0);
 
         $totalSubsidies = $this->sumSubsidies(clone $baseQuery);
         $totalDiscounts = max($totalDiscounts - $totalSubsidies, 0);

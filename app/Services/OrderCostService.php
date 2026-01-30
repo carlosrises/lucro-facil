@@ -1015,13 +1015,18 @@ class OrderCostService
 
     /**
      * Calcula o subtotal do pedido (base para cálculos de custos, comissões e taxas)
+     * MÉTODO PÚBLICO - FONTE ÚNICA DE VERDADE para cálculo de subtotal
      *
-     * Para Takeat: usa total_delivery_price (valor APÓS descontos mas ANTES de taxas)
-     * pois custos e comissões devem ser calculados sobre o valor efetivamente vendido
-     *
+     * Para Takeat: soma TODOS os pagamentos - taxa iFood R$0,99 (se aplicável)
      * Para iFood: usa orderAmount
+     *
+     * Este método é usado por:
+     * - Dashboard
+     * - DRE (Resumo Financeiro)
+     * - Cálculos de custos/comissões
+     * - Frontend (via calculated_costs)
      */
-    private function getOrderSubtotal(Order $order): float
+    public function getOrderSubtotal(Order $order): float
     {
         $subtotal = null;
 

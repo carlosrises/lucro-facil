@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\FinanceEntry;
 use App\Models\Order;
 use App\Models\Store;
+use App\Services\OrderCostService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -12,7 +13,7 @@ use Inertia\Inertia;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, OrderCostService $orderCostService)
     {
         try {
             // Aumentar limite de memória e timeout (mitigação temporária para evitar timeouts durante investigação)
@@ -104,64 +105,9 @@ class DashboardController extends Controller
             $totalRecalculatedPaymentFees = 0;
 
             foreach ($orders as $order) {
+                // USAR ORDERC OSTSERVICE - FONTE ÚNICA DE VERDADE
+                $orderSubtotal = $orderCostService->getOrderSubtotal($order);
                 $raw = is_array($order->raw) ? $order->raw : ($order->raw ? json_decode($order->raw, true) : []);
-                $deliveryFee = (float) $order->delivery_fee;
-
-                // Recalcular subtotal para este pedido
-                $sessionPayments = $raw['session']['payments'] ?? [];
-
-                $totalCashback = collect($sessionPayments)->filter(function ($payment) {
-                    $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                    $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-
-                    return str_contains($paymentName, 'cashback') || str_contains($paymentKeyword, 'clube');
-                })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
-
-                $subsidies = collect($sessionPayments)->filter(function ($payment) {
-                    $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-
-                    return str_contains($paymentName, 'subsid') || str_contains($paymentName, 'cupom');
-                })->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
-
-                $realPayments = collect($sessionPayments)
-                    ->filter(function ($payment) {
-                        $paymentName = strtolower($payment['payment_method']['name'] ?? '');
-                        $paymentKeyword = strtolower($payment['payment_method']['keyword'] ?? '');
-
-                        return ! str_contains($paymentName, 'cashback')
-                            && ! str_contains($paymentKeyword, 'clube')
-                            && ! str_contains($paymentName, 'subsid')
-                            && ! str_contains($paymentName, 'cupom');
-                    })
-                    ->sum(fn ($p) => (float) ($p['payment_value'] ?? 0));
-
-                if ($realPayments == 0 && count($sessionPayments) == 0) {
-                    if ($order->provider === 'takeat' && isset($raw['session']['total_price'])) {
-                        $realPayments = (float) $raw['session']['total_price'];
-                    } else {
-                        $realPayments = (float) $order->gross_total;
-                    }
-                }
-
-                $deliveryBy = strtoupper($raw['session']['delivery_by'] ?? '');
-                $isMarketplaceDelivery = in_array($deliveryBy, ['IFOOD', 'MARKETPLACE']);
-
-                $orderSubtotal = $realPayments + $subsidies;
-                if (! $isMarketplaceDelivery && $deliveryFee > 0) {
-                    $orderSubtotal += $deliveryFee;
-                }
-
-                // Ajuste: subtrair taxa fixa de R$0,99 apenas quando o pedido
-                // for proveniente do provider 'takeat' com origin 'ifood'.
-                $providerName = strtolower($order->provider ?? '');
-                $originName = strtolower($order->origin ?? ($raw['session']['origin'] ?? ''));
-                if ($providerName === 'takeat' && $originName === 'ifood') {
-                    $orderSubtotal -= 0.99;
-                }
-
-                if ($orderSubtotal < 0) {
-                    $orderSubtotal = 0;
-                }
 
                 // Buscar itens do pedido com categorias de imposto
                 $items = $order->items ?? [];
