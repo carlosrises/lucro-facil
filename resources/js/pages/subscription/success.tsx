@@ -33,7 +33,7 @@ export default function Success({ sessionId }: SuccessProps) {
                     </Link>
 
                     {sessionId && (
-                        <p className="mt-6 text-xs text-gray-500">
+                        <p className="mt-6 break-all text-xs text-gray-500">
                             ID da sessão: {sessionId}
                         </p>
                     )}

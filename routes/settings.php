@@ -33,7 +33,7 @@ Route::middleware('auth')->group(function () {
             ->orderBy('price_month', 'asc')
             ->get();
         $currentPlan = auth()->user()->tenant->plan ?? null;
-        $subscription = auth()->user()->tenant->subscriptions()->where('status', 'active')->first();
+        $subscription = auth()->user()->tenant->subscriptions()->whereIn('status', ['active', 'trialing'])->first();
 
         return Inertia::render('settings/billing', [
             'plans' => $plans,
