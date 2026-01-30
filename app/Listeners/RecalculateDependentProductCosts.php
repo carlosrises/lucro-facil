@@ -39,12 +39,12 @@ class RecalculateDependentProductCosts
             return;
         }
 
-        Log::info('Recalculando custos de produtos dependentes', [
-            'source_type' => $sourceType,
-            'source_id' => $sourceId,
-            'dependent_products_count' => $dependentProductIds->count(),
-            'tenant_id' => $event->tenantId,
-        ]);
+        // Log::info('Recalculando custos de produtos dependentes', [
+        //     'source_type' => $sourceType,
+        //     'source_id' => $sourceId,
+        //     'dependent_products_count' => $dependentProductIds->count(),
+        //     'tenant_id' => $event->tenantId,
+        // ]);
 
         DB::beginTransaction();
         try {
@@ -56,6 +56,7 @@ class RecalculateDependentProductCosts
                         'source_type' => $sourceType,
                         'source_id' => $sourceId,
                     ]);
+
                     continue;
                 }
 
@@ -80,14 +81,14 @@ class RecalculateDependentProductCosts
                         $oldCost = $product->unit_cost;
                         $product->update(['unit_cost' => $newCmv]);
 
-                        Log::info('CMV atualizado no cadastro de produtos', [
-                            'product_id' => $product->id,
-                            'product_name' => $product->name,
-                            'old_cost' => number_format($oldCost, 2, '.', ''),
-                            'new_cost' => number_format($newCmv, 2, '.', ''),
-                            'difference' => number_format($newCmv - $oldCost, 2, '.', ''),
-                            'tenant_id' => $event->tenantId,
-                        ]);
+                        // Log::info('CMV atualizado no cadastro de produtos', [
+                        //     'product_id' => $product->id,
+                        //     'product_name' => $product->name,
+                        //     'old_cost' => number_format($oldCost, 2, '.', ''),
+                        //     'new_cost' => number_format($newCmv, 2, '.', ''),
+                        //     'difference' => number_format($newCmv - $oldCost, 2, '.', ''),
+                        //     'tenant_id' => $event->tenantId,
+                        // ]);
 
                         // Verificar se este produto também é usado como insumo em outros produtos
                         $isUsedAsIngredient = ProductCost::where('tenant_id', $event->tenantId)
@@ -96,10 +97,10 @@ class RecalculateDependentProductCosts
 
                         // Se for usado como insumo, disparar evento em cascata
                         if ($isUsedAsIngredient) {
-                            Log::info('Produto é usado como insumo - disparando cascata', [
-                                'product_id' => $product->id,
-                                'product_name' => $product->name,
-                            ]);
+                            // Log::info('Produto é usado como insumo - disparando cascata', [
+                            //     'product_id' => $product->id,
+                            //     'product_name' => $product->name,
+                            // ]);
 
                             event(new ProductCostChanged(
                                 $product->id,
@@ -121,11 +122,11 @@ class RecalculateDependentProductCosts
 
             DB::commit();
 
-            Log::info('Recalculo de custos concluído com sucesso', [
-                'source_type' => $sourceType,
-                'source_id' => $sourceId,
-                'products_updated' => count(self::$processedProducts[$event->tenantId]),
-            ]);
+            // Log::info('Recalculo de custos concluído com sucesso', [
+            //     'source_type' => $sourceType,
+            //     'source_id' => $sourceId,
+            //     'products_updated' => count(self::$processedProducts[$event->tenantId]),
+            // ]);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Erro ao recalcular custos de produtos dependentes', [

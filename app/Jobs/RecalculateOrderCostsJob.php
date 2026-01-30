@@ -47,12 +47,13 @@ class RecalculateOrderCostsJob implements ShouldQueue
         if ($this->type === 'order') {
             $order = Order::find($this->referenceId);
 
-            if (!$order) {
+            if (! $order) {
                 \Log::error("Pedido não encontrado para recálculo: {$this->referenceId}");
                 \Cache::put($cacheKey, [
                     'status' => 'error',
                     'message' => 'Pedido não encontrado',
                 ], now()->addHours(2));
+
                 return;
             }
 
@@ -158,7 +159,7 @@ class RecalculateOrderCostsJob implements ShouldQueue
                         }
                     }
 
-                    if (!empty($keywordsToSearch)) {
+                    if (! empty($keywordsToSearch)) {
                         $query->where(function ($q) use ($keywordsToSearch) {
                             foreach ($keywordsToSearch as $keyword) {
                                 // Para Takeat: verificar raw->session->payments->payment_method->keyword
@@ -240,7 +241,7 @@ class RecalculateOrderCostsJob implements ShouldQueue
             'completed_at' => now()->toISOString(),
         ], now()->addHours(2));
 
-        \Log::info("Recálculo de custos concluído - type: {$this->type}, referenceId: {$this->referenceId}, total: {$total}");
+        // \Log::info("Recálculo de custos concluído - type: {$this->type}, referenceId: {$this->referenceId}, total: {$total}");
     }
 
     /**
