@@ -2,14 +2,11 @@
 
 namespace App\Services;
 
-use App\Models\Order;
 use Illuminate\Support\Facades\DB;
 
 class FinancialAggregationService
 {
-    public function __construct(private OrderCostService $orderCostService)
-    {
-    }
+    public function __construct(private OrderCostService $orderCostService) {}
 
     /**
      * Calcula todos os valores financeiros de forma otimizada usando chunk e agregação
@@ -66,8 +63,6 @@ class FinancialAggregationService
                     // Calcular subtotal usando OrderCostService - FONTE ÚNICA DE VERDADE
                     $orderSubtotal = $this->orderCostService->getOrderSubtotal($order);
                     $totalRevenue += $orderSubtotal;
-
-                    \Log::info("Order #{$order->id} subtotal: {$orderSubtotal}");
 
                     // Calcular impostos dos produtos
                     $items = $order->items ?? [];
