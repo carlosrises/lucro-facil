@@ -54,6 +54,9 @@ class OnboardingController extends Controller
         if ($step == 3) {
             $data['plans'] = Plan::where('active', true)
                 ->where('is_visible', true)
+                ->where('is_contact_plan', false)
+                ->with('prices')
+                ->orderBy('display_order')
                 ->orderBy('price_month')
                 ->get();
             $data['currentPlan'] = $tenant->plan;

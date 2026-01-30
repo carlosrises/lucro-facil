@@ -6,7 +6,9 @@ import {
     FieldLabel,
     FieldTitle,
 } from '@/components/ui/field';
+import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Switch } from '@/components/ui/switch';
 import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { Check, Loader2, Sparkles } from 'lucide-react';
@@ -27,11 +29,23 @@ interface PresetDetails {
     products: any[];
 }
 
+interface PlanPrice {
+    id: number;
+    key: string;
+    label: string;
+    amount: number | null;
+    interval: string;
+    period_label: string;
+    is_annual: boolean;
+}
+
 interface Plan {
     id: number;
     name: string;
     price_month: number;
+    prices?: PlanPrice[];
     features: string[];
+    is_contact_plan?: boolean;
 }
 
 interface OnboardingProps {
@@ -49,6 +63,7 @@ export default function OnboardingWizard() {
     const [selectedBusinessType, setSelectedBusinessType] = useState('');
     const [loading, setLoading] = useState(false);
     const [loadingPlanId, setLoadingPlanId] = useState<number | null>(null);
+    const [isAnnual, setIsAnnual] = useState(false);
 
     const handleBusinessTypeSubmit = () => {
         if (!selectedBusinessType) return;
@@ -90,12 +105,33 @@ export default function OnboardingWizard() {
         try {
             const response = await axios.post('/settings/billing/checkout', {
                 plan_id: planId,
+                price_interval: isAnnual ? 'year' : 'month',
             });
             window.location.href = response.data.checkout_url;
         } catch (error) {
             console.error('Erro ao criar checkout:', error);
             setLoadingPlanId(null);
         }
+    };
+
+    const getPlanPrice = (plan: Plan) => {
+        if (plan.is_contact_plan) return null;
+
+        const targetInterval = isAnnual ? 'year' : 'month';
+        const price = plan.prices?.find((p) => p.interval === targetInterval);
+
+        if (price && price.amount !== null) {
+            return {
+                amount: price.amount,
+                periodLabel:
+                    price.period_label || (isAnnual ? 'por ano' : 'por mês'),
+            };
+        }
+
+        return {
+            amount: plan.price_month,
+            periodLabel: 'por mês',
+        };
     };
 
     return (
@@ -240,58 +276,94 @@ export default function OnboardingWizard() {
                     {/* Step 3: Escolha do Plano */}
                     {currentStep === 3 && plans && (
                         <div className="rounded-lg border bg-white p-8 dark:bg-gray-800">
-                            <h2 className="mb-6 text-2xl font-bold">
+                            <h2 className="mb-4 text-2xl font-bold">
                                 Escolha seu plano
                             </h2>
                             <p className="mb-6 text-muted-foreground">
-                                Você está no plano FREE. Que tal experimentar 14
+                                Você está no plano FREE. Que tal experimentar 7
                                 dias grátis?
                             </p>
 
+                            <div className="mb-6 flex items-center justify-center gap-3">
+                                <Label
+                                    htmlFor="onboarding-billing-toggle"
+                                    className={`text-sm font-medium transition-colors ${
+                                        !isAnnual
+                                            ? 'text-gray-900 dark:text-white'
+                                            : 'text-gray-500 dark:text-gray-400'
+                                    }`}
+                                >
+                                    Mensal
+                                </Label>
+                                <Switch
+                                    id="onboarding-billing-toggle"
+                                    checked={isAnnual}
+                                    onCheckedChange={setIsAnnual}
+                                />
+                                <Label
+                                    htmlFor="onboarding-billing-toggle"
+                                    className={`text-sm font-medium transition-colors ${
+                                        isAnnual
+                                            ? 'text-gray-900 dark:text-white'
+                                            : 'text-gray-500 dark:text-gray-400'
+                                    }`}
+                                >
+                                    Anual
+                                    <span className="ml-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900 dark:text-green-300">
+                                        Economize
+                                    </span>
+                                </Label>
+                            </div>
+
                             <div className="mb-6 space-y-4">
-                                {plans.map((plan) => (
-                                    <div
-                                        key={plan.id}
-                                        className="rounded-lg border p-4 hover:border-purple-600"
-                                    >
-                                        <div className="mb-2 flex items-center justify-between">
-                                            <div>
-                                                <h3 className="font-bold">
-                                                    {plan.name}
-                                                </h3>
-                                                <p className="text-sm text-muted-foreground">
-                                                    R${' '}
-                                                    {typeof plan.price_month ===
-                                                    'number'
-                                                        ? plan.price_month.toFixed(
-                                                              2,
-                                                          )
-                                                        : parseFloat(
-                                                              plan.price_month,
-                                                          ).toFixed(2)}
-                                                    /mês
-                                                </p>
+                                {plans.map((plan) => {
+                                    const priceInfo = getPlanPrice(plan);
+                                    return (
+                                        <div
+                                            key={plan.id}
+                                            className="rounded-lg border p-4 hover:border-purple-600"
+                                        >
+                                            <div className="mb-2 flex items-center justify-between">
+                                                <div>
+                                                    <h3 className="font-bold">
+                                                        {plan.name}
+                                                    </h3>
+                                                    {priceInfo && (
+                                                        <p className="text-sm text-muted-foreground">
+                                                            R${' '}
+                                                            {priceInfo.amount.toFixed(
+                                                                2,
+                                                            )}{' '}
+                                                            {
+                                                                priceInfo.periodLabel
+                                                            }
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <Button
+                                                    onClick={() =>
+                                                        handleSelectPlan(
+                                                            plan.id,
+                                                        )
+                                                    }
+                                                    disabled={
+                                                        loadingPlanId !== null
+                                                    }
+                                                >
+                                                    {loadingPlanId ===
+                                                    plan.id ? (
+                                                        <>
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                            Carregando...
+                                                        </>
+                                                    ) : (
+                                                        'Experimentar Grátis'
+                                                    )}
+                                                </Button>
                                             </div>
-                                            <Button
-                                                onClick={() =>
-                                                    handleSelectPlan(plan.id)
-                                                }
-                                                disabled={
-                                                    loadingPlanId !== null
-                                                }
-                                            >
-                                                {loadingPlanId === plan.id ? (
-                                                    <>
-                                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                                        Carregando...
-                                                    </>
-                                                ) : (
-                                                    'Experimentar Grátis'
-                                                )}
-                                            </Button>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
 
                             <div className="flex justify-between">
@@ -300,7 +372,7 @@ export default function OnboardingWizard() {
                                     onClick={handleComplete}
                                     disabled={loading}
                                 >
-                                    Continuar com FREE
+                                    Continuar sem plano
                                 </Button>
                             </div>
                         </div>
