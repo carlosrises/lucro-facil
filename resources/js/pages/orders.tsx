@@ -221,7 +221,7 @@ export default function Orders() {
                     setLocalIndicators((prevInd) => {
                         const orderNetRevenue = Number(order.net_revenue || 0);
                         const orderCMV = Number(order.total_costs || 0);
-                        const orderSubtotal = Number(order.gross_total || 0);
+                        const orderSubtotal = calculateOrderSubtotal(order);
 
                         const newOrderCount = prevInd.orderCount + 1;
                         const newSubtotal = prevInd.subtotal + orderSubtotal;

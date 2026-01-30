@@ -337,29 +337,36 @@ export function OrderFinancialCard({
             }
         }
 
-        // Subtotal para cálculo de receita líquida
-        // Subtotal = Pago pelo cliente + Subsídio + Taxa de Entrega (se for pela loja)
-        // Este é o valor que realmente entra na loja
-        let subtotal = paidByClient;
+        // Subtotal = soma de TODOS os pagamentos (incluindo subsídios, pois são receita)
+        const allPayments = order?.raw?.session?.payments || [];
+        let subtotal = allPayments.reduce((sum: number, payment: any) => {
+            const value = parseFloat(String(payment.payment_value || '0')) || 0;
+            return sum + value;
+        }, 0);
 
-        // Adicionar subsídio (valor pago pelo marketplace)
-        if (totalSubsidy > 0) {
-            subtotal += totalSubsidy;
+        // Se for Takeat + iFood, subtrair taxa de R$0,99
+        if (isTakeatIfoodOrder(order) && subtotal > 0) {
+            const rawSessionServiceFee =
+                parseFloat(
+                    String(
+                        order?.raw?.session?.service_fee ??
+                            order?.raw?.session?.serviceFee ??
+                            0,
+                    ),
+                ) || 0;
+            const ifoodFee =
+                rawSessionServiceFee > 0
+                    ? rawSessionServiceFee
+                    : TAKEAT_IFOOD_SERVICE_FEE;
+            subtotal = Math.max(subtotal - ifoodFee, 0);
         }
 
         // Verificar se a entrega foi feita pelo marketplace
-        // Quando for pelo marketplace, a taxa de entrega já está em calculated_costs como custo
         const deliveryBy =
             order?.raw?.session?.delivery_by?.toUpperCase() || '';
         const isMarketplaceDelivery = ['IFOOD', 'MARKETPLACE'].includes(
             deliveryBy,
         );
-
-        // Adicionar taxa de entrega se for entrega pela LOJA (não marketplace)
-        // Quando é marketplace, a taxa já está em calculated_costs como custo
-        if (!isMarketplaceDelivery && deliveryFee > 0) {
-            subtotal += deliveryFee;
-        }
 
         // CMV (custo dos produtos + add-ons)
         const items = order?.items || [];

@@ -31,92 +31,44 @@ import { Badge } from '../ui/badge';
  * @export Exportada para uso em data-table e outros componentes
  */
 export function calculateOrderSubtotal(order: Order): number {
-    // NOVA LÓGICA SIMPLIFICADA (alinhada com order-financial-card.tsx):
-    // Subtotal = valor pago pelo cliente + subsídios do marketplace + taxa de entrega (se delivery próprio)
+    // LÓGICA SIMPLIFICADA (alinhada com backend OrderCostService):
+    // Subtotal = soma de TODOS os payment_value - taxa iFood (se Takeat+iFood)
 
     const grossTotal = parseFloat(String(order?.gross_total || '0')) || 0;
-    const deliveryFee = parseFloat(String(order?.delivery_fee || '0')) || 0;
 
-    // Pagamentos da sessão (para Takeat)
+    // Para Takeat: somar TODOS os pagamentos (incluindo subsídios)
     const sessionPayments = order?.raw?.session?.payments || [];
+    
+    if (order?.provider === 'takeat' && sessionPayments.length > 0) {
+        // Somar TODOS os payment_value
+        let subtotal = sessionPayments.reduce((sum: number, payment: any) => {
+            const value = parseFloat(String(payment.payment_value || '0')) || 0;
+            return sum + value;
+        }, 0);
 
-    // Filtrar pagamentos de cashback (desconto da loja, não subsídio)
-    const cashbackPayments = sessionPayments.filter((payment: any) => {
-        const paymentName = payment.payment_method?.name?.toLowerCase() || '';
-        const paymentKeyword =
-            payment.payment_method?.keyword?.toLowerCase() || '';
-        return (
-            paymentName.includes('cashback') || paymentKeyword.includes('clube')
-        );
-    });
-
-    // Filtrar subsídios (cupons do marketplace)
-    const subsidyPayments = sessionPayments.filter((payment: any) => {
-        const paymentName = payment.payment_method?.name?.toLowerCase() || '';
-        const paymentKeyword =
-            payment.payment_method?.keyword?.toLowerCase() || '';
-        const isCashback =
-            paymentName.includes('cashback') ||
-            paymentKeyword.includes('clube');
-        const isSubsidy =
-            paymentName.includes('subsid') ||
-            paymentName.includes('cupom') ||
-            paymentKeyword.includes('subsid') ||
-            paymentKeyword.includes('cupom');
-        return isSubsidy && !isCashback;
-    });
-
-    // Filtrar pagamentos reais (não subsidiados e não cashback)
-    const realPayments = sessionPayments.filter((payment: any) => {
-        const paymentName = payment.payment_method?.name?.toLowerCase() || '';
-        const paymentKeyword =
-            payment.payment_method?.keyword?.toLowerCase() || '';
-        const isCashback =
-            paymentName.includes('cashback') ||
-            paymentKeyword.includes('clube');
-        const isSubsidized =
-            paymentName.includes('subsid') ||
-            paymentName.includes('cupom') ||
-            paymentKeyword.includes('subsid') ||
-            paymentKeyword.includes('cupom');
-        return !isSubsidized && !isCashback && (payment.payment_value || 0) > 0;
-    });
-
-    const totalSubsidy = subsidyPayments.reduce((sum: number, payment: any) => {
-        const value = parseFloat(String(payment.payment_value || '0')) || 0;
-        return sum + value;
-    }, 0);
-
-    // Pago pelo cliente (soma dos pagamentos reais)
-    let paidByClient = realPayments.reduce((sum: number, payment: any) => {
-        const value = parseFloat(String(payment.payment_value || '0')) || 0;
-        return sum + value;
-    }, 0);
-
-    // Se não houver pagamentos, usar gross_total como fallback
-    if (paidByClient === 0 && realPayments.length === 0) {
-        if (order?.provider === 'takeat' && order?.raw?.session?.total_price) {
-            // Para Takeat, usar total_price (já com desconto)
-            paidByClient =
-                parseFloat(String(order.raw.session.total_price)) || 0;
-        } else {
-            paidByClient = grossTotal;
+        // Se for Takeat + iFood, subtrair taxa de R$0,99
+        const origin = order?.origin?.toLowerCase() || '';
+        const sessionChannel = order?.raw?.session?.sales_channel?.toLowerCase() || '';
+        const isIfoodOrder = origin === 'ifood' || sessionChannel === 'ifood';
+        
+        if (isIfoodOrder && subtotal > 0) {
+            const rawSessionServiceFee =
+                parseFloat(
+                    String(
+                        order?.raw?.session?.service_fee ??
+                        order?.raw?.session?.serviceFee ??
+                        0
+                    )
+                ) || 0;
+            const ifoodFee = rawSessionServiceFee > 0 ? rawSessionServiceFee : 0.99;
+            subtotal = Math.max(subtotal - ifoodFee, 0);
         }
+
+        return subtotal;
     }
 
-    // Determinar se a entrega é do marketplace ou da loja
-    const deliveryBy = order?.raw?.session?.delivery_by?.toUpperCase() || '';
-    const isMarketplaceDelivery = ['IFOOD', 'MARKETPLACE'].includes(deliveryBy);
-
-    // Subtotal = pago pelo cliente + subsídios + taxa de entrega (se delivery próprio)
-    let subtotal = paidByClient + totalSubsidy;
-
-    // Adicionar taxa de entrega apenas se for delivery da loja (não marketplace)
-    if (!isMarketplaceDelivery && deliveryFee > 0) {
-        subtotal += deliveryFee;
-    }
-
-    return subtotal;
+    // Fallback para outros providers ou se não houver pagamentos
+    return grossTotal;
 }
 
 // Tipagem vinda do backend
