@@ -19,15 +19,48 @@ class AdminDashboardController extends Controller
             abort(403, 'Acesso negado.');
         }
 
+        // Estatísticas gerais
+        $totalClients = Tenant::count();
+        $activeSubscriptions = Subscription::whereIn('status', ['active', 'trialing'])->count();
+        $trialingSubscriptions = Subscription::where('status', 'trialing')->count();
+
+        // Receita mensal (soma dos planos com interval 'month')
+        $monthlyRevenue = Subscription::whereIn('status', ['active', 'trialing'])
+            ->where('price_interval', 'month')
+            ->join('plans', 'subscriptions.plan_id', '=', 'plans.id')
+            ->sum('plans.price_month');
+
+        // Receita anual convertida para mensal (soma dos planos com interval 'year' / 12)
+        $annualRevenue = Subscription::whereIn('status', ['active', 'trialing'])
+            ->where('price_interval', 'year')
+            ->join('plan_prices', function($join) {
+                $join->on('subscriptions.plan_id', '=', 'plan_prices.plan_id')
+                     ->where('plan_prices.interval', '=', 'year');
+            })
+            ->sum('plan_prices.amount');
+
+        $monthlyRevenueFromAnnual = $annualRevenue / 12;
+        $totalMonthlyRevenue = $monthlyRevenue + $monthlyRevenueFromAnnual;
+
         $stats = [
-            'total_clients' => Tenant::count(),
-            'active_subscriptions' => Subscription::where('status', 'active')->count(),
-            'monthly_revenue' => Subscription::where('status', 'active')
-                ->join('plans', 'subscriptions.plan_id', '=', 'plans.id')
-                ->sum('plans.price_month'),
+            'total_clients' => $totalClients,
+            'active_subscriptions' => $activeSubscriptions,
+            'trialing_subscriptions' => $trialingSubscriptions,
+            'monthly_revenue' => $totalMonthlyRevenue,
+            'annual_revenue' => $totalMonthlyRevenue * 12,
             'open_tickets' => Ticket::where('status', 'open')->count(),
             'total_stores' => Store::count(),
             'new_clients_this_month' => Tenant::whereMonth('created_at', now()->month)->count(),
+
+            // Mudanças do mês anterior
+            'clients_change' => $this->calculatePercentageChange(
+                Tenant::whereMonth('created_at', now()->month)->count(),
+                Tenant::whereMonth('created_at', now()->subMonth()->month)->whereYear('created_at', now()->subMonth()->year)->count()
+            ),
+            'subscriptions_change' => $this->calculatePercentageChange(
+                Subscription::whereIn('status', ['active', 'trialing'])->whereMonth('created_at', now()->month)->count(),
+                Subscription::whereIn('status', ['active', 'trialing'])->whereMonth('created_at', now()->subMonth()->month)->whereYear('created_at', now()->subMonth()->year)->count()
+            ),
         ];
 
         // Atividade recente (últimos 10 itens)
@@ -51,7 +84,7 @@ class AdminDashboardController extends Controller
 
         // Distribuição por planos
         $plan_distribution = Plan::withCount(['subscriptions' => function ($query) {
-            $query->where('status', 'active');
+            $query->whereIn('status', ['active', 'trialing']);
         }])->get()->map(fn ($plan) => [
             'name' => $plan->name,
             'count' => $plan->subscriptions_count,
@@ -62,5 +95,14 @@ class AdminDashboardController extends Controller
             'recent_activity' => $recent_activity,
             'plan_distribution' => $plan_distribution,
         ]);
+    }
+
+    private function calculatePercentageChange($current, $previous)
+    {
+        if ($previous == 0) {
+            return $current > 0 ? 100 : 0;
+        }
+
+        return (($current - $previous) / $previous) * 100;
     }
 }
