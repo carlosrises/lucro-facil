@@ -45,10 +45,10 @@ interface Subscription {
     tenant: {
         id: number;
         name: string;
-        user?: {
+        users?: Array<{
             name: string;
             email: string;
-        };
+        }>;
     };
     plan: {
         id: number;
@@ -120,16 +120,20 @@ export default function AdminSubscriptions() {
     const columns = [
         columnHelper.accessor('tenant.name', {
             header: 'Cliente',
-            cell: (info) => (
-                <div className="flex flex-col">
-                    <span className="font-medium">{info.getValue()}</span>
-                    {info.row.original.tenant.user && (
-                        <span className="text-xs text-muted-foreground">
-                            {info.row.original.tenant.user.email}
-                        </span>
-                    )}
-                </div>
-            ),
+            cell: (info) => {
+                const tenant = info.row.original.tenant;
+                const primaryUser = tenant.users?.[0];
+                return (
+                    <div className="flex flex-col">
+                        <span className="font-medium">{info.getValue()}</span>
+                        {primaryUser && (
+                            <span className="text-xs text-muted-foreground">
+                                {primaryUser.email}
+                            </span>
+                        )}
+                    </div>
+                );
+            },
         }),
         columnHelper.accessor('plan.name', {
             header: 'Plano',

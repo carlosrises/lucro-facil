@@ -11,7 +11,7 @@ class SubscriptionsController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Subscription::with(['plan', 'tenant.user']);
+        $query = Subscription::with(['plan', 'tenant.users']);
 
         // Filtro por status
         if ($request->filled('status')) {
@@ -33,7 +33,7 @@ class SubscriptionsController extends Controller
             $search = $request->search;
             $query->whereHas('tenant', function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                    ->orWhereHas('user', function ($q2) use ($search) {
+                    ->orWhereHas('users', function ($q2) use ($search) {
                         $q2->where('name', 'like', "%{$search}%")
                             ->orWhere('email', 'like', "%{$search}%");
                     });
