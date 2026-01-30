@@ -51,8 +51,12 @@ class OrdersController extends Controller
                 $q->where(function ($query) use ($providers) {
                     foreach ($providers as $filter) {
                         $query->orWhere(function ($subQuery) use ($filter) {
-                            // Formato: "provider" ou "provider:origin"
-                            if (str_contains($filter, ':')) {
+                            // Formato: "provider", "provider:origin" ou "channel:value"
+                            if (str_contains($filter, 'channel:')) {
+                                // Filtrar por channel do raw JSON
+                                $channel = str_replace('channel:', '', $filter);
+                                $subQuery->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(raw, '$.channel')) = ?", [$channel]);
+                            } elseif (str_contains($filter, ':')) {
                                 [$provider, $origin] = explode(':', $filter, 2);
                                 $subQuery->where('provider', $provider)->where('origin', $origin);
                             } else {
@@ -240,9 +244,36 @@ class OrdersController extends Controller
                 ];
             });
 
-        // Combinar e ordenar
-        $providerOptions = $storeProviders
-            ->merge($takeatOrigins)
+// Buscar channels distintos do raw JSON
+            $channels = Order::where('tenant_id', tenant_id())
+                ->whereNotNull('raw')
+                ->whereRaw("JSON_EXTRACT(raw, '$.channel') IS NOT NULL")
+                ->get()
+                ->pluck('raw')
+                ->map(function ($raw) {
+                    $data = is_string($raw) ? json_decode($raw, true) : $raw;
+                    return $data['channel'] ?? null;
+                })
+                ->filter()
+                ->unique()
+                ->map(function ($channel) {
+                    $channelLabels = [
+                        'delivery' => '🚚 Delivery',
+                        'takeout' => '🏪 Retirada',
+                        'indoor' => '🍽️ Salão',
+                    ];
+
+                    return [
+                        'value' => "channel:{$channel}",
+                        'label' => $channelLabels[$channel] ?? ucfirst($channel),
+                    ];
+                })
+                ->values();
+
+            // Combinar e ordenar
+            $providerOptions = $storeProviders
+                ->merge($takeatOrigins)
+                ->merge($channels)
             ->unique('value')
             ->sortBy('label')
             ->values();
@@ -978,12 +1009,25 @@ class OrdersController extends Controller
                 $q->where(function ($query) use ($providers) {
                     foreach ($providers as $filter) {
                         $query->orWhere(function ($subQuery) use ($filter) {
-                            // Formato: "provider" ou "provider:origin"
-                            if (str_contains($filter, ':')) {
+                            // Formato: "provider", "provider:origin" ou "channel:value"
+                            if (str_contains($filter, 'channel:')) {
+                                // Filtrar por channel do raw JSON
+                                $channel = str_replace('channel:', '', $filter);
+                                $subQuery->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(raw, '$.channel')) = ?", [$channel]);
+                            } elseif (str_contains($filter, ':')) {
                                 [$provider, $origin] = explode(':', $filter, 2);
                                 $subQuery->where('provider', $provider)->where('origin', $origin);
                             } else {
-                                $subQuery->where('provider', $filter);
+                                // Se for takeat sem origin, filtrar por origin = takeat (pedidos próprios)
+                                if ($filter === 'takeat') {
+                                    $subQuery->where('provider', 'takeat')
+                                        ->where(function ($q) {
+                                            $q->where('origin', 'takeat')
+                                                ->orWhereNull('origin');
+                                        });
+                                } else {
+                                    $subQuery->where('provider', $filter);
+                                }
                             }
                         });
                     }

@@ -39,12 +39,35 @@ class DashboardController extends Controller
                 ->whereNotIn('status', ['CANCELLED', 'CANCELLATION_REQUESTED'])
                 ->when($storeId, fn ($q) => $q->where('store_id', $storeId))
                 ->when($providerFilter, function ($q, $providerFilter) {
-                    if (str_contains($providerFilter, ':')) {
-                        [$provider, $origin] = explode(':', $providerFilter, 2);
-                        $q->where('provider', $provider)->where('origin', $origin);
-                    } else {
-                        $q->where('provider', $providerFilter);
-                    }
+                    // Aceita múltiplos providers separados por vírgula
+                    $providers = explode(',', $providerFilter);
+
+                    $q->where(function ($query) use ($providers) {
+                        foreach ($providers as $filter) {
+                            $query->orWhere(function ($subQuery) use ($filter) {
+                                // Formato: "provider", "provider:origin" ou "channel:value"
+                                if (str_contains($filter, 'channel:')) {
+                                    // Filtrar por channel do raw JSON
+                                    $channel = str_replace('channel:', '', $filter);
+                                    $subQuery->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(raw, '$.channel')) = ?", [$channel]);
+                                } elseif (str_contains($filter, ':')) {
+                                    [$provider, $origin] = explode(':', $filter, 2);
+                                    $subQuery->where('provider', $provider)->where('origin', $origin);
+                                } else {
+                                    // Se for takeat sem origin, filtrar por origin = takeat (pedidos próprios)
+                                    if ($filter === 'takeat') {
+                                        $subQuery->where('provider', 'takeat')
+                                            ->where(function ($q) {
+                                                $q->where('origin', 'takeat')
+                                                    ->orWhereNull('origin');
+                                            });
+                                    } else {
+                                        $subQuery->where('provider', $filter);
+                                    }
+                                }
+                            });
+                        }
+                    });
                 });
 
             // Usar serviço de agregação financeira - FONTE ÚNICA DE VERDADE
@@ -121,12 +144,22 @@ class DashboardController extends Controller
                 ->whereNotIn('status', ['CANCELLED', 'CANCELLATION_REQUESTED'])
                 ->when($storeId, fn ($q) => $q->where('store_id', $storeId))
                 ->when($providerFilter, function ($q, $providerFilter) {
-                    if (str_contains($providerFilter, ':')) {
-                        [$provider, $origin] = explode(':', $providerFilter, 2);
-                        $q->where('provider', $provider)->where('origin', $origin);
-                    } else {
-                        $q->where('provider', $providerFilter);
-                    }
+                    // Aceita múltiplos providers separados por vírgula
+                    $providers = explode(',', $providerFilter);
+
+                    $q->where(function ($query) use ($providers) {
+                        foreach ($providers as $filter) {
+                            $query->orWhere(function ($subQuery) use ($filter) {
+                                // Formato: "provider" ou "provider:origin"
+                                if (str_contains($filter, ':')) {
+                                    [$provider, $origin] = explode(':', $filter, 2);
+                                    $subQuery->where('provider', $provider)->where('origin', $origin);
+                                } else {
+                                    $subQuery->where('provider', $filter);
+                                }
+                            });
+                        }
+                    });
                 });
 
             $previousSimpleTotals = (clone $previousBaseQuery)
@@ -352,52 +385,86 @@ class DashboardController extends Controller
                     ];
                 });
 
-            // Buscar combinações de provider+origin disponíveis nos pedidos
-            $providerOptions = Order::where('tenant_id', $tenantId)
-                ->select('provider', 'origin')
+            // Buscar TODOS os providers de stores configuradas + combinações existentes nos pedidos
+            $providerLabels = [
+                'ifood' => 'iFood',
+                'takeat' => 'Takeat',
+                '99food' => '99Food',
+                'rappi' => 'Rappi',
+                'uber_eats' => 'Uber Eats',
+            ];
+
+            $originLabels = [
+                'ifood' => 'iFood',
+                '99food' => '99Food',
+                'neemo' => 'Neemo',
+                'keeta' => 'Keeta',
+                'totem' => 'Totem',
+                'pdv' => 'PDV',
+                'takeat' => 'Próprio',
+            ];
+
+            // Buscar providers das stores configuradas
+            $storeProviders = Store::where('tenant_id', $tenantId)
+                ->select('provider')
                 ->distinct()
-                ->orderBy('provider')
-                ->orderBy('origin')
-                ->get()
-                ->map(function ($order) {
-                    // Mapear labels amigáveis
-                    $providerLabels = [
-                        'ifood' => 'iFood',
-                        'takeat' => 'Takeat',
-                        '99food' => '99Food',
-                        'rappi' => 'Rappi',
-                        'uber_eats' => 'Uber Eats',
-                    ];
-
-                    $originLabels = [
-                        'ifood' => 'iFood',
-                        '99food' => '99Food',
-                        'neemo' => 'Neemo',
-                        'keeta' => 'Keeta',
-                        'totem' => 'Totem',
-                        'pdv' => 'PDV',
-                        'takeat' => 'Próprio',
-                    ];
-
-                    $providerLabel = $providerLabels[$order->provider] ?? ucfirst($order->provider);
-
-                    // Se for Takeat com origin diferente de 'takeat', criar combinação
-                    if ($order->provider === 'takeat' && $order->origin && $order->origin !== 'takeat') {
-                        $originLabel = $originLabels[$order->origin] ?? ucfirst($order->origin);
-
-                        return [
-                            'value' => "takeat:{$order->origin}",
-                            'label' => "{$originLabel} (Takeat)",
-                        ];
-                    }
-
-                    // Para outros providers ou Takeat próprio
+                ->pluck('provider')
+                ->map(function ($provider) use ($providerLabels) {
                     return [
-                        'value' => $order->provider,
-                        'label' => $providerLabel,
+                        'value' => $provider,
+                        'label' => $providerLabels[$provider] ?? ucfirst($provider),
+                    ];
+                });
+
+            // Buscar combinações Takeat + origin dos pedidos
+            $takeatOrigins = Order::where('tenant_id', $tenantId)
+                ->where('provider', 'takeat')
+                ->whereNotNull('origin')
+                ->where('origin', '!=', 'takeat')
+                ->select('origin')
+                ->distinct()
+                ->pluck('origin')
+                ->map(function ($origin) use ($originLabels) {
+                    $originLabel = $originLabels[$origin] ?? ucfirst($origin);
+
+                    return [
+                        'value' => "takeat:{$origin}",
+                        'label' => "{$originLabel} (Takeat)",
+                    ];
+                });
+
+            // Buscar channels distintos do raw JSON
+            $channels = Order::where('tenant_id', $tenantId)
+                ->whereNotNull('raw')
+                ->whereRaw("JSON_EXTRACT(raw, '$.channel') IS NOT NULL")
+                ->get()
+                ->pluck('raw')
+                ->map(function ($raw) {
+                    $data = is_string($raw) ? json_decode($raw, true) : $raw;
+                    return $data['channel'] ?? null;
+                })
+                ->filter()
+                ->unique()
+                ->map(function ($channel) {
+                    $channelLabels = [
+                        'delivery' => '🚚 Delivery',
+                        'takeout' => '🏪 Retirada',
+                        'indoor' => '🍽️ Salão',
+                    ];
+
+                    return [
+                        'value' => "channel:{$channel}",
+                        'label' => $channelLabels[$channel] ?? ucfirst($channel),
                     ];
                 })
+                ->values();
+
+            // Combinar e ordenar
+            $providerOptions = $storeProviders
+                ->merge($takeatOrigins)
+                ->merge($channels)
                 ->unique('value')
+                ->sortBy('label')
                 ->values();
 
             // Obter plano atual do tenant

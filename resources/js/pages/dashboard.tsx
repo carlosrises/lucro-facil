@@ -11,6 +11,7 @@ import {
     CommandItem,
     CommandList,
 } from '@/components/ui/command';
+import { MultiSelect } from '@/components/ui/multi-select';
 import {
     Popover,
     PopoverContent,
@@ -119,12 +120,11 @@ export default function Dashboard({
         filters.store_id ? String(filters.store_id) : 'all',
     );
 
-    const [selectedProvider, setSelectedProvider] = useState<string>(
-        filters.provider || 'all',
+    const [selectedProviders, setSelectedProviders] = useState<string[]>(() =>
+        filters.provider ? filters.provider.split(',') : [],
     );
 
     const [openStoreCombo, setOpenStoreCombo] = useState(false);
-    const [openProviderCombo, setOpenProviderCombo] = useState(false);
 
     // Mapear logos dos marketplaces
     const getMarketplaceLogo = (provider: string) => {
@@ -166,7 +166,9 @@ export default function Dashboard({
                     : undefined,
                 store_id: selectedStore !== 'all' ? selectedStore : undefined,
                 provider:
-                    selectedProvider !== 'all' ? selectedProvider : undefined,
+                    selectedProviders.length > 0
+                        ? selectedProviders.join(',')
+                        : undefined,
             },
             {
                 preserveState: true,
@@ -188,7 +190,9 @@ export default function Dashboard({
                     : undefined,
                 store_id: value !== 'all' ? value : undefined,
                 provider:
-                    selectedProvider !== 'all' ? selectedProvider : undefined,
+                    selectedProviders.length > 0
+                        ? selectedProviders.join(',')
+                        : undefined,
             },
             {
                 preserveState: true,
@@ -197,8 +201,8 @@ export default function Dashboard({
         );
     };
 
-    const handleProviderChange = (value: string) => {
-        setSelectedProvider(value);
+    const handleProvidersChange = (values: string[]) => {
+        setSelectedProviders(values);
         router.get(
             '/dashboard',
             {
@@ -209,7 +213,7 @@ export default function Dashboard({
                     ? dateRange.to.toISOString().split('T')[0]
                     : undefined,
                 store_id: selectedStore !== 'all' ? selectedStore : undefined,
-                provider: value !== 'all' ? value : undefined,
+                provider: values.length > 0 ? values.join(',') : undefined,
             },
             {
                 preserveState: true,
@@ -405,109 +409,15 @@ export default function Dashboard({
                                 </PopoverContent>
                             </Popover>
 
-                            {/* Filtro de Marketplaces com Combobox */}
-                            <Popover
-                                open={openProviderCombo}
-                                onOpenChange={setOpenProviderCombo}
-                            >
-                                <PopoverTrigger asChild>
-                                    <Button
-                                        variant="outline"
-                                        role="combobox"
-                                        aria-expanded={openProviderCombo}
-                                        className="h-9 w-full justify-between sm:w-[280px]"
-                                    >
-                                        <span className="truncate">
-                                            {selectedProvider === 'all'
-                                                ? 'Todos os marketplaces'
-                                                : providerOptions.find(
-                                                      (p) =>
-                                                          p.value ===
-                                                          selectedProvider,
-                                                  )?.label || 'Selecionar...'}
-                                        </span>
-                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent
-                                    className="w-[280px] p-0"
-                                    align="start"
-                                >
-                                    <Command>
-                                        <CommandInput
-                                            placeholder="Buscar marketplace..."
-                                            className="h-9"
-                                        />
-                                        <CommandList>
-                                            <CommandEmpty>
-                                                Nenhum marketplace encontrado.
-                                            </CommandEmpty>
-                                            <CommandGroup>
-                                                <CommandItem
-                                                    value="all"
-                                                    keywords={[
-                                                        'todos',
-                                                        'all',
-                                                        'marketplaces',
-                                                    ]}
-                                                    onSelect={() => {
-                                                        handleProviderChange(
-                                                            'all',
-                                                        );
-                                                        setOpenProviderCombo(
-                                                            false,
-                                                        );
-                                                    }}
-                                                >
-                                                    Todos os marketplaces
-                                                    <Check
-                                                        className={cn(
-                                                            'ml-auto h-4 w-4',
-                                                            selectedProvider ===
-                                                                'all'
-                                                                ? 'opacity-100'
-                                                                : 'opacity-0',
-                                                        )}
-                                                    />
-                                                </CommandItem>
-                                                {providerOptions.map(
-                                                    (provider) => (
-                                                        <CommandItem
-                                                            key={provider.value}
-                                                            value={
-                                                                provider.label
-                                                            }
-                                                            keywords={[
-                                                                provider.label,
-                                                                provider.value,
-                                                            ]}
-                                                            onSelect={() => {
-                                                                handleProviderChange(
-                                                                    provider.value,
-                                                                );
-                                                                setOpenProviderCombo(
-                                                                    false,
-                                                                );
-                                                            }}
-                                                        >
-                                                            {provider.label}
-                                                            <Check
-                                                                className={cn(
-                                                                    'ml-auto h-4 w-4',
-                                                                    selectedProvider ===
-                                                                        provider.value
-                                                                        ? 'opacity-100'
-                                                                        : 'opacity-0',
-                                                                )}
-                                                            />
-                                                        </CommandItem>
-                                                    ),
-                                                )}
-                                            </CommandGroup>
-                                        </CommandList>
-                                    </Command>
-                                </PopoverContent>
-                            </Popover>
+                            {/* Filtro de Marketplaces com MultiSelect */}
+                            <MultiSelect
+                                options={providerOptions}
+                                placeholder="Marketplaces"
+                                values={selectedProviders}
+                                onChange={handleProvidersChange}
+                                searchPlaceholder="Buscar marketplace..."
+                                className="w-full sm:w-[280px]"
+                            />
                         </div>
 
                         <DashboardSectionCards data={dashboardData} />
