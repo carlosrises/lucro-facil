@@ -104,52 +104,72 @@ class StripeService
             return;
         }
 
-        foreach ($plan->prices as $price) {
-            if ($price->amount === null) {
-                continue;
+        try {
+            foreach ($plan->prices as $price) {
+                if ($price->amount === null) {
+                    continue;
+                }
+
+                if ($price->stripe_price_id) {
+                    continue;
+                }
+
+                $interval = $price->interval ?: 'month';
+                if (!in_array($interval, ['month', 'year'], true)) {
+                    continue;
+                }
+
+                $stripePrice = $this->stripe->prices->create([
+                    'product' => $productId,
+                    'unit_amount' => (int) ($price->amount * 100),
+                    'currency' => 'brl',
+                    'recurring' => [
+                        'interval' => $interval,
+                    ],
+                    'metadata' => [
+                        'plan_id' => $plan->id,
+                        'plan_price_id' => $price->id,
+                        'plan_price_key' => $price->key,
+                    ],
+                ]);
+
+                $price->update(['stripe_price_id' => $stripePrice->id]);
             }
 
-            if ($price->stripe_price_id) {
-                continue;
+            foreach ($oldStripePriceIds as $oldStripePriceId) {
+                if (!$oldStripePriceId) {
+                    continue;
+                }
+
+                $this->stripe->prices->update($oldStripePriceId, [
+                    'active' => false,
+                ]);
             }
 
-            $interval = $price->interval ?: 'month';
-            if (!in_array($interval, ['month', 'year'], true)) {
-                continue;
+            $firstStripePrice = $plan->prices()->whereNotNull('stripe_price_id')->first();
+            if ($firstStripePrice && !$plan->stripe_price_id) {
+                $plan->withoutEvents(function () use ($plan, $firstStripePrice) {
+                    $plan->update(['stripe_price_id' => $firstStripePrice->stripe_price_id]);
+                });
             }
-
-            $stripePrice = $this->stripe->prices->create([
-                'product' => $productId,
-                'unit_amount' => (int) ($price->amount * 100),
-                'currency' => 'brl',
-                'recurring' => [
-                    'interval' => $interval,
-                ],
-                'metadata' => [
+        } catch (\Stripe\Exception\InvalidRequestException $e) {
+            // Se o produto não existe, limpar referências
+            if (str_contains($e->getMessage(), 'No such product')) {
+                logger()->warning('Produto não existe na Stripe ao sincronizar preços', [
                     'plan_id' => $plan->id,
-                    'plan_price_id' => $price->id,
-                    'plan_price_key' => $price->key,
-                ],
-            ]);
+                    'stripe_product_id' => $productId,
+                ]);
 
-            $price->update(['stripe_price_id' => $stripePrice->id]);
-        }
+                $plan->update([
+                    'stripe_product_id' => null,
+                    'stripe_price_id' => null,
+                ]);
 
-        foreach ($oldStripePriceIds as $oldStripePriceId) {
-            if (!$oldStripePriceId) {
-                continue;
+                $plan->prices()->update(['stripe_price_id' => null]);
+
+                throw $e;
             }
-
-            $this->stripe->prices->update($oldStripePriceId, [
-                'active' => false,
-            ]);
-        }
-
-        $firstStripePrice = $plan->prices()->whereNotNull('stripe_price_id')->first();
-        if ($firstStripePrice && !$plan->stripe_price_id) {
-            $plan->withoutEvents(function () use ($plan, $firstStripePrice) {
-                $plan->update(['stripe_price_id' => $firstStripePrice->stripe_price_id]);
-            });
+            throw $e;
         }
     }
 
@@ -214,6 +234,25 @@ class StripeService
                 'description' => $plan->description,
                 'active' => $plan->active,
             ]);
+        } catch (\Stripe\Exception\InvalidRequestException $e) {
+            // Produto não existe mais na Stripe, limpar e recriar
+            if (str_contains($e->getMessage(), 'No such product')) {
+                logger()->warning('Produto não existe na Stripe, limpando referência', [
+                    'plan_id' => $plan->id,
+                    'stripe_product_id' => $plan->stripe_product_id,
+                ]);
+
+                $plan->update([
+                    'stripe_product_id' => null,
+                    'stripe_price_id' => null,
+                ]);
+
+                // Limpar também os stripe_price_ids dos preços relacionados
+                $plan->prices()->update(['stripe_price_id' => null]);
+
+                throw $e; // Re-lança para ser tratado no controller
+            }
+            throw $e;
         } catch (ApiErrorException $e) {
             logger()->error('Erro ao atualizar produto do plano no Stripe', [
                 'plan_id' => $plan->id,
@@ -225,18 +264,33 @@ class StripeService
 
     /**
      * Criar sessão de checkout para assinatura
+     *
+     * @param string|null $priceInterval 'month' ou 'year'
      */
-    public function createCheckoutSession(Tenant $tenant, Plan $plan): string
+    public function createCheckoutSession(Tenant $tenant, Plan $plan, ?string $priceInterval = 'month'): string
     {
         $successUrl = url('/subscription/success?session_id={CHECKOUT_SESSION_ID}');
         $cancelUrl = url('/subscription/cancel');
 
+        // Buscar o preço correto (mensal ou anual)
+        $planPrice = $plan->prices()
+            ->where('interval', $priceInterval)
+            ->whereNotNull('stripe_price_id')
+            ->first();
+
+        // Se não encontrar preço específico, tentar usar o stripe_price_id do plano
+        $stripePriceId = $planPrice?->stripe_price_id ?? $plan->stripe_price_id;
+
+        if (!$stripePriceId) {
+            throw new \Exception("Nenhum preço válido encontrado para o plano {$plan->code}");
+        }
+
         try {
             $session = $this->stripe->checkout->sessions->create([
                 'mode' => 'subscription',
-                'customer_email' => $tenant->owner->email ?? null,
+                'customer_email' => auth()->user()->email ?? $tenant->owner->email ?? null,
                 'line_items' => [[
-                    'price' => $plan->stripe_price_id,
+                    'price' => $stripePriceId,
                     'quantity' => 1,
                 ]],
                 'success_url' => $successUrl,
@@ -244,13 +298,15 @@ class StripeService
                 'metadata' => [
                     'tenant_id' => $tenant->id,
                     'plan_id' => $plan->id,
+                    'price_interval' => $priceInterval,
                 ],
                 'subscription_data' => [
                     'metadata' => [
                         'tenant_id' => $tenant->id,
                         'plan_id' => $plan->id,
+                        'price_interval' => $priceInterval,
                     ],
-                    'trial_period_days' => 14, // 14 dias grátis
+                    'trial_period_days' => 7, // 7 dias grátis
                 ],
             ]);
 
@@ -259,6 +315,7 @@ class StripeService
             logger()->error('Erro ao criar sessão de checkout', [
                 'plan_id' => $plan->id,
                 'tenant_id' => $tenant->id,
+                'price_interval' => $priceInterval,
                 'error' => $e->getMessage(),
             ]);
             throw $e;
