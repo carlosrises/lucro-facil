@@ -23,10 +23,14 @@ import {
 interface AdminStats {
     total_clients: number;
     active_subscriptions: number;
+    trialing_subscriptions: number;
     monthly_revenue: number;
+    annual_revenue: number;
     open_tickets: number;
     total_stores: number;
     new_clients_this_month: number;
+    clients_change: number;
+    subscriptions_change: number;
 }
 
 interface RecentActivity {
@@ -63,6 +67,18 @@ export default function AdminDashboard() {
     const { stats, recent_activity, plan_distribution } =
         usePage<AdminDashboardProps>().props;
 
+    const formatCurrency = (value: number) => {
+        return new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+        }).format(value);
+    };
+
+    const formatPercentage = (value: number) => {
+        const sign = value >= 0 ? '+' : '';
+        return `${sign}${value.toFixed(1)}%`;
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Dashboard Admin" />
@@ -71,7 +87,7 @@ export default function AdminDashboard() {
                 <div className="@container/main flex flex-1 flex-col gap-2">
                     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
                         {/* Cards de Estatísticas */}
-                        <div className="grid grid-cols-1 gap-4 px-4 lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
                             <Card className="@container/card">
                                 <CardHeader>
                                     <CardDescription className="flex items-center gap-2">
@@ -82,11 +98,18 @@ export default function AdminDashboard() {
                                         {stats.total_clients}
                                     </CardTitle>
                                     <CardAction>
-                                        <Badge variant="outline">
-                                            <IconTrendingUp />
-                                            {stats.new_clients_this_month > 0
-                                                ? `+${stats.new_clients_this_month} este mês`
-                                                : 'Sem novos'}
+                                        <Badge
+                                            variant="outline"
+                                            className={
+                                                stats.clients_change >= 0
+                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                                    : 'border-red-200 bg-red-50 text-red-700'
+                                            }
+                                        >
+                                            <IconTrendingUp className="h-3 w-3" />
+                                            {formatPercentage(
+                                                stats.clients_change,
+                                            )}
                                         </Badge>
                                     </CardAction>
                                 </CardHeader>
@@ -102,9 +125,18 @@ export default function AdminDashboard() {
                                         {stats.active_subscriptions}
                                     </CardTitle>
                                     <CardAction>
-                                        <Badge variant="outline">
-                                            <TrendingUp className="h-4 w-4" />
-                                            Ativo
+                                        <Badge
+                                            variant="outline"
+                                            className={
+                                                stats.subscriptions_change >= 0
+                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                                    : 'border-red-200 bg-red-50 text-red-700'
+                                            }
+                                        >
+                                            <IconTrendingUp className="h-3 w-3" />
+                                            {formatPercentage(
+                                                stats.subscriptions_change,
+                                            )}
                                         </Badge>
                                     </CardAction>
                                 </CardHeader>
@@ -114,21 +146,55 @@ export default function AdminDashboard() {
                                 <CardHeader>
                                     <CardDescription className="flex items-center gap-2">
                                         <TrendingUp className="h-4 w-4" />
-                                        Receita Mensal
+                                        Receita Mensal (MRR)
                                     </CardDescription>
                                     <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                        R${' '}
-                                        {stats.monthly_revenue.toLocaleString(
-                                            'pt-BR',
-                                            { minimumFractionDigits: 2 },
-                                        )}
+                                        {formatCurrency(stats.monthly_revenue)}
                                     </CardTitle>
                                     <CardAction>
-                                        <Badge variant="outline">
-                                            <IconTrendingUp />
-                                            MRR
+                                        <Badge
+                                            variant="outline"
+                                            className="text-xs"
+                                        >
+                                            ARR:{' '}
+                                            {formatCurrency(
+                                                stats.annual_revenue,
+                                            )}
                                         </Badge>
                                     </CardAction>
+                                </CardHeader>
+                            </Card>
+
+                            <Card className="@container/card">
+                                <CardHeader>
+                                    <CardDescription className="flex items-center gap-2">
+                                        <UserPlus className="h-4 w-4" />
+                                        Em Período Trial
+                                    </CardDescription>
+                                    <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+                                        {stats.trialing_subscriptions}
+                                    </CardTitle>
+                                    <CardAction>
+                                        <Badge
+                                            variant="outline"
+                                            className="text-xs"
+                                        >
+                                            {stats.new_clients_this_month} novos
+                                            este mês
+                                        </Badge>
+                                    </CardAction>
+                                </CardHeader>
+                            </Card>
+
+                            <Card className="@container/card">
+                                <CardHeader>
+                                    <CardDescription className="flex items-center gap-2">
+                                        <Store className="h-4 w-4" />
+                                        Total de Lojas
+                                    </CardDescription>
+                                    <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+                                        {stats.total_stores}
+                                    </CardTitle>
                                 </CardHeader>
                             </Card>
 
@@ -144,52 +210,14 @@ export default function AdminDashboard() {
                                     <CardAction>
                                         <Badge
                                             variant={
-                                                stats.open_tickets > 0
+                                                stats.open_tickets > 5
                                                     ? 'destructive'
                                                     : 'outline'
                                             }
                                         >
-                                            {stats.open_tickets > 0
-                                                ? 'Pendente'
-                                                : 'Ok'}
-                                        </Badge>
-                                    </CardAction>
-                                </CardHeader>
-                            </Card>
-
-                            <Card className="@container/card">
-                                <CardHeader>
-                                    <CardDescription className="flex items-center gap-2">
-                                        <Store className="h-4 w-4" />
-                                        Total de Lojas
-                                    </CardDescription>
-                                    <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                        {stats.total_stores}
-                                    </CardTitle>
-                                    <CardAction>
-                                        <Badge variant="outline">
-                                            <Store className="h-4 w-4" />
-                                            Conectadas
-                                        </Badge>
-                                    </CardAction>
-                                </CardHeader>
-                            </Card>
-
-                            <Card className="@container/card">
-                                <CardHeader>
-                                    <CardDescription className="flex items-center gap-2">
-                                        <UserPlus className="h-4 w-4" />
-                                        Novos Este Mês
-                                    </CardDescription>
-                                    <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                        {stats.new_clients_this_month}
-                                    </CardTitle>
-                                    <CardAction>
-                                        <Badge variant="outline">
-                                            <IconTrendingUp />
-                                            {stats.new_clients_this_month > 0
-                                                ? 'Crescendo'
-                                                : 'Estável'}
+                                            {stats.open_tickets > 5
+                                                ? 'Alta demanda'
+                                                : 'Normal'}
                                         </Badge>
                                     </CardAction>
                                 </CardHeader>
