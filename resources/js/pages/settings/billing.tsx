@@ -63,7 +63,9 @@ export default function Billing() {
     const { plans, currentPlan, subscription } = usePage<BillingProps>().props;
     const [loadingPlanId, setLoadingPlanId] = useState<number | null>(null);
     const [isAnnual, setIsAnnual] = useState(false);
-
+    // Debug
+    console.log('Subscription data:', subscription);
+    console.log('Current plan:', currentPlan);
     const handleUpgrade = async (planId: number) => {
         setLoadingPlanId(planId);
         try {
@@ -137,12 +139,27 @@ export default function Billing() {
                                             const actualInterval =
                                                 subscription.price_interval ||
                                                 'month';
+
+                                            console.log(
+                                                'actualInterval:',
+                                                actualInterval,
+                                            );
+                                            console.log(
+                                                'currentPlan.prices:',
+                                                currentPlan.prices,
+                                            );
+
                                             const actualPrice =
                                                 currentPlan.prices?.find(
                                                     (p) =>
                                                         p.interval ===
                                                         actualInterval,
                                                 );
+
+                                            console.log(
+                                                'actualPrice found:',
+                                                actualPrice,
+                                            );
 
                                             if (
                                                 actualPrice &&
