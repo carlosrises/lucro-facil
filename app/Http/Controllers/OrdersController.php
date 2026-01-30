@@ -970,14 +970,24 @@ class OrdersController extends Controller
             })
             // Filtro de loja
             ->when($request->input('store_id'), fn ($q, $storeId) => $q->where('store_id', $storeId))
-            // Filtro de provider
+            // Filtro de provider (múltiplos)
             ->when($request->input('provider'), function ($q, $providerFilter) {
-                if (str_contains($providerFilter, ':')) {
-                    [$provider, $origin] = explode(':', $providerFilter, 2);
-                    $q->where('provider', $provider)->where('origin', $origin);
-                } else {
-                    $q->where('provider', $providerFilter);
-                }
+                // Aceita múltiplos providers separados por vírgula
+                $providers = explode(',', $providerFilter);
+
+                $q->where(function ($query) use ($providers) {
+                    foreach ($providers as $filter) {
+                        $query->orWhere(function ($subQuery) use ($filter) {
+                            // Formato: "provider" ou "provider:origin"
+                            if (str_contains($filter, ':')) {
+                                [$provider, $origin] = explode(':', $filter, 2);
+                                $subQuery->where('provider', $provider)->where('origin', $origin);
+                            } else {
+                                $subQuery->where('provider', $filter);
+                            }
+                        });
+                    }
+                });
             })
             // Filtro de tipo de pedido
             ->when($request->input('order_type'), function ($q, $orderType) {
