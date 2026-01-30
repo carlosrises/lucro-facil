@@ -169,6 +169,15 @@ class PlansController extends Controller
                 $this->stripe->updatePlanProduct($plan);
                 $this->stripe->syncPlanPrices($plan, $oldStripePriceIds);
             }
+        } elseif ($validated['is_contact_plan']) {
+            // Planos de contato não devem ter preços nem sincronizar com Stripe
+            // Apenas garantir que os campos Stripe estão limpos
+            if ($plan->stripe_product_id || $plan->stripe_price_id) {
+                $plan->update([
+                    'stripe_product_id' => null,
+                    'stripe_price_id' => null,
+                ]);
+            }
         }
 
         return redirect()->back()->with('success', 'Plano atualizado com sucesso!');
@@ -225,6 +234,50 @@ class PlansController extends Controller
     }
 
     /**
+     * Toggle active status of a plan.
+     * Para planos de contato, apenas atualiza no sistema sem sincronizar com Stripe.
+     */
+    public function toggleActive(Plan $plan)
+    {
+        try {
+            $newStatus = !$plan->active;
+
+            // Se não for plano de contato E tiver stripe_product_id, sincronizar com Stripe
+            if (!$plan->is_contact_plan && $plan->stripe_product_id) {
+                try {
+                    $this->stripe->updatePlanProduct($plan->fill(['active' => $newStatus]));
+                } catch (\Stripe\Exception\InvalidRequestException $e) {
+                    // Se o produto não existe na Stripe, limpar referências
+                    if (str_contains($e->getMessage(), 'No such product')) {
+                        $plan->update([
+                            'stripe_product_id' => null,
+                            'stripe_price_id' => null,
+                            'active' => $newStatus,
+                        ]);
+                        $plan->prices()->update(['stripe_price_id' => null]);
+
+                        return back()->with('success', 'Plano atualizado (produto Stripe não existe mais).');
+                    }
+                    throw $e;
+                }
+            }
+
+            // Atualizar status no sistema
+            $plan->update(['active' => $newStatus]);
+
+            return back()->with('success', 'Plano '.($newStatus ? 'ativado' : 'desativado').' com sucesso!');
+        } catch (\Exception $e) {
+            Log::error('Erro ao alternar status do plano', [
+                'plan_id' => $plan->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return back()->withErrors(['error' => 'Erro ao atualizar plano: '.$e->getMessage()]);
+        }
+    }
+
+    /**
      * Remove the specified resource from storage.
      */
     public function destroy(Plan $plan)
@@ -240,13 +293,21 @@ class PlansController extends Controller
                 ]);
             }
 
-            // Arquivar produto no Stripe
+            // Tentar arquivar produto no Stripe (se existir)
             if ($plan->stripe_product_id) {
                 try {
                     \Stripe\Stripe::setApiKey(config('services.stripe.secret'));
                     \Stripe\Product::update($plan->stripe_product_id, ['active' => false]);
+                } catch (\Stripe\Exception\InvalidRequestException $e) {
+                    // Produto não existe na Stripe, continuar com exclusão
+                    Log::warning('Produto não encontrado na Stripe ao excluir plano (ignorado)', [
+                        'plan_id' => $plan->id,
+                        'stripe_product_id' => $plan->stripe_product_id,
+                        'error' => $e->getMessage(),
+                    ]);
                 } catch (\Exception $e) {
-                    Log::warning('Erro ao arquivar produto no Stripe', [
+                    // Outros erros da Stripe não devem impedir exclusão
+                    Log::warning('Erro ao arquivar produto no Stripe (ignorado)', [
                         'plan_id' => $plan->id,
                         'stripe_product_id' => $plan->stripe_product_id,
                         'error' => $e->getMessage(),
@@ -254,7 +315,7 @@ class PlansController extends Controller
                 }
             }
 
-            // Deletar plano
+            // Deletar plano (Observer será disparado, mas erros serão capturados)
             $plan->delete();
 
             DB::commit();
@@ -262,12 +323,13 @@ class PlansController extends Controller
             return redirect()->back()->with('success', 'Plano excluído com sucesso!');
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Erro ao desativar plano', [
+            Log::error('Erro ao excluir plano', [
                 'plan_id' => $plan->id,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
 
-            return redirect()->back()->withErrors(['error' => 'Erro ao desativar plano: '.$e->getMessage()]);
+            return redirect()->back()->withErrors(['error' => 'Erro ao excluir plano: '.$e->getMessage()]);
         }
     }
 
@@ -310,6 +372,11 @@ class PlansController extends Controller
                 $plan = Plan::where('stripe_product_id', $product->id)
                     ->orWhere('code', $planCode)
                     ->first();
+
+                // Pular planos de contato (sob consulta)
+                if ($plan && $plan->is_contact_plan) {
+                    continue;
+                }
 
                 $monthlyPrice = collect($prices->data)->firstWhere('recurring.interval', 'month');
                 $fallbackPrice = $prices->data[0];
@@ -403,37 +470,75 @@ class PlansController extends Controller
 
     /**
      * Sincronizar planos do sistema para o Stripe
+     * Envia TODOS os planos (novos e existentes)
      */
     public function syncToStripe()
     {
         try {
-            // Buscar planos que não têm stripe_product_id
-            $plansWithoutStripe = Plan::whereNull('stripe_product_id')->get();
-
+            $plans = Plan::where('is_contact_plan', false)->get();
             $synced = 0;
+            $updated = 0;
+            $created = 0;
 
             DB::beginTransaction();
 
-            foreach ($plansWithoutStripe as $plan) {
-                if ($plan->is_contact_plan) {
-                    continue;
-                }
-                if ($plan->prices()->exists()) {
-                    $this->stripe->createPlanWithPrices($plan->load('prices'));
+            foreach ($plans as $plan) {
+                // Se o plano já tem stripe_product_id, atualizar
+                if ($plan->stripe_product_id) {
+                    try {
+                        // Atualizar produto no Stripe
+                        $this->stripe->updatePlanProduct($plan);
+
+                        // Sincronizar preços (cria novos se necessário)
+                        if ($plan->prices()->exists()) {
+                            $this->stripe->syncPlanPrices($plan->load('prices'));
+                        }
+
+                        $updated++;
+                    } catch (\Stripe\Exception\InvalidRequestException $e) {
+                        // Se o produto não existe, recarregar o plano e criar novamente
+                        if (str_contains($e->getMessage(), 'No such product')) {
+                            $plan->refresh();
+
+                            if ($plan->prices()->exists()) {
+                                $this->stripe->createPlanWithPrices($plan->load('prices'));
+                            } else {
+                                $stripeIds = $this->stripe->createPlanInStripe($plan);
+                                $plan->update($stripeIds);
+                            }
+                            $created++;
+                        } else {
+                            throw $e;
+                        }
+                    }
                 } else {
-                    $stripeIds = $this->stripe->createPlanInStripe($plan);
-                    $plan->update($stripeIds);
+                    // Criar novo plano no Stripe
+                    if ($plan->prices()->exists()) {
+                        $this->stripe->createPlanWithPrices($plan->load('prices'));
+                    } else {
+                        $stripeIds = $this->stripe->createPlanInStripe($plan);
+                        $plan->update($stripeIds);
+                    }
+                    $created++;
                 }
+
                 $synced++;
             }
 
             DB::commit();
 
-            return redirect()->back()->with('success', "{$synced} plano(s) enviado(s) para o Stripe.");
+            $message = $created > 0 && $updated > 0
+                ? "{$created} plano(s) criado(s) e {$updated} atualizado(s) no Stripe."
+                : ($created > 0
+                    ? "{$created} plano(s) criado(s) no Stripe."
+                    : "{$updated} plano(s) atualizado(s) no Stripe.");
+
+            return redirect()->back()->with('success', $message);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Erro ao sincronizar para o Stripe', [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return redirect()->back()->withErrors(['error' => 'Erro ao sincronizar: '.$e->getMessage()]);
