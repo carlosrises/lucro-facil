@@ -683,6 +683,11 @@ export function DataTable({
         string[]
     >(() => (filters?.payment_method ? filters.payment_method.split(',') : []));
 
+    // Estado local para canais/providers (multiselect)
+    const [localProviders, setLocalProviders] = React.useState<string[]>(() =>
+        filters?.provider ? filters.provider.split(',') : [],
+    );
+
     // Sincronizar estado local com filtros do servidor
     React.useEffect(() => {
         const serverMethods = filters?.payment_method
@@ -1109,18 +1114,21 @@ export function DataTable({
                 />
 
                 {/* Filtro por canal */}
-                <Combobox
-                    options={[
-                        { value: 'all', label: 'Todos os canais' },
-                        ...providerOptions,
-                    ]}
-                    placeholder="Filtrar canal"
-                    value={filters?.provider ?? 'all'}
-                    onChange={(value) =>
+                <MultiSelect
+                    options={providerOptions}
+                    placeholder="Canal"
+                    values={localProviders}
+                    onChange={(values) => {
+                        setLocalProviders(values);
                         updateFilters({
-                            provider: value === 'all' ? undefined : value,
-                        })
-                    }
+                            provider:
+                                values.length > 0
+                                    ? values.join(',')
+                                    : undefined,
+                        });
+                    }}
+                    searchPlaceholder="Buscar canal..."
+                    className="w-[200px]"
                 />
                 {/* Filtro por meio de pagamento */}
                 <MultiSelect
