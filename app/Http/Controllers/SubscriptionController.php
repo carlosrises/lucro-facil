@@ -54,13 +54,14 @@ class SubscriptionController extends Controller
 
         // Pegar plano da sessão ou do request
         $planId = $request->input('plan_id') ?? session('selected_plan_id');
+        $priceInterval = $request->input('price_interval', 'month'); // 'month' ou 'year'
 
         if (! $planId) {
             return redirect('/#pricing')
                 ->withErrors(['error' => 'Selecione um plano para continuar.']);
         }
 
-        $plan = Plan::findOrFail($planId);
+        $plan = Plan::with('prices')->findOrFail($planId);
 
         if (! $plan->active) {
             return redirect('/#pricing')
@@ -68,8 +69,8 @@ class SubscriptionController extends Controller
         }
 
         try {
-            // Criar Checkout Session no Stripe
-            $checkoutUrl = $this->stripe->createCheckoutSession($tenant, $plan);
+            // Criar Checkout Session no Stripe (com intervalo de preço)
+            $checkoutUrl = $this->stripe->createCheckoutSession($tenant, $plan, $priceInterval);
 
             // Limpar plano da sessão
             session()->forget('selected_plan_id');

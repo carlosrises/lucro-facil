@@ -267,7 +267,13 @@ export default function Pricing({ id, plans: dbPlans }: PricingProps) {
             return plan.contactUrl;
         }
 
-        return register();
+        const activePrice = getActivePrice(plan);
+        const priceInterval =
+            activePrice?.interval === 'year' || activePrice?.isAnnual
+                ? 'year'
+                : 'month';
+
+        return `${register()}?plan=${plan.id}&price_interval=${priceInterval}`;
     };
 
     return (
