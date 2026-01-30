@@ -9,6 +9,7 @@ class ProductMapping extends Model
     protected $fillable = [
         'tenant_id', 'internal_product_id', 'provider',
         'external_item_id', 'external_item_name', 'item_type',
+        'linking_since',
     ];
 
     public function internalProduct()
