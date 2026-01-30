@@ -405,7 +405,10 @@ class DashboardController extends Controller
             $currentPlan = $tenant->plan ? [
                 'code' => $tenant->plan->code,
                 'name' => $tenant->plan->name,
-            ] : null;
+            ] : [
+                'code' => 'FREE',
+                'name' => 'Grátis',
+            ];
 
             return Inertia::render('dashboard', [
                 'dashboardData' => [
