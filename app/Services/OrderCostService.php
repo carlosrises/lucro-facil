@@ -1045,9 +1045,8 @@ class OrderCostService
             }
         }
 
-        if ($this->shouldExcludeDeliveryFeeFromSubtotal($order)) {
-            $subtotal -= $this->getDeliveryFeeAmount($order);
-        }
+        // NÃO subtrair taxa de entrega - o subtotal deve incluir tudo que o cliente pagou
+        // A taxa de entrega faz parte da receita da loja
 
         return max($subtotal, 0);
     }
