@@ -28,6 +28,7 @@ Route::middleware('auth')->group(function () {
     Route::get('settings/billing', function () {
         $plans = \App\Models\Plan::where('active', true)
             ->where('is_visible', true)
+            ->with('prices')
             ->orderBy('display_order', 'asc')
             ->orderBy('price_month', 'asc')
             ->get();
@@ -44,15 +45,18 @@ Route::middleware('auth')->group(function () {
     Route::post('settings/billing/checkout', function (\Illuminate\Http\Request $request) {
         $request->validate([
             'plan_id' => 'required|exists:plans,id',
+            'price_interval' => 'nullable|string|in:month,year',
         ]);
 
-        $plan = \App\Models\Plan::findOrFail($request->plan_id);
+        $plan = \App\Models\Plan::with('prices')->findOrFail($request->plan_id);
         $tenant = auth()->user()->tenant;
+        $priceInterval = $request->price_interval ?? 'month';
 
         \Log::info('[Checkout] Criando sessão', [
             'tenant_id' => $tenant->id,
             'plan_id' => $plan->id,
             'plan_name' => $plan->name,
+            'price_interval' => $priceInterval,
             'user_email' => auth()->user()->email,
         ]);
 
@@ -60,41 +64,15 @@ Route::middleware('auth')->group(function () {
         $stripe = new \Stripe\StripeClient(config('services.stripe.secret'));
 
         try {
-            $session = $stripe->checkout->sessions->create([
-                'payment_method_types' => ['card'],
-                'line_items' => [[
-                    'price_data' => [
-                        'currency' => 'brl',
-                        'product_data' => [
-                            'name' => $plan->name,
-                            'description' => $plan->description,
-                        ],
-                        'unit_amount' => (int)($plan->price_month * 100), // Centavos
-                        'recurring' => [
-                            'interval' => 'month',
-                        ],
-                    ],
-                    'quantity' => 1,
-                ]],
-                'mode' => 'subscription',
-                'success_url' => route('billing.success') . '?session_id={CHECKOUT_SESSION_ID}',
-                'cancel_url' => route('billing.edit'),
-                'client_reference_id' => $tenant->id,
-                'customer_email' => auth()->user()->email,
-                'metadata' => [
-                    'tenant_id' => $tenant->id,
-                    'plan_id' => $plan->id,
-                    'user_id' => auth()->id(),
-                ],
-            ]);
+            $stripeService = app(\App\Services\StripeService::class);
+            $checkoutUrl = $stripeService->createCheckoutSession($tenant, $plan, $priceInterval);
 
             \Log::info('[Checkout] Sessão criada com sucesso', [
-                'session_id' => $session->id,
-                'checkout_url' => $session->url,
+                'checkout_url' => $checkoutUrl,
             ]);
 
             return response()->json([
-                'checkout_url' => $session->url,
+                'checkout_url' => $checkoutUrl,
             ]);
         } catch (\Exception $e) {
             \Log::error('[Checkout] Erro ao criar sessão: ' . $e->getMessage());

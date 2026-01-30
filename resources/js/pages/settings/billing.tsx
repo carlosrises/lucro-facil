@@ -6,10 +6,24 @@ import { toast } from 'sonner';
 
 import HeadingSmall from '@/components/heading-small';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { type BreadcrumbItem } from '@/types';
 
 import AppLayout from '@/layouts/app-layout';
 import SettingsLayout from '@/layouts/settings/layout';
+
+interface PlanPrice {
+    id: number;
+    key: string;
+    label: string;
+    amount: number | null;
+    interval: string;
+    period_label: string;
+    is_annual: boolean;
+    stripe_price_id: string | null;
+    active: boolean;
+}
 
 interface Plan {
     id: number;
@@ -17,6 +31,7 @@ interface Plan {
     name: string;
     description: string | null;
     price_month: number | null;
+    prices?: PlanPrice[];
     features: string[] | null;
     is_contact_plan: boolean;
     contact_url: string | null;
@@ -46,12 +61,14 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function Billing() {
     const { plans, currentPlan, subscription } = usePage<BillingProps>().props;
     const [loadingPlanId, setLoadingPlanId] = useState<number | null>(null);
+    const [isAnnual, setIsAnnual] = useState(false);
 
     const handleUpgrade = async (planId: number) => {
         setLoadingPlanId(planId);
         try {
             const response = await axios.post('/settings/billing/checkout', {
                 plan_id: planId,
+                price_interval: isAnnual ? 'year' : 'month',
             });
 
             // Redirecionar para o Stripe Checkout
@@ -63,6 +80,29 @@ export default function Billing() {
             toast.error('Erro ao iniciar checkout. Tente novamente.');
             setLoadingPlanId(null);
         }
+    };
+
+    const getPlanPrice = (plan: Plan) => {
+        if (plan.is_contact_plan) return null;
+
+        const targetInterval = isAnnual ? 'year' : 'month';
+        const price = plan.prices?.find((p) => p.interval === targetInterval);
+
+        if (price && price.amount !== null) {
+            return {
+                amount: price.amount,
+                interval: price.interval,
+                periodLabel:
+                    price.period_label || (isAnnual ? 'por ano' : 'por mês'),
+            };
+        }
+
+        // Fallback para price_month
+        return {
+            amount: plan.price_month,
+            interval: 'month',
+            periodLabel: 'por mês',
+        };
     };
 
     return (
@@ -136,9 +176,42 @@ export default function Billing() {
 
                     {/* Lista de Planos */}
                     <div>
-                        <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
-                            Planos Disponíveis
-                        </h3>
+                        <div className="mb-6 flex items-center justify-between">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                Planos Disponíveis
+                            </h3>
+
+                            <div className="flex items-center gap-3">
+                                <Label
+                                    htmlFor="billing-toggle"
+                                    className={`text-sm font-medium transition-colors ${
+                                        !isAnnual
+                                            ? 'text-gray-900 dark:text-white'
+                                            : 'text-gray-500 dark:text-gray-400'
+                                    }`}
+                                >
+                                    Mensal
+                                </Label>
+                                <Switch
+                                    id="billing-toggle"
+                                    checked={isAnnual}
+                                    onCheckedChange={setIsAnnual}
+                                />
+                                <Label
+                                    htmlFor="billing-toggle"
+                                    className={`text-sm font-medium transition-colors ${
+                                        isAnnual
+                                            ? 'text-gray-900 dark:text-white'
+                                            : 'text-gray-500 dark:text-gray-400'
+                                    }`}
+                                >
+                                    Anual
+                                    <span className="ml-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900 dark:text-green-300">
+                                        Economize
+                                    </span>
+                                </Label>
+                            </div>
+                        </div>
 
                         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                             {plans.map((plan) => {
@@ -215,21 +288,38 @@ export default function Billing() {
                                                     </span>
                                                 </div>
                                             ) : (
-                                                <div className="flex items-baseline">
-                                                    <span className="text-4xl font-bold text-gray-900 dark:text-white">
-                                                        R${' '}
-                                                        {plan.price_month?.toLocaleString(
-                                                            'pt-BR',
-                                                            {
-                                                                minimumFractionDigits: 2,
-                                                                maximumFractionDigits: 2,
-                                                            },
-                                                        )}
-                                                    </span>
-                                                    <span className="ml-2 text-gray-600 dark:text-gray-400">
-                                                        /mês
-                                                    </span>
-                                                </div>
+                                                (() => {
+                                                    const priceInfo =
+                                                        getPlanPrice(plan);
+                                                    return priceInfo &&
+                                                        priceInfo.amount !==
+                                                            null ? (
+                                                        <div className="flex items-baseline">
+                                                            <span className="text-4xl font-bold text-gray-900 dark:text-white">
+                                                                R${' '}
+                                                                {priceInfo.amount.toLocaleString(
+                                                                    'pt-BR',
+                                                                    {
+                                                                        minimumFractionDigits: 2,
+                                                                        maximumFractionDigits: 2,
+                                                                    },
+                                                                )}
+                                                            </span>
+                                                            <span className="ml-2 text-gray-600 dark:text-gray-400">
+                                                                {
+                                                                    priceInfo.periodLabel
+                                                                }
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-center">
+                                                            <span className="text-sm text-gray-500">
+                                                                Preço
+                                                                indisponível
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })()
                                             )}
                                         </div>
 
