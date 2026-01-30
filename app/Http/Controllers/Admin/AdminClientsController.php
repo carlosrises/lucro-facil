@@ -69,7 +69,7 @@ class AdminClientsController extends Controller
         }
 
         $clients = $query->paginate(15)->through(function ($tenant) {
-            $activeSubscription = $tenant->subscriptions->where('status', 'active')->first();
+            $activeSubscription = $tenant->subscriptions->whereIn('status', ['active', 'trialing'])->first();
             $primaryUser = $tenant->users->first();
 
             return [
@@ -242,7 +242,7 @@ class AdminClientsController extends Controller
 
         // Atualizar assinatura se plan_id foi fornecido
         if (isset($validated['plan_id']) && ! empty($validated['plan_id'])) {
-            $activeSubscription = $tenant->subscriptions()->where('status', 'active')->first();
+            $activeSubscription = $tenant->subscriptions()->whereIn('status', ['active', 'trialing'])->first();
 
             if ($activeSubscription) {
                 // Atualizar assinatura existente
