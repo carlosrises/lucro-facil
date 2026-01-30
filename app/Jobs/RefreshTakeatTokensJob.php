@@ -24,18 +24,17 @@ class RefreshTakeatTokensJob implements ShouldQueue
     public function handle(): void
     {
         try {
-            Log::info('🚦 Iniciando RefreshTakeatTokensJob - Verificação de tokens expirando');
+            Log::info('🚦 Iniciando RefreshTakeatTokensJob - Verificação de tokens expirados ou expirando');
 
-            // Busca tokens Takeat expirando em menos de 72h (3 dias)
+            // Busca tokens Takeat já expirados OU expirando em menos de 72h (3 dias)
             $tokens = OauthToken::where('provider', 'takeat')
                 ->whereNotNull('expires_at')
-                ->where('expires_at', '>', now())
-                ->where('expires_at', '<', now()->addHours(72))
+                ->where('expires_at', '<', now()->addHours(72)) // Já expirados ou expirando em 72h
                 ->with('store')
                 ->get();
 
             if ($tokens->isEmpty()) {
-                Log::info('✅ Nenhum token Takeat próximo da expiração');
+                Log::info('✅ Nenhum token Takeat expirado ou próximo da expiração');
 
                 return;
             }
@@ -71,7 +70,7 @@ class RefreshTakeatTokensJob implements ShouldQueue
                     ]);
 
                     // Tentar reconexão automática usando credenciais salvas
-                    $response = Http::post('https://api.takeat.com.br/api/auth/login', [
+                    $response = Http::post('https://backend-pdv.takeat.app/public/api/sessions', [
                         'email' => $token->username,
                         'password' => $token->getPassword(),
                     ]);
