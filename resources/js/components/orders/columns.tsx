@@ -38,7 +38,7 @@ export function calculateOrderSubtotal(order: Order): number {
 
     // Para Takeat: somar TODOS os pagamentos (incluindo subsídios)
     const sessionPayments = order?.raw?.session?.payments || [];
-    
+
     if (order?.provider === 'takeat' && sessionPayments.length > 0) {
         // Somar TODOS os payment_value
         let subtotal = sessionPayments.reduce((sum: number, payment: any) => {
@@ -48,19 +48,21 @@ export function calculateOrderSubtotal(order: Order): number {
 
         // Se for Takeat + iFood, subtrair taxa de R$0,99
         const origin = order?.origin?.toLowerCase() || '';
-        const sessionChannel = order?.raw?.session?.sales_channel?.toLowerCase() || '';
+        const sessionChannel =
+            order?.raw?.session?.sales_channel?.toLowerCase() || '';
         const isIfoodOrder = origin === 'ifood' || sessionChannel === 'ifood';
-        
+
         if (isIfoodOrder && subtotal > 0) {
             const rawSessionServiceFee =
                 parseFloat(
                     String(
                         order?.raw?.session?.service_fee ??
-                        order?.raw?.session?.serviceFee ??
-                        0
-                    )
+                            order?.raw?.session?.serviceFee ??
+                            0,
+                    ),
                 ) || 0;
-            const ifoodFee = rawSessionServiceFee > 0 ? rawSessionServiceFee : 0.99;
+            const ifoodFee =
+                rawSessionServiceFee > 0 ? rawSessionServiceFee : 0.99;
             subtotal = Math.max(subtotal - ifoodFee, 0);
         }
 

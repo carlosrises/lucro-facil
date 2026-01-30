@@ -43,6 +43,47 @@ class RecalculateOrderCostsJob implements ShouldQueue
             'started_at' => now()->toISOString(),
         ], now()->addHours(2));
 
+        // Se type for 'order', recalcular apenas um pedido específico
+        if ($this->type === 'order') {
+            $order = Order::find($this->referenceId);
+
+            if (!$order) {
+                \Log::error("Pedido não encontrado para recálculo: {$this->referenceId}");
+                \Cache::put($cacheKey, [
+                    'status' => 'error',
+                    'message' => 'Pedido não encontrado',
+                ], now()->addHours(2));
+                return;
+            }
+
+            try {
+                $result = $costService->calculateCosts($order);
+                $order->update([
+                    'calculated_costs' => $result,
+                    'total_costs' => $result['total_costs'] ?? 0,
+                    'total_commissions' => $result['total_commissions'] ?? 0,
+                    'net_revenue' => $result['net_revenue'] ?? 0,
+                    'costs_calculated_at' => now(),
+                ]);
+
+                \Cache::put($cacheKey, [
+                    'status' => 'completed',
+                    'total' => 1,
+                    'processed' => 1,
+                    'percentage' => 100,
+                    'completed_at' => now()->toISOString(),
+                ], now()->addHours(2));
+            } catch (\Exception $e) {
+                \Log::error("Erro ao recalcular pedido {$order->id}: {$e->getMessage()}");
+                \Cache::put($cacheKey, [
+                    'status' => 'error',
+                    'message' => $e->getMessage(),
+                ], now()->addHours(2));
+            }
+
+            return;
+        }
+
         // Se type for 'product', buscar pedidos que têm itens com esse produto
         if ($this->type === 'product') {
             $query = Order::whereHas('items', function ($q) {
