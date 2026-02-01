@@ -1,16 +1,40 @@
 import RegisteredUserController from '@/actions/App/Http/Controllers/Auth/RegisteredUserController';
-import { login } from '@/routes';
-import { Form, Head } from '@inertiajs/react';
-import { LoaderCircle } from 'lucide-react';
-
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
+import { login } from '@/routes';
+import { Form, Head } from '@inertiajs/react';
+import { LoaderCircle } from 'lucide-react';
+import { useState } from 'react';
 
 export default function Register() {
+    const [phone, setPhone] = useState('');
+
+    // Função para formatar o telefone no padrão (99) 99999-9999
+    function formatPhone(value: string) {
+        let digits = value.replace(/\D/g, '');
+        if (digits.length > 11) digits = digits.slice(0, 11);
+        if (digits.length === 0) return '';
+        if (digits.length < 3) return '(' + digits;
+        if (digits.length < 7)
+            return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+        if (digits.length <= 10) {
+            // Formato fixo: (99) 9999-9999
+            return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`.replace(
+                /-$/,
+                '',
+            );
+        }
+        // Formato celular: (99) 99999-9999
+        return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`.replace(
+            /-$/,
+            '',
+        );
+    }
+
     return (
         <AuthLayout
             title="Criar uma conta"
@@ -56,6 +80,24 @@ export default function Register() {
                                     placeholder="email@exemplo.com"
                                 />
                                 <InputError message={errors.email} />
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label htmlFor="phone">WhatsApp</Label>
+                                <Input
+                                    id="phone"
+                                    type="tel"
+                                    tabIndex={3}
+                                    autoComplete="tel"
+                                    name="phone"
+                                    placeholder="(99) 99999-9999"
+                                    pattern="^\(?\d{2}\)?[\s-]?\d{4,5}-?\d{4}$"
+                                    value={phone}
+                                    onChange={(e) =>
+                                        setPhone(formatPhone(e.target.value))
+                                    }
+                                />
+                                <InputError message={errors.phone} />
                             </div>
 
                             <div className="grid gap-2">

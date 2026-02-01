@@ -33,12 +33,15 @@ interface PriceOption {
     isAnnual: boolean;
 }
 
+import { type Auth } from '@/types';
+
 interface PricingProps {
     id?: string;
     plans?: Plan[];
+    auth?: Auth;
 }
 
-export default function Pricing({ id, plans: dbPlans }: PricingProps) {
+export default function Pricing({ id, plans: dbPlans, auth }: PricingProps) {
     const { ref, isVisible } = useScrollAnimation();
     const [billingCycle, setBillingCycle] = useState('annual');
     // Fallback para planos hardcoded se não vier do banco
@@ -273,7 +276,12 @@ export default function Pricing({ id, plans: dbPlans }: PricingProps) {
                 ? 'year'
                 : 'month';
 
-        return `${register()}?plan=${plan.id}&price_interval=${priceInterval}`;
+        // Se não estiver logado, direciona para registro
+        if (!auth || !auth.user) {
+            return `${register.url()}?plan=${plan.id}&price_interval=${priceInterval}`;
+        }
+        // Se estiver logado, direciona para o checkout
+        return `/subscription/checkout?plan=${plan.id}&price_interval=${priceInterval}`;
     };
 
     return (

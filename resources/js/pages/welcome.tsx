@@ -56,7 +56,7 @@ export default function Welcome() {
                     <Solution id="solucao" />
                     <Features id="recursos" />
                     <Integrations id="integracoes" />
-                    <Pricing id="planos" plans={plans} />
+                    <Pricing id="planos" plans={plans} auth={auth} />
                     <FinalCTA />
                 </main>
 

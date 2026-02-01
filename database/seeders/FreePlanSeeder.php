@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\Plan;
-use App\Models\PlanPrice;
 use Illuminate\Database\Seeder;
 
 class FreePlanSeeder extends Seeder
@@ -153,7 +152,7 @@ class FreePlanSeeder extends Seeder
             );
 
             // Criar ou atualizar preços
-            if (!empty($prices)) {
+            if (! empty($prices)) {
                 // Remove preços antigos
                 $plan->prices()->delete();
 
