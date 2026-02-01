@@ -188,9 +188,9 @@ export default function ItemTriage({
             channel.listen('.item.triaged', (event: any) => {
                 // Mostrar toast de sucesso
                 if (event.action === 'mapped') {
-                    toast.success(`${event.itemName} vinculado com sucesso!`);
+                    toast.success(`${event.item_name} vinculado com sucesso!`);
                 } else if (event.action === 'classified') {
-                    toast.info(`${event.itemName} classificado com sucesso!`);
+                    toast.info(`${event.item_name} classificado com sucesso!`);
                 }
 
                 // Recarregar apenas os items quando receber evento
