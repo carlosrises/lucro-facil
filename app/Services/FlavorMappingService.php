@@ -99,11 +99,15 @@ class FlavorMappingService
             ->whereRaw('JSON_LENGTH(add_ons) > 0')
             ->get();
 
+        $affectedOrderItems = [];
+
         foreach ($orderItems as $orderItem) {
             $addOns = $orderItem->add_ons;
             if (! is_array($addOns)) {
                 continue;
             }
+
+            $itemWasAffected = false;
 
             foreach ($addOns as $index => $addOn) {
                 $addOnName = $addOn['name'] ?? '';
@@ -131,6 +135,7 @@ class FlavorMappingService
                     ]);
 
                     $mappedCount++;
+                    $itemWasAffected = true;
 
                     continue;
                 }
@@ -158,14 +163,20 @@ class FlavorMappingService
                 ]);
 
                 $mappedCount++;
+                $itemWasAffected = true;
             }
 
-            // Recalcular frações de todos os sabores deste order_item usando PizzaFractionService
-            // que garante cálculos corretos baseados no tamanho do produto pai
-            if ($mappedCount > 0) {
-                $pizzaFractionService = new \App\Services\PizzaFractionService;
-                $pizzaFractionService->recalculateFractions($orderItem);
+            // Guardar order_items que foram afetados para recalcular depois
+            if ($itemWasAffected) {
+                $affectedOrderItems[] = $orderItem;
             }
+        }
+
+        // Recalcular frações de todos os order_items afetados
+        // (tanto os que criaram novos mappings quanto os que atualizaram)
+        $pizzaFractionService = new \App\Services\PizzaFractionService;
+        foreach ($affectedOrderItems as $orderItem) {
+            $pizzaFractionService->recalculateFractions($orderItem);
         }
 
         return $mappedCount;
