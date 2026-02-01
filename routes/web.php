@@ -205,6 +205,14 @@ Route::middleware(['auth', 'verified', 'check.onboarding'])->group(function () {
     // Takeat Sync
     Route::post('takeat/sync/today', [TakeatSyncController::class, 'syncToday'])->name('takeat.sync.today');
     Route::post('takeat/sync/date', [TakeatSyncController::class, 'syncDate'])->name('takeat.sync.date');
+
+    // Tickets (Chamados)
+    Route::get('tickets', [\App\Http\Controllers\TicketController::class, 'index'])->name('tickets.index');
+    Route::get('tickets/create', [\App\Http\Controllers\TicketController::class, 'create'])->name('tickets.create');
+    Route::post('tickets', [\App\Http\Controllers\TicketController::class, 'store'])->name('tickets.store');
+    Route::get('tickets/{ticket}', [\App\Http\Controllers\TicketController::class, 'show'])->name('tickets.show');
+    Route::post('tickets/{ticket}/messages', [\App\Http\Controllers\TicketController::class, 'addMessage'])->name('tickets.messages.store');
+    Route::patch('tickets/{ticket}/close', [\App\Http\Controllers\TicketController::class, 'close'])->name('tickets.close');
 });
 
 require __DIR__.'/settings.php';

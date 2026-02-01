@@ -28,7 +28,10 @@ Route::prefix('admin')->middleware(['auth', 'role:admin|admin:system'])->name('a
         return inertia('admin/payments');
     })->name('payments');
 
-    Route::get('/tickets', function () {
-        return inertia('admin/tickets');
-    })->name('tickets');
+    // Tickets (Chamados)
+    Route::get('/tickets', [\App\Http\Controllers\Admin\AdminTicketsController::class, 'index'])->name('tickets.index');
+    Route::get('/tickets/{ticket}', [\App\Http\Controllers\Admin\AdminTicketsController::class, 'show'])->name('tickets.show');
+    Route::post('/tickets/{ticket}/reply', [\App\Http\Controllers\Admin\AdminTicketsController::class, 'reply'])->name('tickets.reply');
+    Route::patch('/tickets/{ticket}/status', [\App\Http\Controllers\Admin\AdminTicketsController::class, 'updateStatus'])->name('tickets.updateStatus');
+    Route::patch('/tickets/{ticket}/priority', [\App\Http\Controllers\Admin\AdminTicketsController::class, 'updatePriority'])->name('tickets.updatePriority');
 });
