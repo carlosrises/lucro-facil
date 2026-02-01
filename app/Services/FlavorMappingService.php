@@ -124,7 +124,7 @@ class FlavorMappingService
                     ->first();
 
                 // Calcular CMV correto baseado no tamanho
-                $product = InternalProduct::find($mapping->internal_product_id);
+                $product = InternalProduct::with('costs')->find($mapping->internal_product_id);
                 $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : 0;
 
                 if ($existingMapping) {
@@ -272,7 +272,7 @@ class FlavorMappingService
                 ->first();
 
             // Calcular CMV correto baseado no tamanho
-            $product = InternalProduct::find($flavor['product_mapping']->internal_product_id);
+            $product = InternalProduct::with('costs')->find($flavor['product_mapping']->internal_product_id);
             $correctCMV = $product ? $this->calculateCorrectCMV($product, $orderItem) : null;
 
             if ($existingMapping) {

@@ -152,7 +152,7 @@ class FixCMV extends Command
                             // Buscar ProductMapping do add-on
                             $mapping = \App\Models\ProductMapping::where('external_item_id', $addOnSku)
                                 ->where('tenant_id', $orderItem->tenant_id)
-                                ->with('internalProduct:id,name,unit_cost,product_category,cmv_by_size')
+                                ->with('internalProduct:id,name,unit_cost,product_category')
                                 ->first();
 
                             // CRÍTICO: Buscar OrderItemMapping do add-on para obter unit_cost_override e quantity (fração)
