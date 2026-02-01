@@ -234,9 +234,8 @@ export function AppSidebar() {
         },
         {
             title: 'Chamados',
-            href: admin.tickets(),
+            href: admin.tickets.index(),
             icon: Ticket,
-            locked: true,
         },
     ];
 
