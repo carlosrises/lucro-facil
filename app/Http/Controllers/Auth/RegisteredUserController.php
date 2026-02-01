@@ -36,18 +36,23 @@ class RegisteredUserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
+            'phone' => [
+                'nullable',
+                'string',
+                'max:20',
+                'regex:/^\(?\d{2}\)?[\s-]?\d{4,5}-?\d{4}$/',
+            ],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
-        // Buscar plano FREE
-        $freePlan = Plan::where('code', 'FREE')->orWhere('code', 'START')->first();
-
-        // 1. Cria o Tenant com plano FREE
+        // 1. Cria o Tenant SEM PLANO (plan_id = null)
+        // O plano só será aplicado após confirmação de pagamento via webhook do Stripe
         $tenant = Tenant::create([
             'uuid' => Str::uuid(),
             'name' => $request->name."'s Workspace",
             'email' => $request->email,
-            'plan_id' => $freePlan?->id,
+            'phone' => $request->phone,
+            'plan_id' => null,
         ]);
 
         $user = User::create([

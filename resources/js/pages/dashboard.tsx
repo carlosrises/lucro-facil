@@ -229,8 +229,8 @@ export default function Dashboard({
             <div className="flex flex-1 flex-col">
                 <div className="@container/main flex flex-1 flex-col gap-2">
                     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-                        {/* Banner de Upgrade (apenas se FREE) */}
-                        {currentPlan && (
+                        {/* Banner de Upgrade (quando não tem plano ou está no FREE) */}
+                        {(!currentPlan || currentPlan.code === 'FREE') && (
                             <div className="px-4 lg:px-6">
                                 <UpgradeBanner currentPlan={currentPlan} />
                             </div>

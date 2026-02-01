@@ -93,10 +93,24 @@ class StripeWebhookController extends Controller
     {
         Log::info('Checkout completed', [
             'session_id' => $session->id,
+            'payment_status' => $session->payment_status ?? 'unknown',
             'metadata' => $session->metadata ?? [],
         ]);
 
         try {
+            // VERIFICAR SE O PAGAMENTO FOI REALMENTE CONCLUÍDO
+            // checkout.session.completed é disparado quando o usuário completa o fluxo,
+            // mas não garante que o pagamento foi processado com sucesso
+            if ($session->payment_status !== 'paid') {
+                Log::info('Checkout session completed but payment not paid yet', [
+                    'session_id' => $session->id,
+                    'payment_status' => $session->payment_status,
+                ]);
+
+                // Não atualizar o plano ainda - aguardar confirmação do pagamento
+                return;
+            }
+
             // Buscar tenant pelos metadados
             $tenantId = $session->metadata->tenant_id ?? $session->client_reference_id;
             $planId = $session->metadata->plan_id ?? null;
@@ -122,6 +136,7 @@ class StripeWebhookController extends Controller
             }
 
             // Atualizar tenant com plan_id e marcar onboarding como completo
+            // SOMENTE APÓS CONFIRMAÇÃO DO PAGAMENTO
             $tenant->update([
                 'plan_id' => $plan->id,
                 'onboarding_completed_at' => $tenant->onboarding_completed_at ?? now(),
