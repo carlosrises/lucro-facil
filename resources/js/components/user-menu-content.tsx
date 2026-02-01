@@ -46,18 +46,16 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
                     </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                    <a
-                        className="flex w-full cursor-pointer items-center"
-                        href="#"
-                        onClick={(e) => {
-                            e.preventDefault();
-                            cleanup();
-                            // TODO: Abrir modal/link de suporte
-                        }}
+                    <Link
+                        className="block w-full"
+                        href="/tickets"
+                        as="button"
+                        prefetch
+                        onClick={cleanup}
                     >
-                        <LifeBuoy className="mr-2 h-4 w-4" />
+                        <LifeBuoy className="mr-2" />
                         Suporte
-                    </a>
+                    </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                     <a
