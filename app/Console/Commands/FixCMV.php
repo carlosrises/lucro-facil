@@ -152,7 +152,7 @@ class FixCMV extends Command
                             // Buscar ProductMapping do add-on
                             $mapping = \App\Models\ProductMapping::where('external_item_id', $addOnSku)
                                 ->where('tenant_id', $orderItem->tenant_id)
-                                ->with('internalProduct:id,name,unit_cost,product_category')
+                                ->with('internalProduct:id,name,unit_cost,product_category,cmv_by_size')
                                 ->first();
 
                             // CRÍTICO: Buscar OrderItemMapping do add-on para obter unit_cost_override e quantity (fração)
@@ -455,7 +455,7 @@ class FixCMV extends Command
             });
 
         // Recalcular custos dos pedidos afetados
-        if (!$dryRun && $affectedOrderIds->isNotEmpty()) {
+        if (! $dryRun && $affectedOrderIds->isNotEmpty()) {
             $uniqueOrderIds = $affectedOrderIds->unique();
             $this->line('');
             $this->info("🔄 Recalculando custos de {$uniqueOrderIds->count()} pedidos...");
