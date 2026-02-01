@@ -54,3 +54,39 @@ export interface User {
     permissions?: string[];
     [key: string]: unknown; // This allows for additional properties...
 }
+
+export interface Tenant {
+    id: number;
+    name: string;
+    email: string;
+    phone?: string;
+    plan_id?: number;
+    onboarding_completed_at?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface Ticket {
+    id: number;
+    tenant_id: number;
+    user_id?: number;
+    subject: string;
+    priority: 'low' | 'medium' | 'high';
+    status: 'open' | 'in_progress' | 'closed';
+    created_at: string;
+    updated_at: string;
+    tenant?: Tenant;
+    user?: User;
+    messages?: TicketMessage[];
+    latest_message?: TicketMessage;
+}
+
+export interface TicketMessage {
+    id: number;
+    ticket_id: number;
+    user_id?: number;
+    message: string;
+    created_at: string;
+    updated_at: string;
+    user?: User;
+}
