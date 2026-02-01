@@ -316,11 +316,20 @@ class SyncOrdersJob implements ShouldQueue
             ->where('external_item_id', $orderItem->sku)
             ->first();
 
-        if (! $productMapping) {
-            return; // Sem mapeamento configurado
+        if (! $productMapping || ! $productMapping->internal_product_id) {
+            return; // Sem mapeamento configurado ou sem produto vinculado
         }
 
-        // Criar OrderItemMapping principal
+        // Buscar produto interno
+        $product = \App\Models\InternalProduct::find($productMapping->internal_product_id);
+        if (! $product) {
+            return;
+        }
+
+        // Calcular CMV correto baseado no tamanho (mesma lógica do LinkProductMappingJob)
+        $correctCMV = $this->calculateCorrectCMV($product, $orderItem);
+
+        // Criar OrderItemMapping principal com unit_cost_override
         OrderItemMapping::create([
             'tenant_id' => $this->tenantId,
             'order_item_id' => $orderItem->id,
@@ -329,11 +338,23 @@ class SyncOrdersJob implements ShouldQueue
             'mapping_type' => 'main',
             'option_type' => 'regular',
             'auto_fraction' => false,
+            'unit_cost_override' => $correctCMV,
         ]);
+
+        // Se for parent_product (pizza completa), processar sabores
+        if ($productMapping->item_type === 'parent_product') {
+            $flavorMappingService = app(FlavorMappingService::class);
+
+            // Primeiro, usar FlavorMappingService para criar/atualizar mappings dos sabores
+            $flavorMappingService->recalculateAllFlavorsForOrderItem($orderItem);
+
+            // Depois, recalcular frações de todos os sabores com PizzaFractionService
+            $pizzaFractionService = new \App\Services\PizzaFractionService;
+            $pizzaFractionService->recalculateFractions($orderItem);
+        }
 
         // Auto-mapear complementos (add_ons) se houverem
         $addOns = $orderItem->add_ons ?? [];
-        $flavorMappingService = app(FlavorMappingService::class);
 
         foreach ($addOns as $index => $addOn) {
             $addonName = $addOn['name'] ?? '';
@@ -353,10 +374,13 @@ class SyncOrdersJob implements ShouldQueue
                 // Se for sabor (flavor), usar FlavorMappingService para aplicar corretamente
                 if ($addonMapping->item_type === 'flavor') {
                     // FlavorMappingService cuida de criar o mapping com CMV correto e fração
+                    $flavorMappingService = app(FlavorMappingService::class);
                     $flavorMappingService->mapFlavorToAllOccurrences($addonMapping, $this->tenantId);
                 } else {
-                    // Para outros tipos de add-on, criar mapping normal
+                    // Para outros tipos de add-on, criar mapping com unit_cost_override
                     $addonQty = $addOn['quantity'] ?? 1;
+                    $addonProduct = \App\Models\InternalProduct::find($addonMapping->internal_product_id);
+                    $unitCost = $addonProduct ? (float) $addonProduct->unit_cost : 0;
 
                     OrderItemMapping::create([
                         'tenant_id' => $this->tenantId,
@@ -368,9 +392,65 @@ class SyncOrdersJob implements ShouldQueue
                         'auto_fraction' => false,
                         'external_reference' => (string) $index,
                         'external_name' => $addonName,
+                        'unit_cost_override' => $unitCost,
                     ]);
                 }
             }
         }
+    }
+
+    /**
+     * Calcular o CMV correto do produto baseado no tamanho
+     */
+    private function calculateCorrectCMV(\App\Models\InternalProduct $product, OrderItem $orderItem): float
+    {
+        if ($product->product_category !== 'sabor_pizza') {
+            return (float) $product->unit_cost;
+        }
+
+        // Buscar o produto pai através do mapping principal
+        $pizzaSize = null;
+        $mainMapping = $orderItem->mappings()->where('mapping_type', 'main')->first();
+
+        if ($mainMapping && $mainMapping->internalProduct) {
+            $pizzaSize = $mainMapping->internalProduct->size;
+        }
+
+        // Fallback: detectar do nome do item se produto pai não tiver size
+        if (! $pizzaSize) {
+            $pizzaSize = $this->detectPizzaSize($orderItem->name);
+        }
+
+        if (! $pizzaSize) {
+            return (float) $product->unit_cost;
+        }
+
+        // Calcular CMV dinamicamente pela ficha técnica
+        $cmv = $product->calculateCMV($pizzaSize);
+
+        return $cmv > 0 ? $cmv : (float) $product->unit_cost;
+    }
+
+    /**
+     * Detectar tamanho da pizza a partir do nome do item
+     */
+    private function detectPizzaSize(string $itemName): ?string
+    {
+        $itemNameLower = mb_strtolower($itemName);
+
+        if (preg_match('/\bbroto\b/', $itemNameLower)) {
+            return 'broto';
+        }
+        if (preg_match('/\bgrande\b/', $itemNameLower)) {
+            return 'grande';
+        }
+        if (preg_match('/\b(familia|big|don|70x35)\b/', $itemNameLower)) {
+            return 'familia';
+        }
+        if (preg_match('/\b(media|média|m\b)/', $itemNameLower)) {
+            return 'media';
+        }
+
+        return null;
     }
 }
