@@ -81,16 +81,21 @@ class InternalProduct extends Model
         $total = 0;
 
         foreach ($costs as $cost) {
-            // Tentar buscar como ingrediente primeiro
-            $ingredient = \App\Models\Ingredient::find($cost->ingredient_id);
-
-            if ($ingredient) {
-                $total += $cost->qty * $ingredient->unit_price;
+            // PRIMEIRO: Verificar se é InternalProduct marcado como ingrediente
+            $internalProduct = InternalProduct::find($cost->ingredient_id);
+            
+            if ($internalProduct && $internalProduct->is_ingredient) {
+                // Usar unit_cost do InternalProduct
+                $total += $cost->qty * $internalProduct->unit_cost;
             } else {
-                // Se não for ingrediente, buscar como produto interno
-                $product = InternalProduct::find($cost->ingredient_id);
-                if ($product) {
-                    $total += $cost->qty * $product->unit_cost;
+                // Tentar buscar na tabela ingredients
+                $ingredient = \App\Models\Ingredient::find($cost->ingredient_id);
+                
+                if ($ingredient) {
+                    $total += $cost->qty * $ingredient->unit_price;
+                } elseif ($internalProduct) {
+                    // Fallback: se não achou ingredient mas tem internal_product
+                    $total += $cost->qty * $internalProduct->unit_cost;
                 }
             }
         }
